@@ -160,7 +160,11 @@ const Home: React.FC = () => {
                 </p>
               </div>
 
-              <div className="rounded-xl border border-gray-100 bg-white p-3.5">
+              <div
+                className="rounded-xl border border-gray-100 bg-white p-3.5"
+                role="button"
+                onClick={() => navigate('/posters')}
+              >
                 <div className="mb-2.5 flex h-8 w-8 items-center justify-center rounded-lg bg-purple-50">
                   <IonIcon icon={imagesOutline} className="text-base text-purple-600" />
                 </div>

@@ -30,6 +30,7 @@ import Login from './pages/login';
 import BusinessSetup from './pages/business-setup';
 import Subscription from './pages/subscription';
 import Home from './pages/Home';
+import Posters from './pages/Posters';
 
 setupIonicReact();
 
@@ -93,6 +94,16 @@ const App: React.FC = () => (
               </RequireAuth>
             }
           />
+
+          <Route
+            path="/posters"
+            element={
+              <RequireAuth>
+                <Posters />
+              </RequireAuth>
+            }
+          />
+
           <Route
             path="/products/:productId"
             element={

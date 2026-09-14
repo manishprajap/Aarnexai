@@ -652,16 +652,14 @@ const Upload: React.FC = () => {
       formData.append('promptDescription', promptDescription.trim());
       formData.append('bannerColor', bannerColor);
 
-      const uploadResponse = await apiPost('/upload', {
-        formData,
-      });
+      const uploadResponse = await apiPost('/upload', formData);
 
-      if (!uploadResponse.data?.success) {
-        throw new Error(uploadResponse.data?.message || 'Upload failed');
+      if (!uploadResponse.success) {
+        throw new Error(uploadResponse.message || 'Upload failed');
       }
 
-      const productId = uploadResponse.data.productId;
-      const uploadedImageUrl = uploadResponse.data.imageUrl || null;
+      const productId = uploadResponse.productId;
+      const uploadedImageUrl = uploadResponse.imageUrl || null;
 
       if (!productId) {
         throw new Error('Product ID was not returned');
@@ -703,8 +701,6 @@ const Upload: React.FC = () => {
 
   const stepIndex = !previewUrl ? 0 : !categoryId ? 1 : 2;
 
-  // Dropdown option lists — icon per item is resolved from the item's name
-  // (or the API-provided image icon for top-level categories).
   const categoryOptions: DropdownOption[] = categories.map((c) => ({
     id: c.id,
     name: c.name,
