@@ -1,0 +1,159 @@
+* {
+  font-family: 'Roboto', sans-serif;
+}
+
+.app-toolbar {
+  --background: #28a398;
+  --border-width: 0;
+  --min-height: auto;
+}
+
+.header-logo {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  flex: none;
+}
+
+.bg-gray-50 {
+    background-color: oklch(0.91 0.04 176.74);
+}
+/* Header text (Welcome back + Hi, Name) */
+.header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.header-text h1 {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.header-text p {
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.25;
+  margin-top: 2px;
+}
+
+/* Avatar / account trigger */
+.avatar-trigger {
+  display: flex;
+  height: 34px;
+  width: 34px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: #0e2340;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.avatar-trigger span {
+  font-size: 13px;
+  font-weight: 600;
+  color: #ffffff;
+}
+
+.account-popover {
+  --width: 180px;
+  --box-shadow: 0 8px 24px rgba(14, 35, 64, 0.14);
+}
+
+.account-menu ion-item {
+  --padding-start: 12px;
+  --inner-padding-end: 12px;
+  --min-height: 44px;
+  font-size: 13.5px;
+  font-weight: 500;
+}
+
+.account-menu ion-icon {
+  font-size: 17px;
+  margin-right: 4px;
+}
+
+/* Hero */
+.hero-card {
+  background: #0e2340;
+}
+
+.hero-icon-chip {
+  background: linear-gradient(135deg, #1e88c9 0%, #2fb673 100%);
+}
+
+.hero-heading {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #ffffff;
+}
+
+.hero-button {
+  --background: linear-gradient(135deg, #1e88c9 0%, #2fb673 100%);
+  --background-activated: linear-gradient(135deg, #1e88c9 0%, #2fb673 100%);
+  --background-hover: linear-gradient(135deg, #1e88c9 0%, #2fb673 100%);
+  --color: #ffffff;
+  --border-radius: 10px;
+  --box-shadow: none;
+  height: 46px;
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Section headings */
+.section-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 12px 0;
+}
+
+/* Card titles/subtitles */
+.card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.card-subtitle {
+  font-size: 12px;
+  color: #6b7280;
+  margin: 2px 0 0 0;
+  line-height: 1.4;
+}
+
+.upload-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2937;
+  margin: 0;
+}
+
+.upload-desc {
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.4;
+  margin: 6px 0 0 0;
+}
+
+.feature-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.feature-desc {
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.4;
+  margin: 6px 0 0 0;
+}
