@@ -141,7 +141,7 @@ interface ProductDetailsState {
   banners: ProductDetailsBanner[];
 }
 
-const Upload: React.FC = () => {
+const UploadNEW: React.FC = () => {
   const navigate = useNavigate();
 
   /*
@@ -162,21 +162,6 @@ const Upload: React.FC = () => {
 
   const [uploading, setUploading] = useState(false);
 
-  /*
-  |--------------------------------------------------------------------------
-  | Submit lock (synchronous, unlike state)
-  |--------------------------------------------------------------------------
-  |
-  | `uploading` state only updates on the next render, so a fast
-  | double-tap/double-click on "Analyze Product" can fire the
-  | handler twice before React re-renders with disabled={true}.
-  | That double fire is a common cause of seeing 2 requests hit
-  | the backend (and Gemini) for what looked like a single tap.
-  | This ref is set synchronously the instant the handler runs,
-  | so the second call is rejected immediately, no matter how
-  | fast the taps are.
-  |
-  */
 
   const isSubmittingRef = useRef(false);
 
@@ -468,19 +453,7 @@ const Upload: React.FC = () => {
         );
       }
 
-      /*
-      |--------------------------------------------------------------------------
-      | STEP 3
-      | Navigate to Product Details page
-      |--------------------------------------------------------------------------
-      |
-      | We pass the product straight through router state so the
-      | details page can render immediately without an extra
-      | network round trip. The details page still knows how to
-      | fetch this itself (via GET /api/products/:productId) if
-      | someone opens the link directly or refreshes.
-      |
-      */
+    
 
       const productForDetailsPage: ProductDetailsState = {
         id: productId,
@@ -696,4 +669,4 @@ const Upload: React.FC = () => {
   );
 };
 
-export default Upload;
+export default UploadNEW;

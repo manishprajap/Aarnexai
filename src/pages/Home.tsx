@@ -160,9 +160,9 @@ const Home: React.FC = () => {
                 </p>
               </div>
 
-              <div
-                className="rounded-xl border border-gray-100 bg-white p-3.5"
-                role="button"
+              <button
+                type="button"
+                className="rounded-xl border border-gray-100 bg-white p-3.5 text-left w-full cursor-pointer"
                 onClick={() => navigate('/posters')}
               >
                 <div className="mb-2.5 flex h-8 w-8 items-center justify-center rounded-lg bg-purple-50">
@@ -172,7 +172,7 @@ const Home: React.FC = () => {
                 <p className="feature-desc">
                   Generates different professional designs.
                 </p>
-              </div>
+              </button>
 
               <div className="rounded-xl border border-gray-100 bg-white p-3.5">
                 <div className="mb-2.5 flex h-8 w-8 items-center justify-center rounded-lg bg-green-50">

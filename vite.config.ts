@@ -9,11 +9,13 @@ export default defineConfig({
     tailwindcss(),
     legacy(),
   ],
-   server: {
+
+  server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'https://aarnatechxperts.in/bizmyntra',
         changeOrigin: true,
+        secure: true,
       },
     },
   },
