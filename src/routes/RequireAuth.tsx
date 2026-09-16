@@ -1,3 +1,4 @@
+// routes/RequireAuth.tsx
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -13,6 +14,8 @@ const RequireAuth: React.FC<{ children: React.ReactElement }> = ({ children }) =
   }
 
   if (!isAuthenticated) {
+    // Remember where the user was trying to go so RedirectIfAuthed can
+    // send them back here once they're authenticated again.
     return <Navigate to="/login" replace state={{ from: location }} />;
   }
 

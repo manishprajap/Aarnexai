@@ -27,6 +27,7 @@ import {
   lockClosedOutline,
 } from 'ionicons/icons';
 import { apiGet, apiPost } from '../api';
+import { loadFacebookSdk } from '../lib/facebookSdk';
 
 interface BannerItem {
   id: number;
@@ -60,12 +61,9 @@ const brand = {
   wa: '#25D366',
 };
 
-/* =========================================================
-   PLATFORM CONFIG
-   Same connect/status/callback pattern for all three
-   platforms — Instagram was the original; Facebook and
-   WhatsApp follow the exact same shape.
-========================================================= */
+const META_APP_ID = import.meta.env.VITE_META_APP_ID as string;
+const WHATSAPP_CONFIG_ID = import.meta.env.VITE_META_WHATSAPP_CONFIG_ID as string;
+
 
 type PlatformKey = 'facebook' | 'instagram' | 'whatsapp';
 
@@ -75,7 +73,7 @@ interface PlatformConfig {
   icon: string;
   iconColor: string;
   statusEndpoint: string;
-  connectUrl: string;
+  connectEndpoint: string;
 }
 
 const PLATFORMS: PlatformConfig[] = [
@@ -85,7 +83,7 @@ const PLATFORMS: PlatformConfig[] = [
     icon: logoFacebook,
     iconColor: brand.fb,
     statusEndpoint: '/facebook/status',
-    connectUrl: 'https://aarnatechxperts.in/bizmyntra/api/facebook/connect',
+    connectEndpoint: '/facebook/connect',
   },
   {
     key: 'instagram',
@@ -93,7 +91,7 @@ const PLATFORMS: PlatformConfig[] = [
     icon: logoInstagram,
     iconColor: brand.ig2,
     statusEndpoint: '/instagram/status',
-    connectUrl: 'https://aarnatechxperts.in/bizmyntra/api/instagram/connect',
+    connectEndpoint: '/instagram/connect',
   },
   {
     key: 'whatsapp',
@@ -101,7 +99,7 @@ const PLATFORMS: PlatformConfig[] = [
     icon: logoWhatsapp,
     iconColor: brand.wa,
     statusEndpoint: '/whatsapp/status',
-    connectUrl: 'https://aarnatechxperts.in/bizmyntra/api/whatsapp/connect',
+    connectEndpoint: '/whatsapp/connect', // NOT used via startPlatformConnect — see connectWhatsAppAndPost
   },
 ];
 
@@ -234,6 +232,163 @@ const Posters: React.FC = () => {
     }
   };
 
+  /*
+   * Kick off OAuth for Facebook/Instagram: POST to our backend's
+   * connect endpoint (not GET-navigate to it — that's what
+   * produced the 405 Method Not Allowed) and get back the
+   * real Meta authorization URL to redirect to.
+   *
+   * NOT used for WhatsApp — see connectWhatsAppAndPost below.
+   *
+   * The backend route requires `platforms` to include this
+   * platform's key — and uses `bannerId` for logging/context —
+   * so both must be sent in the body, or it responds 400
+   * "platform was not selected".
+   */
+  const startPlatformConnect = async (
+    platform: PlatformKey,
+    bannerId: number,
+    platforms: PlatformKey[]
+  ): Promise<string> => {
+    const res = await apiPost(PLATFORM_BY_KEY[platform].connectEndpoint, {
+      bannerId,
+      platforms,
+    });
+
+    if (res?.success === false) {
+      throw new Error(
+        res?.message ||
+          `Could not start ${PLATFORM_BY_KEY[platform].label} connection.`
+      );
+    }
+
+    const authUrl: string | undefined =
+      res?.redirectUrl ?? res?.authUrl ?? res?.url;
+
+    if (!authUrl) {
+      throw new Error(
+        `Could not start ${PLATFORM_BY_KEY[platform].label} connection. Please try again.`
+      );
+    }
+
+    return authUrl;
+  };
+
+  const connectWhatsAppAndPost = (bannerId: number): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      loadFacebookSdk(META_APP_ID)
+        .then(() => {
+          let sessionInfo: { wabaId?: string; phoneNumberId?: string } = {};
+
+          const handleMessage = (event: MessageEvent) => {
+            if (
+              event.origin !== 'https://www.facebook.com' &&
+              event.origin !== 'https://web.facebook.com'
+            ) {
+              return;
+            }
+
+            try {
+              const data = JSON.parse(event.data);
+              if (
+                data.type === 'WA_EMBEDDED_SIGNUP' &&
+                data.event === 'FINISH'
+              ) {
+                sessionInfo = {
+                  wabaId: data.data?.waba_id,
+                  phoneNumberId: data.data?.phone_number_id,
+                };
+              }
+            } catch {
+              // Not a JSON message meant for us — ignore.
+            }
+          };
+
+          if (!window.FB || typeof window.FB.login !== 'function') {
+            reject(new Error('Facebook SDK loaded but FB.login is unavailable'));
+            return;
+          }
+
+          window.addEventListener('message', handleMessage);
+
+          // Facebook's SDK rejects an `async` function passed directly as
+          // the callback (its internal type-check throws "Expression is
+          // of type asyncfunction, not function"). So the callback here
+          // must be a plain function; it fires off the async work inside
+          // without awaiting it.
+          window.FB.login(
+            (response: any) => {
+              window.removeEventListener('message', handleMessage);
+
+              // Diagnostic logging — keep this (or gate it behind a debug
+              // flag) since response.status is the fastest way to tell
+              // apart a real user cancellation from an HTTPS/app-status
+              // problem on Meta's side.
+              console.log('FB.login raw response:', response);
+
+              const code = response?.authResponse?.code;
+
+              if (!code || !sessionInfo.wabaId || !sessionInfo.phoneNumberId) {
+                let reason = 'WhatsApp signup was cancelled or incomplete';
+
+                if (response?.status === 'not_authorized') {
+                  reason =
+                    'App is not authorized for this account — check App Roles / Live mode in the Meta App Dashboard';
+                } else if (response?.status === 'unknown' || !response?.status) {
+                  reason =
+                    'Facebook login was blocked — verify this page is served over HTTPS and the Meta app is active';
+                }
+
+                reject(new Error(reason));
+                return;
+              }
+
+              (async () => {
+                try {
+                  const connectRes = await apiPost('/whatsapp/connect', {
+                    code,
+                    wabaId: sessionInfo.wabaId,
+                    phoneNumberId: sessionInfo.phoneNumberId,
+                  });
+
+                  if (!connectRes?.success) {
+                    reject(new Error(connectRes?.message || 'WhatsApp connect failed'));
+                    return;
+                  }
+
+                  const publishRes = await apiPost('/banners/publish', {
+                    bannerId,
+                    platforms: ['whatsapp'],
+                  });
+
+                  if (!publishRes?.success) {
+                    reject(new Error(publishRes?.message || 'Failed to publish banner'));
+                    return;
+                  }
+
+                  resolve();
+                } catch (err: any) {
+                  reject(err);
+                }
+              })();
+            },
+            {
+              config_id: WHATSAPP_CONFIG_ID,
+              response_type: 'code',
+              override_default_response_type: true,
+              extras: {
+                feature: 'whatsapp_embedded_signup',
+                sessionInfoVersion: '3',
+              },
+            }
+          );
+        })
+        .catch((err: any) =>
+          reject(err instanceof Error ? err : new Error('Failed to load Facebook SDK'))
+        );
+    });
+  };
+
   const groupedByDay = useMemo(() => {
     const map = new Map<number, BannerItem[]>();
     for (const banner of banners) {
@@ -265,15 +420,18 @@ const Posters: React.FC = () => {
   };
 
   /* =========================================================
-     OAUTH CALLBACK HANDLING (generalized for all platforms)
+     OAUTH CALLBACK HANDLING (Facebook / Instagram only)
+
+     WhatsApp never redirects the browser, so it never hits
+     this handler — its whole flow (popup -> connect -> publish)
+     resolves in memory inside connectWhatsAppAndPost above.
 
      Backend should redirect back with a query param named
      after the platform, e.g.:
        ?instagram=connected
        ?facebook=connected
-       ?whatsapp=connected
-     with the same possible values as before: connected,
-     cancelled, no_account, error, invalid_state, expired.
+     with possible values: connected, cancelled, no_account,
+     error, invalid_state, expired.
   ========================================================= */
   useEffect(() => {
     const handleOAuthCallback = async () => {
@@ -283,6 +441,7 @@ const Posters: React.FC = () => {
       let result: string | null = null;
 
       for (const platform of PLATFORMS) {
+        if (platform.key === 'whatsapp') continue; // never arrives via redirect
         const value = params.get(platform.key);
         if (value) {
           matchedPlatform = platform.key;
@@ -323,6 +482,8 @@ const Posters: React.FC = () => {
 
             if (stillNeeded.length > 0) {
               // Continue the connect chain with the next platform.
+              // (WhatsApp can't appear here — it's handled separately
+              // and never added to a pending redirect chain.)
               localStorage.setItem(
                 'pending_banner_publish',
                 JSON.stringify({
@@ -331,8 +492,12 @@ const Posters: React.FC = () => {
                 })
               );
 
-              window.location.href =
-                PLATFORM_BY_KEY[stillNeeded[0]].connectUrl;
+              const nextAuthUrl = await startPlatformConnect(
+                stillNeeded[0],
+                data.bannerId,
+                pendingPlatforms
+              );
+              window.location.href = nextAuthUrl;
 
               return;
             }
@@ -396,10 +561,77 @@ const Posters: React.FC = () => {
       const bannerId = activeBanner.id;
 
       /*
-       * Make sure every selected platform is connected.
-       * If any isn't, save what the user was trying to do
-       * and kick off OAuth for the first missing one — the
-       * callback handler above will chain through the rest.
+       * WhatsApp always needs its own Embedded Signup popup —
+       * handle it separately, before touching the Facebook/
+       * Instagram redirect flow below.
+       */
+      if (selectedPlatforms.includes('whatsapp')) {
+        const alreadyConnected =
+          connectionStatus.whatsapp || (await checkPlatformConnection('whatsapp'));
+
+        if (!alreadyConnected) {
+          await connectWhatsAppAndPost(bannerId);
+        } else {
+          const publishRes = await apiPost('/banners/publish', {
+            bannerId,
+            platforms: ['whatsapp'],
+          });
+
+          if (!publishRes?.success) {
+            throw new Error(publishRes?.message || 'Failed to publish banner');
+          }
+        }
+
+        // Any remaining non-WhatsApp platforms still go through the
+        // normal redirect flow.
+        const otherPlatforms = selectedPlatforms.filter((p) => p !== 'whatsapp');
+
+        for (const platform of otherPlatforms) {
+          let connected = connectionStatus[platform];
+          try {
+            connected = await checkPlatformConnection(platform);
+          } catch {
+            connected = false;
+          }
+
+          if (!connected) {
+            localStorage.setItem(
+              'pending_banner_publish',
+              JSON.stringify({ bannerId, platforms: otherPlatforms })
+            );
+            const authUrl = await startPlatformConnect(platform, bannerId, otherPlatforms);
+            window.location.href = authUrl;
+            return; // browser is navigating away — nothing more to do here
+          }
+        }
+
+        if (otherPlatforms.length > 0) {
+          const response = await apiPost('/banners/publish', {
+            bannerId,
+            platforms: otherPlatforms,
+          });
+
+          if (!response?.success) {
+            throw new Error(response?.message || 'Failed to publish banner');
+          }
+        }
+
+        const postedDay = activeBanner.day;
+
+        setSuccessMsg(
+          `Posted to ${selectedPlatforms
+            .map((platform) => PLATFORM_BY_KEY[platform].label)
+            .join(' & ')}`
+        );
+
+        setActiveBanner(null);
+        setSelectedPlatforms([]);
+        setBanners((prev) => prev.filter((banner) => banner.day !== postedDay));
+        return;
+      }
+
+      /*
+       * Facebook / Instagram only — unchanged original flow.
        */
       for (const platform of selectedPlatforms) {
         let connected = connectionStatus[platform];
@@ -419,7 +651,12 @@ const Posters: React.FC = () => {
             })
           );
 
-          window.location.href = PLATFORM_BY_KEY[platform].connectUrl;
+          const authUrl = await startPlatformConnect(
+            platform,
+            bannerId,
+            selectedPlatforms
+          );
+          window.location.href = authUrl;
           return;
         }
       }

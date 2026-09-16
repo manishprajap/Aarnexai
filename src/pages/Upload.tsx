@@ -61,8 +61,7 @@ import { apiGet, apiPost } from '../api';
 import { useAuth } from '../context/AuthContext';
 
 // ==================================================
-// BRAND — reused from BusinessSetup / Subscription so this screen matches
-// the rest of the app rather than looking like a separate product.
+// BRAND
 // ==================================================
 
 const brand = {
@@ -76,8 +75,6 @@ const brand = {
   pageBgTo: '#F3FBF4',
 };
 
-// Soft tint palette for category/subcategory/child-category avatars —
-// rotates by id so the same item always gets the same tint.
 const AVATAR_TINTS = [
   { bg: '#EAF4FF', fg: '#1E7FE0' },
   { bg: '#EAFBF8', fg: '#12A19C' },
@@ -119,10 +116,7 @@ const unwrapList = <T,>(res: any, key: string): T[] => {
 };
 
 // ==================================================
-// ICON MATCHING — picks a relevant ionicon based on keywords found in a
-// category / subcategory / child-category name, so every item gets an
-// icon even though the API only returns a real image for top-level
-// categories.
+// ICON MATCHING
 // ==================================================
 
 const NAME_ICON_MAP: { keywords: string[]; icon: string }[] = [
@@ -164,8 +158,6 @@ const PROMPT_TYPE_ICON: Record<string, string> = {
   custom: colorPaletteOutline,
 };
 
-// Renders either the real image icon (top-level categories, when the API
-// gives one) or a keyword-matched ionicon as a fallback.
 const renderItemIcon = (name: string, imageIcon?: string | null, color?: string) => {
   const isImageIcon = Boolean(imageIcon && /^https?:\/\//.test(imageIcon));
 
@@ -177,7 +169,7 @@ const renderItemIcon = (name: string, imageIcon?: string | null, color?: string)
 };
 
 // ==================================================
-// SECTION LABEL — plain sentence-case heading, no eyebrow chrome
+// SECTION LABEL
 // ==================================================
 
 const SectionLabel: React.FC<{ text: string; hint?: string }> = ({ text, hint }) => (
@@ -196,9 +188,7 @@ const SectionLabel: React.FC<{ text: string; hint?: string }> = ({ text, hint })
 );
 
 // ==================================================
-// DROPDOWN SELECT — a single tappable field that opens a scrollable list
-// of icon + name rows. Used for category, subcategory, child category and
-// prompt type, so all four behave the same way.
+// DROPDOWN SELECT
 // ==================================================
 
 interface DropdownOption {
@@ -341,8 +331,7 @@ const DropdownSelect: React.FC<DropdownSelectProps> = ({
 };
 
 // ==================================================
-// STEP PROGRESS — a genuine sequence (photo → category → style), so a
-// segmented progress bar earns its place here.
+// STEP PROGRESS
 // ==================================================
 
 const STEPS = ['Photo', 'Category', 'Style'];
@@ -360,6 +349,79 @@ const StepProgress: React.FC<{ current: number }> = ({ current }) => (
     ))}
   </div>
 );
+
+// ==================================================
+// AI ANALYZE RESPONSE TYPES — mirrors /api/products/analyze
+// ==================================================
+
+interface AiProduct {
+  productName?: string;
+  brand?: string;
+  companyName?: string;
+  price?: string | null;
+  category?: string;
+  subcategory?: string;
+  color?: string;
+  features?: string[];
+  description?: string;
+  marketingTitle?: string;
+  metaDescription?: string;
+  keywords?: string[];
+  hashtags?: string[];
+  visibleText?: string[];
+  confidence?: number;
+  cleanImageUrl?: string | null;
+}
+
+interface AnalyzeBannerResult {
+  id: string | number | null;
+  day: number;
+  type?: string;
+  theme: string | null;
+  imageUrl: string | null;
+  caption: string | null;
+  status: 'done' | 'failed';
+  error: string | null;
+}
+
+interface AnalyzeResponse {
+  success: boolean;
+  message?: string;
+  status?: string;
+  productId?: string | number;
+  product?: AiProduct;
+  banners?: AnalyzeBannerResult[];
+}
+
+interface ProductDetailsBanner {
+  id: string;
+  day: number;
+  theme: string | null;
+  imageUrl: string | null;
+  caption: string | null;
+}
+
+interface ProductDetailsState {
+  id: string | number;
+  status: 'processing' | 'done' | 'failed';
+  originalImageUrl: string | null;
+  cleanImageUrl: string | null;
+  productName: string | null;
+  brand: string | null;
+  companyName: string | null;
+  price: string | null;
+  category: string | null;
+  subcategory: string | null;
+  color: string | null;
+  description: string | null;
+  metaDescription: string | null;
+  confidence: number | null;
+  features: string[];
+  keywords: string[];
+  hashtags: string[];
+  visibleText: string[];
+  banners: ProductDetailsBanner[];
+}
 
 const Upload: React.FC = () => {
   const navigate = useNavigate();
@@ -388,6 +450,7 @@ const Upload: React.FC = () => {
   const [bannerColor, setBannerColor] = useState('#4F46E5');
 
   const [uploading, setUploading] = useState(false);
+  const isSubmittingRef = useRef(false);
 
   const [toastMessage, setToastMessage] = useState('');
   const [showToast, setShowToast] = useState(false);
@@ -605,12 +668,13 @@ const Upload: React.FC = () => {
 
   /*
   |--------------------------------------------------------------------------
-  | Upload
+  | Upload + Analyze (generates banners using category / subcategory /
+  | prompt type / prompt description / banner color selected above)
   |--------------------------------------------------------------------------
   */
 
   const handleContinue = async () => {
-    if (uploading) {
+    if (isSubmittingRef.current || uploading) {
       return;
     }
 
@@ -629,8 +693,16 @@ const Upload: React.FC = () => {
       return;
     }
 
+    isSubmittingRef.current = true;
+
     try {
       setUploading(true);
+
+      /*
+      |--------------------------------------------------------------------------
+      | STEP 1 — Upload image + selections
+      |--------------------------------------------------------------------------
+      */
 
       const formData = new FormData();
       formData.append('image', selectedFile);
@@ -652,7 +724,11 @@ const Upload: React.FC = () => {
       formData.append('promptDescription', promptDescription.trim());
       formData.append('bannerColor', bannerColor);
 
+      console.log('Uploading product...');
+
       const uploadResponse = await apiPost('/upload', formData);
+
+      console.log('UPLOAD RESPONSE:', uploadResponse);
 
       if (!uploadResponse.success) {
         throw new Error(uploadResponse.message || 'Upload failed');
@@ -665,22 +741,98 @@ const Upload: React.FC = () => {
         throw new Error('Product ID was not returned');
       }
 
-      showMessage('Image uploaded successfully');
+      console.log('PRODUCT ID:', productId);
 
-      navigate(`/products/${productId}/review`, {
-        state: {
-          productId,
-          imageUrl: uploadedImageUrl,
-          categoryId,
-          subcategoryId,
-          childCategoryId,
-          promptType,
-          promptDescription: promptDescription.trim(),
-          bannerColor,
-        },
+      showMessage('Image uploaded. AI is generating your banners...');
+
+      console.log('Starting AI analysis...');
+
+      const analyzeResponse: AnalyzeResponse = await apiPost('/products/analyze', {
+        productId,
+      });
+
+      console.log('ANALYZE RESPONSE:', analyzeResponse);
+
+      if (!analyzeResponse?.success) {
+        throw new Error(analyzeResponse?.message || 'Product analysis failed');
+      }
+
+      const aiProduct = analyzeResponse.product;
+
+      if (!aiProduct) {
+        throw new Error('Product analysis returned no data');
+      }
+
+      /*
+      |--------------------------------------------------------------------------
+      | Banners — only keep the ones that generated successfully
+      |--------------------------------------------------------------------------
+      */
+
+      const rawBanners = analyzeResponse.banners ?? [];
+
+      const doneBanners: ProductDetailsBanner[] = rawBanners
+        .filter((b) => b.status === 'done' && b.imageUrl)
+        .map((b) => ({
+          id: String(b.id),
+          day: b.day,
+          theme: b.theme,
+          imageUrl: b.imageUrl,
+          caption: b.caption,
+        }));
+
+      const failedBanners = rawBanners.filter((b) => b.status === 'failed');
+
+      if (failedBanners.length > 0) {
+        console.warn('SOME BANNERS FAILED:', failedBanners);
+      }
+
+      if (doneBanners.length > 0) {
+        showMessage('Product analyzed — banners generated!');
+      } else {
+        showMessage('Product analyzed, but banner generation failed. Check console.');
+      }
+
+      /*
+      |--------------------------------------------------------------------------
+      | Build state for the product details page
+      |--------------------------------------------------------------------------
+      */
+
+      const productForDetailsPage: ProductDetailsState = {
+        id: productId,
+
+        status: (analyzeResponse.status as 'processing' | 'done' | 'failed') || 'done',
+
+        originalImageUrl: uploadedImageUrl,
+        cleanImageUrl: aiProduct.cleanImageUrl ?? null,
+
+        productName: aiProduct.productName ?? null,
+        brand: aiProduct.brand ?? null,
+        companyName: aiProduct.companyName ?? null,
+        price: aiProduct.price ?? null,
+        category: aiProduct.category ?? null,
+        subcategory: aiProduct.subcategory ?? null,
+        color: aiProduct.color ?? null,
+        description: aiProduct.description ?? null,
+        metaDescription: aiProduct.metaDescription ?? null,
+
+        confidence:
+          typeof aiProduct.confidence === 'number' ? aiProduct.confidence : null,
+
+        features: aiProduct.features ?? [],
+        keywords: aiProduct.keywords ?? [],
+        hashtags: aiProduct.hashtags ?? [],
+        visibleText: aiProduct.visibleText ?? [],
+
+        banners: doneBanners,
+      };
+
+      navigate(`/products/${productId}`, {
+        state: { product: productForDetailsPage },
       });
     } catch (error: any) {
-      console.error('UPLOAD ERROR:', error);
+      console.error('UPLOAD / ANALYSIS ERROR:', error);
 
       let message = 'Unable to process product';
 
@@ -693,6 +845,7 @@ const Upload: React.FC = () => {
       showMessage(message);
     } finally {
       setUploading(false);
+      isSubmittingRef.current = false;
     }
   };
 
@@ -1050,7 +1203,7 @@ const Upload: React.FC = () => {
               {uploading ? (
                 <>
                   <IonSpinner slot="start" name="crescent" />
-                  Uploading...
+                  Generating banners...
                 </>
               ) : (
                 <>
