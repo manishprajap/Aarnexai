@@ -53,73 +53,63 @@ interface GetProductResponse {
   product?: ProductDetails;
 }
 
-/*
-|--------------------------------------------------------------------------
-| Navigation state shape
-|--------------------------------------------------------------------------
-|
-| react-router-dom v6's useLocation() no longer accepts a generic
-| type argument, so we type location.state manually via a cast
-| instead (it's typed as `unknown` by the library).
-|
-*/
-
 interface NavigationState {
   product?: ProductDetails;
 }
 
+/**
+ * Works two ways, both rendering the same UI:
+ *
+ * 1. Mounted at /products/:productId — loads that specific product.
+ * 2. Mounted at a route with no :productId (e.g. /product-details) —
+ *    loads the logged-in user's most recent product instead. The
+ *    token already identifies the user, so no ID is needed in the URL.
+ */
 const ProductDetailsPage: React.FC = () => {
-  const { productId } = useParams<{ productId: string }>();
+  const { productId } = useParams<{ productId?: string }>();
   const location = useLocation();
   const navState = location.state as NavigationState | null | undefined;
+
   const [product, setProduct] = useState<ProductDetails | null>(
     navState?.product ?? null
   );
 
   const [loading, setLoading] = useState(!navState?.product);
-
   const [error, setError] = useState<string | null>(null);
-
-  /*
-  |--------------------------------------------------------------------------
-  | Fetch product
-  |--------------------------------------------------------------------------
-  |
-  | We ALWAYS hit the API on mount / productId change — even if a
-  | product was already passed via navigation state. The nav-state
-  | product is only used for an instant first paint; things like
-  | `banners` are generated asynchronously after the product row is
-  | created, so a stale nav-state object can be missing them. The
-  | fresh API response below always overwrites it.
-  |
-  */
+  const [noProductYet, setNoProductYet] = useState(false);
 
   useEffect(() => {
-    if (!productId) {
-      return;
-    }
-
     let cancelled = false;
 
     const fetchProduct = async () => {
       try {
-        // Don't show the full-page spinner if we already have
-        // something to render from navigation state.
         if (!navState?.product) {
           setLoading(true);
         }
 
         setError(null);
+        setNoProductYet(false);
 
-        const response = (await apiGet(
-          `/products/${productId}`
-        )) as GetProductResponse;
+        // With an ID: fetch that product. Without one: fetch the
+        // logged-in user's latest product (token-based, no ID needed).
+        const endpoint = productId
+          ? `/products/${productId}`
+          : '/products/latest';
+
+        const response = (await apiGet(endpoint)) as GetProductResponse;
 
         if (cancelled) {
           return;
         }
 
         if (!response?.success || !response.product) {
+          if (!productId) {
+            // No product uploaded yet — not a real error, just empty state.
+            setNoProductYet(true);
+            setProduct(null);
+            return;
+          }
+
           throw new Error(response?.message || 'Product not found');
         }
 
@@ -129,14 +119,18 @@ const ProductDetailsPage: React.FC = () => {
           return;
         }
 
+        if (!productId) {
+          // Same idea for a 404-style failure on the "latest" endpoint.
+          setNoProductYet(true);
+          setProduct(null);
+          return;
+        }
+
         const message =
           err?.response?.data?.message ||
           err?.message ||
           'Unable to load product';
 
-        // If nav-state already gave us something to show, don't
-        // blow away the screen with an error — just keep showing
-        // the stale-but-usable data.
         if (!navState?.product) {
           setError(message);
         }
@@ -146,6 +140,14 @@ const ProductDetailsPage: React.FC = () => {
         }
       }
     };
+
+    // Skip the fetch only when we already have the product handed to
+    // us via navigation state AND we have an explicit ID (the "latest"
+    // path always needs a fresh fetch, since state won't carry it).
+    if (navState?.product && productId) {
+      setLoading(false);
+      return;
+    }
 
     fetchProduct();
 
@@ -221,15 +223,31 @@ const ProductDetailsPage: React.FC = () => {
           </div>
         )}
 
-        {/* Error */}
+        {/* No product yet (only reachable on the ID-less route) */}
+
+        {!loading && noProductYet && (
+          <div className="flex min-h-full flex-col items-center justify-center gap-2 px-6 py-20 text-center">
+            <p className="m-0 text-sm font-semibold text-gray-700">
+              You haven't uploaded a product yet.
+            </p>
+
+            <p className="m-0 text-xs text-gray-400">
+              Upload a product to see its details here.
+            </p>
+          </div>
+        )}
+
+        {/* Error (only reachable on the ID-based route) */}
 
         {!loading && error && !product && (
           <div className="flex min-h-full flex-col items-center justify-center gap-2 px-6 py-20 text-center">
             <p className="m-0 text-sm font-semibold text-red-500">{error}</p>
 
-            <p className="m-0 text-xs text-gray-400">
-              Product ID: {productId}
-            </p>
+            {productId && (
+              <p className="m-0 text-xs text-gray-400">
+                Product ID: {productId}
+              </p>
+            )}
           </div>
         )}
 

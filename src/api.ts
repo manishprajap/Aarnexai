@@ -1,6 +1,6 @@
 // src/api.ts
 
-const BASE_URL = 'https://aarnatechxperts.in/bizmyntra/api';
+const BASE_URL = 'https://aarnexai.com/aarnexai-backend/api';
 
 const getToken = () =>
   localStorage.getItem('token') ||

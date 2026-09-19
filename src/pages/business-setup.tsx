@@ -21,6 +21,7 @@ import {
   IonBackButton,
 } from '@ionic/react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { apiGet, apiPost } from '../api';
 
 import {
@@ -80,6 +81,7 @@ const getErrorMessage = (e: any, fallback: string) =>
 
 const BusinessSetup: React.FC = () => {
   const navigate = useNavigate();
+  const { refreshStatus } = useAuth();
 
   const [name, setName] = useState('');
   const [category, setCategory] = useState('');
@@ -221,9 +223,6 @@ const BusinessSetup: React.FC = () => {
         formData.append('logo', logoFile);
         payload = formData;
       } else {
-        // No logo selected — send `logo: null` explicitly so the backend
-        // always receives the key rather than it being absent. Logo stays
-        // fully optional; this does not block submission.
         payload = {
           name: name.trim(),
           category: category.trim(),
@@ -234,8 +233,8 @@ const BusinessSetup: React.FC = () => {
         };
       }
 
-      await apiPost('/business/setup', payload);
-
+      await apiPost('business/setup', payload);
+      await refreshStatus();
       navigate('/subscription');
     } catch (e: any) {
       setError(getErrorMessage(e, 'Could not save your business details'));

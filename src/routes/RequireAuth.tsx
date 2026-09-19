@@ -1,39 +1,118 @@
-// routes/RequireAuth.tsx
-import React from 'react';
-import { Navigate, useLocation } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
+
+import {
+  useIonRouter,
+  IonContent,
+  IonPage,
+  IonSpinner,
+} from '@ionic/react';
+
 import { useAuth } from '../context/AuthContext';
 
-const RequireAuth: React.FC<{ children: React.ReactElement }> = ({ children }) => {
-  const { isAuthenticated, isInitializing, hasBusiness, hasSubscription } = useAuth();
+const RequireAuth: React.FC<{
+  children: React.ReactElement;
+}> = ({ children }) => {
+
+  const {
+    isAuthenticated,
+    isInitializing,
+    hasBusiness,
+    hasSubscription,
+  } = useAuth();
+
   const location = useLocation();
-
-  // Still checking localStorage/session for a saved session - render nothing
-  // briefly rather than flashing the login screen.
-  if (isInitializing) {
-    return null;
-  }
-
-  if (!isAuthenticated) {
-    // Remember where the user was trying to go so RedirectIfAuthed can
-    // send them back here once they're authenticated again.
-    return <Navigate to="/login" replace state={{ from: location }} />;
-  }
-
+  const ionRouter = useIonRouter();
   const path = location.pathname;
 
-  // Force onboarding order: business details first, then subscription.
-  // Each check skips itself on its own route to avoid redirect loops.
-  if (!hasBusiness && path !== '/business-setup') {
-    return <Navigate to="/business-setup" replace />;
+  /**
+   * Redirects are done imperatively via useIonRouter().push,
+   * NOT via <Navigate>. IonRouterOutlet manages its own view
+   * stack/visibility, and a declarative <Navigate> returned
+   * from inside a Route's element can leave the target view
+   * stuck with the "ion-page-invisible" class on first render
+   * (fixed only by a manual refresh). Pushing imperatively,
+   * the same way IonRouterOutlet itself expects navigation to
+   * happen, avoids that.
+   */
+  useEffect(() => {
+
+    if (isInitializing) {
+      return;
+    }
+
+    if (!isAuthenticated) {
+      ionRouter.push('/login', 'root', 'replace');
+      return;
+    }
+
+    if (!hasBusiness && path !== '/business-setup') {
+      ionRouter.push('/business-setup', 'root', 'replace');
+      return;
+    }
+
+    if (hasBusiness && !hasSubscription && path !== '/subscription') {
+      ionRouter.push('/subscription', 'root', 'replace');
+      return;
+    }
+
+    if (
+      hasBusiness &&
+      hasSubscription &&
+      (path === '/business-setup' || path === '/subscription')
+    ) {
+      ionRouter.push('/dashboard', 'root', 'replace');
+      return;
+    }
+
+  }, [
+    isInitializing,
+    isAuthenticated,
+    hasBusiness,
+    hasSubscription,
+    path,
+    ionRouter,
+  ]);
+
+  /**
+   * Wait until AuthContext has finished checking
+   * localStorage + /auth/me.
+   */
+  if (isInitializing) {
+    return (
+      <IonPage>
+        <IonContent className="ion-padding">
+          <div
+            style={{
+              minHeight: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <IonSpinner name="crescent" />
+          </div>
+        </IonContent>
+      </IonPage>
+    );
   }
 
-  if (hasBusiness && !hasSubscription && path !== '/subscription') {
-    return <Navigate to="/subscription" replace />;
-  }
+  const shouldBlock =
+    !isAuthenticated ||
+    (!hasBusiness && path !== '/business-setup') ||
+    (hasBusiness && !hasSubscription && path !== '/subscription') ||
+    (
+      hasBusiness &&
+      hasSubscription &&
+      (path === '/business-setup' || path === '/subscription')
+    );
 
-  // Fully onboarded users shouldn't be able to revisit these setup pages.
-  if (hasBusiness && hasSubscription && (path === '/business-setup' || path === '/subscription')) {
-    return <Navigate to="/dashboard" replace />;
+  /**
+   * A redirect is in flight (handled by the effect above) —
+   * render nothing rather than the guarded page.
+   */
+  if (shouldBlock) {
+    return null;
   }
 
   return children;

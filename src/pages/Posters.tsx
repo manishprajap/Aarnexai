@@ -232,19 +232,6 @@ const Posters: React.FC = () => {
     }
   };
 
-  /*
-   * Kick off OAuth for Facebook/Instagram: POST to our backend's
-   * connect endpoint (not GET-navigate to it — that's what
-   * produced the 405 Method Not Allowed) and get back the
-   * real Meta authorization URL to redirect to.
-   *
-   * NOT used for WhatsApp — see connectWhatsAppAndPost below.
-   *
-   * The backend route requires `platforms` to include this
-   * platform's key — and uses `bannerId` for logging/context —
-   * so both must be sent in the body, or it responds 400
-   * "platform was not selected".
-   */
   const startPlatformConnect = async (
     platform: PlatformKey,
     bannerId: number,
@@ -311,19 +298,10 @@ const Posters: React.FC = () => {
 
           window.addEventListener('message', handleMessage);
 
-          // Facebook's SDK rejects an `async` function passed directly as
-          // the callback (its internal type-check throws "Expression is
-          // of type asyncfunction, not function"). So the callback here
-          // must be a plain function; it fires off the async work inside
-          // without awaiting it.
           window.FB.login(
             (response: any) => {
               window.removeEventListener('message', handleMessage);
 
-              // Diagnostic logging — keep this (or gate it behind a debug
-              // flag) since response.status is the fastest way to tell
-              // apart a real user cancellation from an HTTPS/app-status
-              // problem on Meta's side.
               console.log('FB.login raw response:', response);
 
               const code = response?.authResponse?.code;
@@ -459,11 +437,6 @@ const Posters: React.FC = () => {
 
         await checkPlatformConnection(matchedPlatform);
 
-        /*
-         * Publish the banner that user selected
-         * before OAuth started (may need more than
-         * one platform connected before it can post).
-         */
         const pending = localStorage.getItem('pending_banner_publish');
 
         if (pending) {
@@ -471,8 +444,6 @@ const Posters: React.FC = () => {
             const data = JSON.parse(pending);
             const pendingPlatforms: PlatformKey[] = data.platforms;
 
-            // Check that every selected platform is now connected
-            // before trying to publish again.
             const stillNeeded: PlatformKey[] = [];
 
             for (const platform of pendingPlatforms) {

@@ -31,6 +31,9 @@ import BusinessSetup from './pages/business-setup';
 import Subscription from './pages/subscription';
 import Home from './pages/Home';
 import Posters from './pages/Posters';
+import Campaigns from './pages/Campaigns';
+import CreateCampaign from './pages/CreateCampaign';
+import CampaignDetails from './pages/CampaignDetails';
 
 setupIonicReact();
 
@@ -87,6 +90,33 @@ const App: React.FC = () => (
           <Route path="/home" element={<Navigate to="/dashboard" replace />} />
 
           <Route
+            path="/campaigns"
+            element={
+              <RequireAuth>
+                <Campaigns />
+              </RequireAuth>
+            }
+          />
+
+          <Route
+            path="/campaigns/create"
+            element={
+              <RequireAuth>
+                <CreateCampaign />
+              </RequireAuth>
+            }
+          />
+
+          <Route
+            path="/campaigns/:campaignId"
+            element={
+              <RequireAuth>
+                <CampaignDetails />
+              </RequireAuth>
+            }
+          />
+
+          <Route
             path="/upload"
             element={
               <RequireAuth>
@@ -112,6 +142,16 @@ const App: React.FC = () => (
               </RequireAuth>
             }
           />
+
+          <Route
+            path="/product-details"
+            element={
+              <RequireAuth>
+                <ProductDetails />
+              </RequireAuth>
+            }
+          />
+
           <Route
             path="/products/:productId/customize"
             element={

@@ -1,5 +1,11 @@
-// context/AuthContext.tsx
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  ReactNode,
+} from 'react';
+
 import { apiGet } from '../api';
 
 export interface AuthUser {
@@ -17,75 +23,225 @@ interface AuthContextValue {
   user: AuthUser | null;
   hasBusiness: boolean;
   hasSubscription: boolean;
-  login: (user: AuthUser, token: string, hasBusiness: boolean, hasSubscription: boolean) => void;
+
+  login: (
+    user: AuthUser,
+    token: string,
+    hasBusiness: boolean,
+    hasSubscription: boolean
+  ) => void;
+
   logout: () => void;
+
   refreshStatus: () => Promise<void>;
 }
 
-// 'token' matches the key src/api.ts reads for the Authorization header.
 const AUTH_TOKEN_KEY = 'token';
 const AUTH_USER_KEY = 'auth_user';
 const AUTH_HAS_BUSINESS_KEY = 'auth_has_business';
 const AUTH_HAS_SUBSCRIPTION_KEY = 'auth_has_subscription';
 
-const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+const AuthContext = createContext<AuthContextValue | undefined>(
+  undefined
+);
 
-export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isInitializing, setIsInitializing] = useState(true);
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [hasBusiness, setHasBusiness] = useState(false);
-  const [hasSubscription, setHasSubscription] = useState(false);
+export const AuthProvider: React.FC<{
+  children: ReactNode;
+}> = ({ children }) => {
 
-  // Runs once on app start - restores the session if one was saved earlier,
-  // then re-validates against the server so stale local flags never drive
-  // navigation (e.g. after a business/subscription change on another device).
+  const [isAuthenticated, setIsAuthenticated] =
+    useState(false);
+
+  const [isInitializing, setIsInitializing] =
+    useState(true);
+
+  const [user, setUser] =
+    useState<AuthUser | null>(null);
+
+  const [hasBusiness, setHasBusiness] =
+    useState(false);
+
+  const [hasSubscription, setHasSubscription] =
+    useState(false);
+
+  /**
+   * ============================================================
+   * SAVE AUTH STATUS
+   * ============================================================
+   */
+
+  const saveAuthStatus = (
+    nextUser: AuthUser | null,
+    nextHasBusiness: boolean,
+    nextHasSubscription: boolean
+  ) => {
+
+    setUser(nextUser);
+
+    setHasBusiness(nextHasBusiness);
+
+    setHasSubscription(nextHasSubscription);
+
+    if (nextUser) {
+      localStorage.setItem(
+        AUTH_USER_KEY,
+        JSON.stringify(nextUser)
+      );
+    } else {
+      localStorage.removeItem(AUTH_USER_KEY);
+    }
+
+    localStorage.setItem(
+      AUTH_HAS_BUSINESS_KEY,
+      String(nextHasBusiness)
+    );
+
+    localStorage.setItem(
+      AUTH_HAS_SUBSCRIPTION_KEY,
+      String(nextHasSubscription)
+    );
+  };
+
+  /**
+   * ============================================================
+   * INITIAL AUTH CHECK
+   * ============================================================
+   */
+
   useEffect(() => {
+
+    let mounted = true;
+
     const init = async () => {
-      const token = localStorage.getItem(AUTH_TOKEN_KEY);
-      const storedUser = localStorage.getItem(AUTH_USER_KEY);
+
+      const token =
+        localStorage.getItem(AUTH_TOKEN_KEY);
+
+      const storedUser =
+        localStorage.getItem(AUTH_USER_KEY);
 
       if (!token) {
-        setIsInitializing(false);
+
+        if (mounted) {
+          setIsAuthenticated(false);
+          setUser(null);
+          setHasBusiness(false);
+          setHasSubscription(false);
+          setIsInitializing(false);
+        }
+
         return;
       }
 
-      setIsAuthenticated(true);
-      if (storedUser) {
-        try {
-          setUser(JSON.parse(storedUser));
-        } catch {
-          setUser(null);
-        }
-      }
-      setHasBusiness(localStorage.getItem(AUTH_HAS_BUSINESS_KEY) === 'true');
-      setHasSubscription(localStorage.getItem(AUTH_HAS_SUBSCRIPTION_KEY) === 'true');
+      /*
+       * Restore cached values immediately.
+       */
+      if (mounted) {
 
+        setIsAuthenticated(true);
+
+        if (storedUser) {
+          try {
+            setUser(JSON.parse(storedUser));
+          } catch {
+            setUser(null);
+          }
+        }
+
+        setHasBusiness(
+          localStorage.getItem(
+            AUTH_HAS_BUSINESS_KEY
+          ) === 'true'
+        );
+
+        setHasSubscription(
+          localStorage.getItem(
+            AUTH_HAS_SUBSCRIPTION_KEY
+          ) === 'true'
+        );
+      }
+
+      /*
+       * Verify with backend.
+       */
       try {
+
         const res = await apiGet('/auth/me');
-        setUser(res.user);
-        setHasBusiness(Boolean(res.hasBusiness));
-        setHasSubscription(Boolean(res.hasSubscription));
-        localStorage.setItem(AUTH_USER_KEY, JSON.stringify(res.user));
-        localStorage.setItem(AUTH_HAS_BUSINESS_KEY, String(Boolean(res.hasBusiness)));
-        localStorage.setItem(AUTH_HAS_SUBSCRIPTION_KEY, String(Boolean(res.hasSubscription)));
-      } catch {
-        // Token invalid/expired - clear the session.
-        localStorage.removeItem(AUTH_TOKEN_KEY);
-        localStorage.removeItem(AUTH_USER_KEY);
-        localStorage.removeItem(AUTH_HAS_BUSINESS_KEY);
-        localStorage.removeItem(AUTH_HAS_SUBSCRIPTION_KEY);
+
+        if (!mounted) {
+          return;
+        }
+
+        const nextUser =
+          res?.user ?? null;
+
+        const nextHasBusiness =
+          Boolean(res?.hasBusiness);
+
+        const nextHasSubscription =
+          Boolean(res?.hasSubscription);
+
+        saveAuthStatus(
+          nextUser,
+          nextHasBusiness,
+          nextHasSubscription
+        );
+
+        setIsAuthenticated(true);
+
+      } catch (error) {
+
+        console.error(
+          '[AUTH] /auth/me failed:',
+          error
+        );
+
+        if (!mounted) {
+          return;
+        }
+
+        localStorage.removeItem(
+          AUTH_TOKEN_KEY
+        );
+
+        localStorage.removeItem(
+          AUTH_USER_KEY
+        );
+
+        localStorage.removeItem(
+          AUTH_HAS_BUSINESS_KEY
+        );
+
+        localStorage.removeItem(
+          AUTH_HAS_SUBSCRIPTION_KEY
+        );
+
         setIsAuthenticated(false);
         setUser(null);
         setHasBusiness(false);
         setHasSubscription(false);
-      }
 
-      setIsInitializing(false);
+      } finally {
+
+        if (mounted) {
+          setIsInitializing(false);
+        }
+      }
     };
 
     init();
+
+    return () => {
+      mounted = false;
+    };
+
   }, []);
+
+  /**
+   * ============================================================
+   * LOGIN
+   * ============================================================
+   */
 
   const login = (
     nextUser: AuthUser,
@@ -93,41 +249,90 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     nextHasBusiness: boolean,
     nextHasSubscription: boolean
   ) => {
-    localStorage.setItem(AUTH_TOKEN_KEY, token);
-    localStorage.setItem(AUTH_USER_KEY, JSON.stringify(nextUser));
-    localStorage.setItem(AUTH_HAS_BUSINESS_KEY, String(nextHasBusiness));
-    localStorage.setItem(AUTH_HAS_SUBSCRIPTION_KEY, String(nextHasSubscription));
-    setUser(nextUser);
-    setHasBusiness(nextHasBusiness);
-    setHasSubscription(nextHasSubscription);
+
+    localStorage.setItem(
+      AUTH_TOKEN_KEY,
+      token
+    );
+
+    saveAuthStatus(
+      nextUser,
+      Boolean(nextHasBusiness),
+      Boolean(nextHasSubscription)
+    );
+
     setIsAuthenticated(true);
+    setIsInitializing(false);
   };
+
+  /**
+   * ============================================================
+   * LOGOUT
+   * ============================================================
+   */
 
   const logout = () => {
-    localStorage.removeItem(AUTH_TOKEN_KEY);
-    localStorage.removeItem(AUTH_USER_KEY);
-    localStorage.removeItem(AUTH_HAS_BUSINESS_KEY);
-    localStorage.removeItem(AUTH_HAS_SUBSCRIPTION_KEY);
+
+    localStorage.removeItem(
+      AUTH_TOKEN_KEY
+    );
+
+    localStorage.removeItem(
+      AUTH_USER_KEY
+    );
+
+    localStorage.removeItem(
+      AUTH_HAS_BUSINESS_KEY
+    );
+
+    localStorage.removeItem(
+      AUTH_HAS_SUBSCRIPTION_KEY
+    );
+
     setUser(null);
+
     setHasBusiness(false);
+
     setHasSubscription(false);
+
     setIsAuthenticated(false);
+
+    setIsInitializing(false);
   };
 
-  // Call after business-setup or subscription purchase completes, so the
-  // rest of the app (guards, redirects) sees the updated status immediately.
-  const refreshStatus = async () => {
-    try {
-      const res = await apiGet('/auth/me');
-      setUser(res.user);
-      setHasBusiness(Boolean(res.hasBusiness));
-      setHasSubscription(Boolean(res.hasSubscription));
-      localStorage.setItem(AUTH_USER_KEY, JSON.stringify(res.user));
-      localStorage.setItem(AUTH_HAS_BUSINESS_KEY, String(Boolean(res.hasBusiness)));
-      localStorage.setItem(AUTH_HAS_SUBSCRIPTION_KEY, String(Boolean(res.hasSubscription)));
-    } catch {
-      // ignore - caller can retry or rely on next navigation
-    }
+  /**
+   * ============================================================
+   * REFRESH SERVER AUTH STATUS
+   * ============================================================
+   */
+
+  const refreshStatus = async (): Promise<void> => {
+
+    const res = await apiGet('/auth/me');
+
+    const nextUser =
+      res?.user ?? null;
+
+    const nextHasBusiness =
+      Boolean(res?.hasBusiness);
+
+    const nextHasSubscription =
+      Boolean(res?.hasSubscription);
+
+    console.log(
+      '[AUTH] Refreshed status:',
+      {
+        user: nextUser,
+        hasBusiness: nextHasBusiness,
+        hasSubscription: nextHasSubscription,
+      }
+    );
+
+    saveAuthStatus(
+      nextUser,
+      nextHasBusiness,
+      nextHasSubscription
+    );
   };
 
   return (
@@ -149,9 +354,15 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 };
 
 export const useAuth = (): AuthContextValue => {
+
   const ctx = useContext(AuthContext);
+
   if (!ctx) {
-    throw new Error('useAuth must be used inside an <AuthProvider>');
+    throw new Error(
+      'useAuth must be used inside an <AuthProvider>'
+    );
   }
+
   return ctx;
 };
+
