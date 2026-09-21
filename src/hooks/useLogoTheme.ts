@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
-import logo from '../assets/aarna-logo.jpeg';
+import logo from '../assets/aarna-logo.png';
 
 /**
  * Reads the logo image and builds a palette from it:

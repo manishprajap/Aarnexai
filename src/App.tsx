@@ -1,4 +1,5 @@
 import { Navigate, Route } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { IonApp, IonRouterOutlet, setupIonicReact } from '@ionic/react';
 import { IonReactRouter } from '@ionic/react-router';
 import { AuthProvider } from './context/AuthContext';
@@ -35,14 +36,25 @@ import Campaigns from './pages/Campaigns';
 import CreateCampaign from './pages/CreateCampaign';
 import CampaignDetails from './pages/CampaignDetails';
 import Profile from './pages/profile';
+import SocialConnections from './pages/SocialConnections';
+import aarnaLogo from './assets/aarna-logo.png';
+import './splash.css';
 
 setupIonicReact();
 
-const App: React.FC = () => (
-  <IonApp>
-    <AuthProvider>
-      <IonReactRouter>
-        <IonRouterOutlet>
+const App: React.FC = () => {
+  const [showSplash, setShowSplash] = useState(true);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setShowSplash(false), 1800);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  return (
+    <IonApp>
+      <AuthProvider>
+        <IonReactRouter>
+          <IonRouterOutlet>
           <Route
             path="/login"
             element={
@@ -136,6 +148,15 @@ const App: React.FC = () => (
           />
 
           <Route
+            path="/social-connections"
+            element={
+              <RequireAuth>
+                <SocialConnections />
+              </RequireAuth>
+            }
+          />
+
+          <Route
             path="/products/:productId"
             element={
               <RequireAuth>
@@ -173,10 +194,24 @@ const App: React.FC = () => (
           
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
-        </IonRouterOutlet>
-      </IonReactRouter>
-    </AuthProvider>
-  </IonApp>
-);
+          </IonRouterOutlet>
+        </IonReactRouter>
+
+        {showSplash && (
+          <div className="brand-splash" role="status" aria-label="Loading AarnexAi">
+            <div className="brand-splash__content">
+              <img src={aarnaLogo} alt="AarnexAi" className="brand-splash__logo" />
+            </div>
+            <div className="brand-splash__waves" aria-hidden="true">
+              <span className="brand-splash__wave brand-splash__wave--blue" />
+              <span className="brand-splash__wave brand-splash__wave--orange" />
+              <span className="brand-splash__wave brand-splash__wave--sky" />
+            </div>
+          </div>
+        )}
+      </AuthProvider>
+    </IonApp>
+  );
+};
 
 export default App;

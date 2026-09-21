@@ -10,6 +10,8 @@ import {
   imagesOutline,
   person,
   personOutline,
+  link,
+  linkOutline,
 } from 'ionicons/icons';
 
 import './BottomTabBar.css';
@@ -26,6 +28,7 @@ const TABS: Tab[] = [
   { path: '/', label: 'Home', icon: homeOutline, activeIcon: home },
   { path: '/posters', label: 'Posters', icon: imagesOutline, activeIcon: images },
   { path: '/upload', label: 'Create', icon: addOutline, activeIcon: add, primary: true },
+  { path: '/social-connections', label: 'Social', icon: linkOutline, activeIcon: link },
   { path: '/profile', label: 'Profile', icon: personOutline, activeIcon: person },
 ];
 

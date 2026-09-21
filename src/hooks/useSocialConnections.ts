@@ -27,12 +27,13 @@ const WHATSAPP_APP_CALLBACK_SCHEME =
    TYPES / CONSTANTS
 ========================================================= */
 
-export type PlatformKey = 'facebook' | 'instagram' | 'whatsapp';
+export type PlatformKey = 'facebook' | 'instagram' | 'whatsapp' | 'google_business';
 
 export const CONNECTABLE_PLATFORMS: PlatformKey[] = [
   'facebook',
   'instagram',
   'whatsapp',
+  'google_business',
 ];
 
 export const isConnectable = (id: string): id is PlatformKey =>
@@ -42,18 +43,21 @@ const LABELS: Record<PlatformKey, string> = {
   facebook: 'Facebook',
   instagram: 'Instagram',
   whatsapp: 'WhatsApp',
+  google_business: 'Google Business Profile',
 };
 
 const emptyFlags = (): Record<PlatformKey, boolean> => ({
   facebook: false,
   instagram: false,
   whatsapp: false,
+  google_business: false,
 });
 
 const emptyNames = (): Record<PlatformKey, string | null> => ({
   facebook: null,
   instagram: null,
   whatsapp: null,
+  google_business: null,
 });
 
 function getErrorMessage(error: unknown): string {
@@ -200,7 +204,7 @@ export function useSocialConnections() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const platform = (['facebook', 'instagram'] as PlatformKey[]).find((p) =>
+    const platform = (['facebook', 'instagram', 'google_business'] as PlatformKey[]).find((p) =>
       params.has(p)
     );
 

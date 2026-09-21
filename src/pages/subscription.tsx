@@ -16,6 +16,7 @@ import {
 } from '@ionic/react';
 import { checkmarkCircle, starOutline } from 'ionicons/icons';
 import { apiPost } from '../api';
+import { useAuth } from '../context/AuthContext';
 
 // Razorpay Checkout is loaded from their CDN script (see loadRazorpayScript
 // below) rather than an npm package, since Checkout itself has to run in
@@ -115,6 +116,8 @@ const PLANS: Plan[] = [
 
 const Subscription: React.FC = () => {
   const navigate = useNavigate();
+  const { refreshStatus } = useAuth();
+
   const [loadingPlan, setLoadingPlan] = useState<number | null>(null);
   const [error, setError] = useState('');
 
@@ -126,6 +129,7 @@ const Subscription: React.FC = () => {
       const scriptLoaded = await loadRazorpayScript();
       if (!scriptLoaded) {
         setError('Could not load payment gateway. Check your connection.');
+        setLoadingPlan(null);
         return;
       }
 
@@ -147,12 +151,25 @@ const Subscription: React.FC = () => {
           razorpay_payment_id: string;
           razorpay_signature: string;
         }) => {
+          // Step 3: verify the payment server-side once Checkout succeeds.
           try {
-            // Step 3: verify the payment server-side once Checkout succeeds.
             await apiPost('/subscription/verify', response);
-            navigate('/dashboard');
           } catch (e: any) {
             setError(e?.error || e?.message || 'Payment could not be verified.');
+            setLoadingPlan(null);
+            return;
+          }
+
+          // Step 4: refresh hasSubscription in AuthContext. Without this the
+          // route guard still sees hasSubscription = false and bounces the
+          // user straight back to /subscription.
+          try {
+            await refreshStatus();
+            navigate('/dashboard', { replace: true });
+          } catch (e: any) {
+            setError(
+              'Payment successful, but we could not refresh your account. Please reopen the app.'
+            );
           } finally {
             setLoadingPlan(null);
           }
@@ -341,7 +358,7 @@ const Subscription: React.FC = () => {
 
                 <IonButton
                   expand="block"
-                  disabled={loadingPlan === plan.planId}
+                  disabled={loadingPlan !== null}
                   onClick={() => handleChoosePlan(plan)}
                   style={
                     {
@@ -373,7 +390,7 @@ const Subscription: React.FC = () => {
           </p>
         </div>
 
-        <IonLoading isOpen={Boolean(loadingPlan)} message="Setting up your plan..." />
+        <IonLoading isOpen={loadingPlan !== null} message="Setting up your plan..." />
         <IonToast
           isOpen={Boolean(error)}
           message={error}

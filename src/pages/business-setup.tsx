@@ -23,6 +23,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { apiGet, apiPost } from '../api';
+import { getBusinessCategory, saveBusinessCategory } from '../utils/businessCategory';
 
 import {
   cameraOutline,
@@ -60,16 +61,20 @@ const fieldStyle = {
   borderRadius: 12,
 } as React.CSSProperties;
 
-const CATEGORIES = [
-  'Restaurant / Cafe',
-  'Retail / Shop',
-  'Salon / Spa',
-  'Clinic / Healthcare',
-  'IT Services',
-  'Real Estate',
-  'Education / Coaching',
-  'Other',
-];
+interface Category {
+  id: number;
+  name: string;
+}
+
+const unwrapList = <T,>(res: any, key: string): T[] => {
+  return res?.data?.[key] ?? res?.[key] ?? [];
+};
+
+const toNum = (v: any): number | null => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
 
 const MAX_LOGO_SIZE_MB = 5;
 
@@ -81,13 +86,18 @@ const getErrorMessage = (e: any, fallback: string) =>
 
 const BusinessSetup: React.FC = () => {
   const navigate = useNavigate();
-  const { refreshStatus } = useAuth();
+  const { refreshStatus, user } = useAuth();
 
   const [name, setName] = useState('');
-  const [category, setCategory] = useState('');
   const [city, setCity] = useState('');
   const [website, setWebsite] = useState('');
   const [phone, setPhone] = useState('');
+
+  // Main business category only (loaded from the API).
+  // Subcategory / child category are chosen per product on the Upload page.
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [categoryId, setCategoryId] = useState<number | null>(null);
+  const [loadingCategories, setLoadingCategories] = useState(false);
 
   const [language, setLanguage] =
     useState<'Hindi' | 'English' | 'Hinglish'>('Hinglish');
@@ -95,6 +105,9 @@ const BusinessSetup: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [initializing, setInitializing] = useState(true);
   const [error, setError] = useState('');
+
+  // used to save the category in localStorage even if `user` from context is not ready yet
+  const profileUserIdRef = useRef<string | number | null>(null);
 
   // Logo — OPTIONAL. Defaults to null/not-selected and the form can be
   // submitted without one; `canSubmit` below never checks logoFile.
@@ -104,7 +117,7 @@ const BusinessSetup: React.FC = () => {
 
   // Logo is intentionally excluded from this check — only name, category,
   // and city are required to submit.
-  const canSubmit = Boolean(name.trim() && category.trim() && city.trim());
+  const canSubmit = Boolean(name.trim() && categoryId && city.trim());
 
   // ==================================================
   // LOAD CURRENT USER (for phone number + any existing details)
@@ -117,15 +130,23 @@ const BusinessSetup: React.FC = () => {
       try {
         // apiGet('/auth/me') resolves to { user: {...} } directly.
         const res = await apiGet('/auth/me');
-        const user = res?.user;
-        if (cancelled || !user) return;
+        const u = res?.user;
+        if (cancelled || !u) return;
 
-        setPhone(user.mobile || '');
-        if (user.name) setName(user.name);
-        if (user.category) setCategory(user.category);
-        if (user.city) setCity(user.city);
-        if (user.website) setWebsite(user.website);
-        if (user.language) setLanguage(user.language);
+        profileUserIdRef.current = u.id ?? null;
+
+        setPhone(u.mobile || '');
+        if (u.name) setName(u.name);
+        if (u.city) setCity(u.city);
+        if (u.website) setWebsite(u.website);
+        if (u.language) setLanguage(u.language);
+
+        // Prefill category: backend first, localStorage as fallback
+        const saved = getBusinessCategory(u.id);
+
+        const cId = toNum(u.categoryId) ?? saved?.categoryId ?? null;
+
+        if (cId) setCategoryId(cId);
       } catch (e: any) {
         if (!cancelled) {
           setError(getErrorMessage(e, 'Could not load your profile'));
@@ -140,6 +161,39 @@ const BusinessSetup: React.FC = () => {
       cancelled = true;
     };
   }, []);
+
+  // ==================================================
+  // LOAD CATEGORIES (once)
+  // ==================================================
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const load = async () => {
+      try {
+        setLoadingCategories(true);
+        const res = await apiGet('/categories');
+        if (!cancelled) setCategories(unwrapList<Category>(res, 'categories'));
+      } catch (e: any) {
+        if (!cancelled) setError(getErrorMessage(e, 'Unable to load categories'));
+      } finally {
+        if (!cancelled) setLoadingCategories(false);
+      }
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // ==================================================
+  // CATEGORY CHANGE
+  // ==================================================
+
+  const handleCategoryChange = (value: any) => {
+    setCategoryId(toNum(value));
+  };
 
   // ==================================================
   // OPEN FILE PICKER
@@ -202,7 +256,7 @@ const BusinessSetup: React.FC = () => {
   // ==================================================
 
   const handleSubmit = async () => {
-    if (!canSubmit) {
+    if (!canSubmit || !categoryId) {
       setError('Please fill in business name, category and city');
       return;
     }
@@ -211,12 +265,16 @@ const BusinessSetup: React.FC = () => {
     setError('');
 
     try {
-      let payload: FormData | Record<string, string | null>;
+      const categoryName = categories.find((c) => c.id === categoryId)?.name ?? '';
+
+      let payload: FormData | Record<string, string | number | null>;
 
       if (logoFile) {
         const formData = new FormData();
         formData.append('name', name.trim());
-        formData.append('category', category.trim());
+        // `category` (name) is kept so older backend code that reads it keeps working
+        formData.append('category', categoryName);
+        formData.append('categoryId', String(categoryId));
         formData.append('city', city.trim());
         formData.append('website', website.trim());
         formData.append('language', language);
@@ -225,7 +283,8 @@ const BusinessSetup: React.FC = () => {
       } else {
         payload = {
           name: name.trim(),
-          category: category.trim(),
+          category: categoryName,
+          categoryId,
           city: city.trim(),
           website: website.trim(),
           language,
@@ -233,7 +292,14 @@ const BusinessSetup: React.FC = () => {
         };
       }
 
-      await apiPost('business/setup', payload);
+      await apiPost('/business/setup', payload);
+
+      // Cache the category so the Upload page can read it without asking again
+      saveBusinessCategory(user?.id ?? profileUserIdRef.current, {
+        categoryId,
+        categoryName,
+      });
+
       await refreshStatus();
       navigate('/subscription');
     } catch (e: any) {
@@ -241,6 +307,11 @@ const BusinessSetup: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const labelStyle: React.CSSProperties = {
+    color: brand.navy,
+    fontWeight: 600,
   };
 
   return (
@@ -473,13 +544,7 @@ const BusinessSetup: React.FC = () => {
                 }}
               />
 
-              <IonLabel
-                position="stacked"
-                style={{
-                  color: brand.navy,
-                  fontWeight: 600,
-                }}
-              >
+              <IonLabel position="stacked" style={labelStyle}>
                 Business Name
               </IonLabel>
 
@@ -502,24 +567,19 @@ const BusinessSetup: React.FC = () => {
                 }}
               />
 
-              <IonLabel
-                position="stacked"
-                style={{
-                  color: brand.navy,
-                  fontWeight: 600,
-                }}
-              >
+              <IonLabel position="stacked" style={labelStyle}>
                 Business Category
               </IonLabel>
 
               <IonSelect
-                value={category}
-                placeholder="Select category"
-                onIonChange={(e) => setCategory(String(e.detail.value || ''))}
+                value={categoryId}
+                placeholder={loadingCategories ? 'Loading...' : 'Select category'}
+                disabled={loadingCategories}
+                onIonChange={(e) => handleCategoryChange(e.detail.value)}
               >
-                {CATEGORIES.map((item) => (
-                  <IonSelectOption key={item} value={item}>
-                    {item}
+                {categories.map((item) => (
+                  <IonSelectOption key={item.id} value={item.id}>
+                    {item.name}
                   </IonSelectOption>
                 ))}
               </IonSelect>
@@ -537,13 +597,7 @@ const BusinessSetup: React.FC = () => {
                 }}
               />
 
-              <IonLabel
-                position="stacked"
-                style={{
-                  color: brand.navy,
-                  fontWeight: 600,
-                }}
-              >
+              <IonLabel position="stacked" style={labelStyle}>
                 City
               </IonLabel>
 
@@ -566,13 +620,7 @@ const BusinessSetup: React.FC = () => {
                 }}
               />
 
-              <IonLabel
-                position="stacked"
-                style={{
-                  color: brand.navy,
-                  fontWeight: 600,
-                }}
-              >
+              <IonLabel position="stacked" style={labelStyle}>
                 Website (optional)
               </IonLabel>
 
@@ -595,13 +643,7 @@ const BusinessSetup: React.FC = () => {
                 }}
               />
 
-              <IonLabel
-                position="stacked"
-                style={{
-                  color: brand.navy,
-                  fontWeight: 600,
-                }}
-              >
+              <IonLabel position="stacked" style={labelStyle}>
                 Phone
               </IonLabel>
 
@@ -626,13 +668,7 @@ const BusinessSetup: React.FC = () => {
                 }}
               />
 
-              <IonLabel
-                position="stacked"
-                style={{
-                  color: brand.navy,
-                  fontWeight: 600,
-                }}
-              >
+              <IonLabel position="stacked" style={labelStyle}>
                 Language
               </IonLabel>
 

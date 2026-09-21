@@ -18,7 +18,7 @@ import {
   eyeOffOutline,
 } from 'ionicons/icons';
 import { useAuth } from '../context/AuthContext';
-import logo from '../assets/aarna-logo.jpeg';
+import logo from '../assets/aarna-logo.png';
 import { apiPost } from '../api';
 import './Login.css';
 

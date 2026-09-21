@@ -1,96 +1,63 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import {
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { useNavigate } from 'react-router-dom';
 
 import {
+  IonButton,
   IonContent,
   IonHeader,
-  IonPage,
-  IonToolbar,
-  IonTitle,
   IonIcon,
-  IonButton,
-  IonBackButton,
-  IonButtons,
-  IonToast,
+  IonPage,
   IonSpinner,
+  IonToast,
+  IonToolbar,
 } from '@ionic/react';
+import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 
 import {
-  cameraOutline,
-  imagesOutline,
-  closeCircle,
-  sparklesOutline,
-  chatbubbleEllipsesOutline,
-  informationCircleOutline,
-  checkmark,
+  arrowBack,
+  camera,
   chevronDownOutline,
-  shirtOutline,
-  fastFoodOutline,
-  phonePortraitOutline,
-  laptopOutline,
-  homeOutline,
-  carOutline,
-  bookOutline,
-  cubeOutline,
-  diamondOutline,
-  walkOutline,
-  watchOutline,
-  glassesOutline,
-  flowerOutline,
-  gameControllerOutline,
-  cutOutline,
-  medkitOutline,
-  pawOutline,
-  bagHandleOutline,
-  colorPaletteOutline,
-  buildOutline,
-  fitnessOutline,
-  giftOutline,
-  rocketOutline,
-  pricetagOutline,
-  appsOutline,
+  cloudUpload,
+  imagesOutline,
+  sparklesOutline,
 } from 'ionicons/icons';
 
 import { apiGet, apiPost } from '../api';
 import { useAuth } from '../context/AuthContext';
+import aarnaLogo from '../assets/aarna-logo.png';
+import {
+  BusinessCategory,
+  getBusinessCategory,
+  resolveBusinessCategory,
+  saveBusinessCategory,
+} from '../utils/businessCategory';
+import { generatePromptPlan, getPlanDay, getPromptPlan } from '../utils/promptPlan';
 
 // ==================================================
-// BRAND
+// BRAND / TOKENS
 // ==================================================
 
-const brand = {
-  navy: '#0F2A4A',
-  blue: '#1E7FE0',
-  teal: '#12A19C',
-  ink: '#5A6B7B',
-  border: '#E1E8EE',
-  cardBg: '#FFFFFF',
-  pageBgFrom: '#EAF4FF',
-  pageBgTo: '#F3FBF4',
+const ui = {
+  primary: '#0F6FEC',
+  primarySoft: '#EAF3FF',
+  text: '#0F1B2D',
+  muted: '#6B7A90',
+  border: '#E1E7EF',
+  dashed: '#B9C7DA',
+  surface: '#F8FAFD',
+  white: '#FFFFFF',
 };
 
-const AVATAR_TINTS = [
-  { bg: '#EAF4FF', fg: '#1E7FE0' },
-  { bg: '#EAFBF8', fg: '#12A19C' },
-  { bg: '#FFF4E6', fg: '#C2740D' },
-  { bg: '#FDEBEE', fg: '#D64545' },
-  { bg: '#F2EAFB', fg: '#7C3AED' },
-  { bg: '#EAF7EE', fg: '#3D9A50' },
-];
+const LOGO_SRC = aarnaLogo;
 
-const tintFor = (id: number) => AVATAR_TINTS[Math.abs(id) % AVATAR_TINTS.length];
+const MAX_DESCRIPTION = 500;
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB (change to 5MB if you want to match the mockup text)
 
-interface Category {
-  id: number;
-  name: string;
-  icon?: string | null;
-}
+// ==================================================
+// TYPES
+// ==================================================
 
 interface Subcategory {
   id: number;
@@ -102,257 +69,7 @@ interface ChildCategory {
   name: string;
 }
 
-const PROMPT_TYPES: { label: string; value: string }[] = [
-  { label: 'Festive / Sale', value: 'festive_sale' },
-  { label: 'Product Launch', value: 'product_launch' },
-  { label: 'Discount / Offer', value: 'discount_offer' },
-  { label: 'Minimal / Clean', value: 'minimal_clean' },
-  { label: 'Premium / Luxury', value: 'premium_luxury' },
-  { label: 'Custom', value: 'custom' },
-];
-
-const unwrapList = <T,>(res: any, key: string): T[] => {
-  return res?.data?.[key] ?? res?.[key] ?? [];
-};
-
-// ==================================================
-// ICON MATCHING
-// ==================================================
-
-const NAME_ICON_MAP: { keywords: string[]; icon: string }[] = [
-  { keywords: ['cloth', 'fashion', 'apparel', 'wear', 'garment', 'dress', 'saree', 'kurta'], icon: shirtOutline },
-  { keywords: ['food', 'grocery', 'snack', 'beverage', 'restaurant', 'sweet', 'bakery'], icon: fastFoodOutline },
-  { keywords: ['mobile', 'phone', 'electronic', 'gadget', 'tech', 'camera'], icon: phonePortraitOutline },
-  { keywords: ['laptop', 'computer'], icon: laptopOutline },
-  { keywords: ['home', 'furniture', 'decor', 'kitchen', 'appliance'], icon: homeOutline },
-  { keywords: ['car', 'auto', 'vehicle', 'bike', 'scooter'], icon: carOutline },
-  { keywords: ['book', 'stationery', 'education'], icon: bookOutline },
-  { keywords: ['jewel', 'diamond', 'gold', 'silver', 'luxury'], icon: diamondOutline },
-  { keywords: ['shoe', 'footwear', 'sandal', 'sneaker', 'slipper'], icon: walkOutline },
-  { keywords: ['watch', 'accessor'], icon: watchOutline },
-  { keywords: ['glass', 'eyewear', 'sunglass'], icon: glassesOutline },
-  { keywords: ['flower', 'plant', 'garden'], icon: flowerOutline },
-  { keywords: ['game', 'toy', 'kids', 'baby'], icon: gameControllerOutline },
-  { keywords: ['beauty', 'cosmetic', 'salon', 'hair', 'makeup'], icon: cutOutline },
-  { keywords: ['health', 'medic', 'pharma', 'wellness', 'fitness supplement'], icon: medkitOutline },
-  { keywords: ['pet', 'animal'], icon: pawOutline },
-  { keywords: ['bag', 'handbag', 'luggage', 'wallet'], icon: bagHandleOutline },
-  { keywords: ['art', 'craft', 'paint', 'handmade'], icon: colorPaletteOutline },
-  { keywords: ['tool', 'hardware', 'machine'], icon: buildOutline },
-  { keywords: ['sport', 'gym', 'fitness'], icon: fitnessOutline },
-  { keywords: ['gift'], icon: giftOutline },
-];
-
-const getIconForName = (name: string): string => {
-  const lower = name.toLowerCase();
-  const match = NAME_ICON_MAP.find((entry) => entry.keywords.some((k) => lower.includes(k)));
-  return match ? match.icon : cubeOutline;
-};
-
-const PROMPT_TYPE_ICON: Record<string, string> = {
-  festive_sale: giftOutline,
-  product_launch: rocketOutline,
-  discount_offer: pricetagOutline,
-  minimal_clean: appsOutline,
-  premium_luxury: diamondOutline,
-  custom: colorPaletteOutline,
-};
-
-const renderItemIcon = (name: string, imageIcon?: string | null, color?: string) => {
-  const isImageIcon = Boolean(imageIcon && /^https?:\/\//.test(imageIcon));
-
-  if (isImageIcon) {
-    return <img src={imageIcon as string} alt="" className="h-4 w-4 object-contain" />;
-  }
-
-  return <IonIcon icon={getIconForName(name)} style={{ fontSize: 16, color: color || brand.blue }} />;
-};
-
-// ==================================================
-// SECTION LABEL
-// ==================================================
-
-const SectionLabel: React.FC<{ text: string; hint?: string }> = ({ text, hint }) => (
-  <div className="mb-3">
-    <p style={{ fontSize: 14, fontWeight: 600, color: brand.navy }}>{text}</p>
-    {hint && (
-      <p
-        className="mt-1 flex items-center gap-1"
-        style={{ fontSize: 12, color: brand.ink }}
-      >
-        <IonIcon icon={informationCircleOutline} style={{ fontSize: 14 }} />
-        {hint}
-      </p>
-    )}
-  </div>
-);
-
-// ==================================================
-// DROPDOWN SELECT
-// ==================================================
-
-interface DropdownOption {
-  id: number | string;
-  name: string;
-  icon: React.ReactNode;
-}
-
-interface DropdownSelectProps {
-  items: DropdownOption[];
-  selectedId: number | string | null;
-  loading?: boolean;
-  placeholder?: string;
-  emptyLabel?: string;
-  onSelect: (id: number | string) => void;
-}
-
-const DropdownSelect: React.FC<DropdownSelectProps> = ({
-  items,
-  selectedId,
-  loading,
-  placeholder,
-  emptyLabel,
-  onSelect,
-}) => {
-  const [open, setOpen] = useState(false);
-  const wrapperRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="h-12 w-full animate-pulse rounded-xl" style={{ background: brand.border }} />
-    );
-  }
-
-  const selected = items.find((i) => i.id === selectedId);
-
-  return (
-    <div ref={wrapperRef} className="relative">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between rounded-xl px-3.5 py-2.5"
-        style={{ border: `1px solid ${brand.border}`, background: '#FFFFFF' }}
-      >
-        <span className="flex min-w-0 items-center gap-2.5">
-          {selected ? (
-            <>
-              <span
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
-                style={{ background: tintFor(typeof selected.id === 'number' ? selected.id : selected.id.length).bg }}
-              >
-                {selected.icon}
-              </span>
-              <span
-                className="truncate"
-                style={{ fontSize: 14, fontWeight: 600, color: brand.navy }}
-              >
-                {selected.name}
-              </span>
-            </>
-          ) : (
-            <span style={{ fontSize: 13.5, color: brand.ink }}>
-              {placeholder || 'Select an option'}
-            </span>
-          )}
-        </span>
-        <IonIcon
-          icon={chevronDownOutline}
-          style={{
-            fontSize: 16,
-            color: brand.ink,
-            flexShrink: 0,
-            transform: open ? 'rotate(180deg)' : 'none',
-            transition: 'transform 0.2s',
-          }}
-        />
-      </button>
-
-      {open && (
-        <div
-          className="absolute left-0 right-0 z-20 mt-1.5 max-h-60 overflow-y-auto rounded-xl"
-          style={{
-            border: `1px solid ${brand.border}`,
-            background: '#FFFFFF',
-            boxShadow: '0 10px 28px rgba(15,42,74,0.14)',
-          }}
-        >
-          {items.length === 0 ? (
-            <div className="px-3.5 py-3" style={{ fontSize: 12.5, color: brand.ink }}>
-              {emptyLabel || 'No options available'}
-            </div>
-          ) : (
-            items.map((item) => {
-              const isSelected = item.id === selectedId;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => {
-                    onSelect(item.id);
-                    setOpen(false);
-                  }}
-                  className="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left transition-colors active:opacity-80"
-                  style={{ background: isSelected ? brand.pageBgFrom : 'transparent' }}
-                >
-                  <span
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
-                    style={{ background: tintFor(typeof item.id === 'number' ? item.id : item.id.length).bg }}
-                  >
-                    {item.icon}
-                  </span>
-                  <span
-                    className="flex-1 truncate"
-                    style={{ fontSize: 13.5, fontWeight: isSelected ? 600 : 500, color: brand.navy }}
-                  >
-                    {item.name}
-                  </span>
-                  {isSelected && (
-                    <IonIcon icon={checkmark} style={{ fontSize: 15, color: brand.blue, flexShrink: 0 }} />
-                  )}
-                </button>
-              );
-            })
-          )}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ==================================================
-// STEP PROGRESS
-// ==================================================
-
-const STEPS = ['Photo', 'Category', 'Style'];
-
-const StepProgress: React.FC<{ current: number }> = ({ current }) => (
-  <div className="flex items-center gap-2 px-4 pb-4 pt-1">
-    {STEPS.map((label, i) => (
-      <div key={label} className="flex flex-1 items-center gap-2">
-        <div
-          className="h-1 flex-1 rounded-full transition-colors"
-          style={{ background: i <= current ? '#FFFFFF' : 'rgba(255,255,255,0.35)' }}
-        />
-        {i < STEPS.length - 1 && null}
-      </div>
-    ))}
-  </div>
-);
-
-// ==================================================
-// AI ANALYZE RESPONSE TYPES — mirrors /api/products/analyze
-// ==================================================
+type AspectRatio = '1:1' | '16:9' | '9:16';
 
 interface AiProduct {
   productName?: string;
@@ -423,43 +140,166 @@ interface ProductDetailsState {
   banners: ProductDetailsBanner[];
 }
 
+const ASPECT_OPTIONS: {
+  value: AspectRatio;
+  ratio: string;
+  label: string;
+  w: number;
+  h: number;
+}[] = [
+  { value: '1:1', ratio: '1:1', label: 'Square', w: 16, h: 16 },
+  { value: '16:9', ratio: '16:9', label: 'Landscape', w: 22, h: 13 },
+  { value: '9:16', ratio: '9:16', label: 'Portrait', w: 13, h: 22 },
+];
+
+const unwrapList = <T,>(res: any, key: string): T[] => {
+  return res?.data?.[key] ?? res?.[key] ?? [];
+};
+
+// ==================================================
+// SMALL UI PIECES
+// ==================================================
+
+const Logo: React.FC = () => {
+  const [failed, setFailed] = useState(false);
+
+  if (failed) {
+    return (
+      <span style={{ fontSize: 22, fontWeight: 800, color: ui.primary, letterSpacing: -0.5 }}>
+        Aarnexai
+      </span>
+    );
+  }
+
+  return (
+    <img
+      src={LOGO_SRC}
+      alt="Aarnexai"
+      onError={() => setFailed(true)}
+      style={{ height: 38, objectFit: 'contain' }}
+    />
+  );
+};
+
+const FieldLabel: React.FC<{ text: string }> = ({ text }) => (
+  <p style={{ fontSize: 14, fontWeight: 600, color: ui.text, margin: '0 0 10px' }}>{text}</p>
+);
+
+interface SelectFieldProps {
+  value: number | null;
+  options: { id: number; name: string }[];
+  placeholder: string;
+  loading?: boolean;
+  onChange: (id: number | null) => void;
+}
+
+const SelectField: React.FC<SelectFieldProps> = ({
+  value,
+  options,
+  placeholder,
+  loading,
+  onChange,
+}) => {
+  if (loading) {
+    return (
+      <div
+        className="animate-pulse"
+        style={{ height: 48, borderRadius: 12, background: ui.border }}
+      />
+    );
+  }
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <select
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
+        style={{
+          width: '100%',
+          height: 48,
+          appearance: 'none',
+          WebkitAppearance: 'none',
+          borderRadius: 12,
+          border: `1px solid ${ui.border}`,
+          background: ui.white,
+          padding: '0 40px 0 14px',
+          fontSize: 14,
+          color: value ? ui.text : ui.muted,
+          outline: 'none',
+        }}
+      >
+        <option value="">{placeholder}</option>
+        {options.map((o) => (
+          <option key={o.id} value={o.id}>
+            {o.name}
+          </option>
+        ))}
+      </select>
+      <IonIcon
+        icon={chevronDownOutline}
+        style={{
+          position: 'absolute',
+          right: 14,
+          top: 16,
+          fontSize: 16,
+          color: ui.muted,
+          pointerEvents: 'none',
+        }}
+      />
+    </div>
+  );
+};
+
+// ==================================================
+// PAGE
+// ==================================================
+
 const Upload: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
 
+  // step 'upload' = screen 1, step 'generate' = screen 2
+  const [step, setStep] = useState<'upload' | 'generate'>('upload');
+
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1');
+
+  // Category comes from Business Setup (saved in localStorage), not selected here
+  const [businessCategory, setBusinessCategory] = useState<BusinessCategory | null>(null);
+
+  // Chosen per product on this screen (both optional)
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [childCategories, setChildCategories] = useState<ChildCategory[]>([]);
-
-  const [categoryId, setCategoryId] = useState<number | null>(null);
   const [subcategoryId, setSubcategoryId] = useState<number | null>(null);
   const [childCategoryId, setChildCategoryId] = useState<number | null>(null);
-
-  const [loadingCategories, setLoadingCategories] = useState(false);
   const [loadingSubcategories, setLoadingSubcategories] = useState(false);
   const [loadingChildCategories, setLoadingChildCategories] = useState(false);
 
-  const [subcategoriesFetched, setSubcategoriesFetched] = useState(false);
-  const [childCategoriesFetched, setChildCategoriesFetched] = useState(false);
-
-  const [promptType, setPromptType] = useState<string | null>(null);
   const [promptDescription, setPromptDescription] = useState('');
-  const [bannerColor, setBannerColor] = useState('#4F46E5');
 
-  const [uploading, setUploading] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false); // step 1: image upload
+  const [generating, setGenerating] = useState(false); // step 2: analyze / generate ad
+  const uploading = uploadingImage || generating;
+  const [productId, setProductId] = useState<string | number | null>(null);
+  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
   const isSubmittingRef = useRef(false);
 
   const [toastMessage, setToastMessage] = useState('');
   const [showToast, setShowToast] = useState(false);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+
+  const showMessage = (message: string) => {
+    setToastMessage(message);
+    setShowToast(true);
+  };
 
   /*
   |--------------------------------------------------------------------------
-  | Cleanup object URL on unmount
+  | Cleanup object URL
   |--------------------------------------------------------------------------
   */
 
@@ -473,120 +313,181 @@ const Upload: React.FC = () => {
 
   /*
   |--------------------------------------------------------------------------
-  | Load categories once an image is selected
+  | Read the business category saved by Business Setup.
+  | localStorage first; if it is empty (cleared / new device) fall back to the
+  | profile from the backend and cache it again.
   |--------------------------------------------------------------------------
   */
 
   useEffect(() => {
-    if (!selectedFile || categories.length > 0) {
+    if (!user?.id && !user?.categoryId) {
       return;
     }
 
-    const loadCategories = async () => {
-      try {
-        setLoadingCategories(true);
-        const res = await apiGet('/categories');
+    const saved = getBusinessCategory(user.id ?? null);
+    const resolved = resolveBusinessCategory(user, saved);
 
-        setCategories(unwrapList<Category>(res, 'categories'));
+    if (resolved) {
+      setBusinessCategory(resolved);
+
+      if (user?.id) {
+        saveBusinessCategory(user.id, resolved);
+      }
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadFromProfile = async () => {
+      try {
+        const res = await apiGet('/auth/me');
+        const u = res?.user;
+
+        if (cancelled) {
+          return;
+        }
+
+        const fromProfile = resolveBusinessCategory(u, null);
+
+        if (!fromProfile) {
+          return;
+        }
+
+        saveBusinessCategory(user?.id ?? u?.id ?? null, fromProfile);
+        setBusinessCategory(fromProfile);
       } catch (error) {
-        console.error('LOAD CATEGORIES ERROR:', error);
-        showMessage('Unable to load categories');
-      } finally {
-        setLoadingCategories(false);
+        console.error('LOAD BUSINESS CATEGORY ERROR:', error);
       }
     };
 
-    loadCategories();
-  }, [categories.length, selectedFile]);
+    loadFromProfile();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, user?.categoryId, user?.category]);
 
   /*
   |--------------------------------------------------------------------------
-  | Load subcategories whenever category changes
+  | Subcategories of the saved business category
   |--------------------------------------------------------------------------
   */
 
+  const businessCategoryId = businessCategory?.categoryId ?? null;
+
   useEffect(() => {
-    if (!categoryId) {
-      setSubcategories([]);
-      setSubcategoryId(null);
-      setChildCategories([]);
-      setChildCategoryId(null);
-      setSubcategoriesFetched(false);
+    setSubcategories([]);
+    setSubcategoryId(null);
+
+    if (!businessCategoryId) {
       return;
     }
 
-    const loadSubcategories = async () => {
+    let cancelled = false;
+
+    const load = async () => {
       try {
         setLoadingSubcategories(true);
-        setSubcategoryId(null);
-        setChildCategories([]);
-        setChildCategoryId(null);
-        setSubcategoriesFetched(false);
+        const res = await apiGet(`/categories/${businessCategoryId}/subcategories`);
 
-        const res = await apiGet(`/categories/${categoryId}/subcategories`);
-
-        setSubcategories(unwrapList<Subcategory>(res, 'subcategories'));
+        if (!cancelled) {
+          setSubcategories(unwrapList<Subcategory>(res, 'subcategories'));
+        }
       } catch (error) {
         console.error('LOAD SUBCATEGORIES ERROR:', error);
-        showMessage('Unable to load subcategories');
+
+        if (!cancelled) {
+          showMessage('Unable to load subcategories');
+        }
       } finally {
-        setLoadingSubcategories(false);
-        setSubcategoriesFetched(true);
+        if (!cancelled) {
+          setLoadingSubcategories(false);
+        }
       }
     };
 
-    loadSubcategories();
-  }, [categoryId]);
+    load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [businessCategoryId]);
 
   /*
   |--------------------------------------------------------------------------
-  | Load child categories whenever subcategory changes
+  | Child categories of the selected subcategory
   |--------------------------------------------------------------------------
   */
 
   useEffect(() => {
+    setChildCategories([]);
+    setChildCategoryId(null);
+
     if (!subcategoryId) {
-      setChildCategories([]);
-      setChildCategoryId(null);
-      setChildCategoriesFetched(false);
       return;
     }
 
-    const loadChildCategories = async () => {
+    let cancelled = false;
+
+    const load = async () => {
       try {
         setLoadingChildCategories(true);
-        setChildCategoryId(null);
-        setChildCategoriesFetched(false);
-
         const res = await apiGet(`/subcategories/${subcategoryId}/childcategories`);
 
-        setChildCategories(unwrapList<ChildCategory>(res, 'childCategories'));
+        if (!cancelled) {
+          setChildCategories(unwrapList<ChildCategory>(res, 'childCategories'));
+        }
       } catch (error) {
         console.error('LOAD CHILD CATEGORIES ERROR:', error);
-        showMessage('Unable to load child categories');
+
+        if (!cancelled) {
+          showMessage('Unable to load child categories');
+        }
       } finally {
-        setLoadingChildCategories(false);
-        setChildCategoriesFetched(true);
+        if (!cancelled) {
+          setLoadingChildCategories(false);
+        }
       }
     };
 
-    loadChildCategories();
+    load();
+
+    return () => {
+      cancelled = true;
+    };
   }, [subcategoryId]);
 
+  useEffect(() => {
+    const categoryName = businessCategory?.categoryName?.trim();
+    const subcategoryName = subcategories.find((item) => item.id === subcategoryId)?.name ?? '';
+    const childCategoryName = childCategories.find((item) => item.id === childCategoryId)?.name ?? '';
+
+    if (!categoryName) {
+      return;
+    }
+
+    const generatedPlan = generatePromptPlan(categoryName, subcategoryName, childCategoryName);
+    const savedPlan = user?.id ? getPromptPlan(user.id) : [];
+    const plan = subcategoryName || childCategoryName ? generatedPlan : savedPlan.length ? savedPlan : generatedPlan;
+    const prompt = plan.find(
+      (item) => item.day === getPlanDay(),
+    );
+
+    if (prompt) {
+      setPromptDescription(prompt.prompt);
+    }
+  }, [
+    businessCategory?.categoryName,
+    subcategoryId,
+    childCategoryId,
+    subcategories,
+    childCategories,
+    user?.id,
+  ]);
+
   /*
   |--------------------------------------------------------------------------
-  | Show Toast
-  |--------------------------------------------------------------------------
-  */
-
-  const showMessage = (message: string) => {
-    setToastMessage(message);
-    setShowToast(true);
-  };
-
-  /*
-  |--------------------------------------------------------------------------
-  | Select File
+  | File select -> go to "Generate Ad" screen
   |--------------------------------------------------------------------------
   */
 
@@ -597,19 +498,23 @@ const Upload: React.FC = () => {
       return;
     }
 
+    processSelectedFile(file);
+
+    // allow picking the same file again later
+    e.target.value = '';
+  };
+
+  const processSelectedFile = (file: File) => {
+
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
 
     if (!allowedTypes.includes(file.type)) {
-      showMessage('Please select JPG, PNG or WEBP image');
-      e.target.value = '';
+      showMessage('Please select a JPG, PNG or WEBP image');
       return;
     }
 
-    const maxSize = 10 * 1024 * 1024;
-
-    if (file.size > maxSize) {
-      showMessage('Image size must be less than 10MB');
-      e.target.value = '';
+    if (file.size > MAX_FILE_SIZE) {
+      showMessage(`Image size must be less than ${MAX_FILE_SIZE / (1024 * 1024)}MB`);
       return;
     }
 
@@ -619,139 +524,188 @@ const Upload: React.FC = () => {
 
     setSelectedFile(file);
     setPreviewUrl(URL.createObjectURL(file));
+
+    // upload right away; the Generate Ad screen opens once this succeeds
+    uploadImage(file);
+  };
+
+  const handleTakePhoto = async () => {
+    if (uploadingImage) {
+      return;
+    }
+
+    try {
+      const photo = await Camera.getPhoto({
+        quality: 90,
+        allowEditing: false,
+        resultType: CameraResultType.Uri,
+        source: CameraSource.Camera,
+        correctOrientation: true,
+      });
+
+      if (!photo.webPath) {
+        showMessage('Could not read the captured photo');
+        return;
+      }
+
+      const response = await fetch(photo.webPath);
+      const blob = await response.blob();
+      const extension = blob.type === 'image/png' ? 'png' : 'jpg';
+      const file = new File([blob], `product-${Date.now()}.${extension}`, {
+        type: blob.type || 'image/jpeg',
+      });
+
+      processSelectedFile(file);
+    } catch (error: any) {
+      if (error?.message?.toLowerCase?.().includes('cancel')) {
+        return;
+      }
+
+      console.error('CAMERA ERROR:', error);
+      showMessage('Unable to open the camera');
+    }
   };
 
   /*
   |--------------------------------------------------------------------------
-  | Clear
+  | STEP 1 — Upload image only (/upload). Opens the "Generate Ad" screen.
   |--------------------------------------------------------------------------
   */
 
-  const handleClear = () => {
+  const uploadImage = async (file: File) => {
+    if (!user?.id) {
+      showMessage('Please log in again');
+      resetToUpload();
+      return;
+    }
+
+    try {
+      setUploadingImage(true);
+
+      const formData = new FormData();
+      formData.append('image', file);
+      formData.append('userId', String(user.id));
+
+      const uploadResponse = await apiPost('/upload', formData);
+
+      if (!uploadResponse?.success) {
+        throw new Error(uploadResponse?.message || 'Image upload failed');
+      }
+
+      if (!uploadResponse.productId) {
+        throw new Error('Product ID was not returned');
+      }
+
+      setProductId(uploadResponse.productId);
+      setUploadedImageUrl(uploadResponse.imageUrl || null);
+      setStep('generate');
+    } catch (error: any) {
+      console.error('IMAGE UPLOAD ERROR:', error);
+
+      showMessage(
+        error?.response?.data?.message || error?.message || 'Unable to upload image',
+      );
+
+      resetToUpload();
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  /*
+  |--------------------------------------------------------------------------
+  | Back
+  |--------------------------------------------------------------------------
+  */
+
+  const resetToUpload = () => {
     if (previewUrl) {
       URL.revokeObjectURL(previewUrl);
     }
 
     setSelectedFile(null);
     setPreviewUrl(null);
-    setCategoryId(null);
+    setProductId(null);
+    setUploadedImageUrl(null);
     setSubcategoryId(null);
-    setSubcategories([]);
     setChildCategoryId(null);
-    setChildCategories([]);
-    setPromptType(null);
     setPromptDescription('');
-    setBannerColor('#4F46E5');
+    setAspectRatio('1:1');
+    setStep('upload');
+  };
 
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+  const handleBack = () => {
+    if (uploading) {
+      return;
     }
+
+    if (step === 'generate') {
+      resetToUpload();
+      return;
+    }
+
+    navigate(-1);
   };
 
   /*
   |--------------------------------------------------------------------------
-  | Hex input change — always keeps a leading '#' and uppercases the value
+  | Generate Ad  ->  /upload  ->  /products/analyze
   |--------------------------------------------------------------------------
   */
 
-  const handleHexChange = (raw: string) => {
-    let val = raw.trim();
-
-    if (!val.startsWith('#')) {
-      val = `#${val}`;
-    }
-
-    val = '#' + val.slice(1).replace(/[^0-9a-fA-F]/g, '');
-
-    setBannerColor(val.slice(0, 7));
-  };
-
-  /*
-  |--------------------------------------------------------------------------
-  | Upload + Analyze (generates banners using category / subcategory /
-  | prompt type / prompt description / banner color selected above)
-  |--------------------------------------------------------------------------
-  */
-
-  const handleContinue = async () => {
+  const handleGenerate = async () => {
     if (isSubmittingRef.current || uploading) {
       return;
     }
 
-    if (!selectedFile) {
-      showMessage('Please select a product image');
+    if (!productId) {
+      showMessage('Please upload a product image first');
       return;
     }
 
-    if (!categoryId) {
-      showMessage('Please select a category');
-      return;
+    // The category may still be hydrating after this page opens. Re-read the
+    // cache/profile at submit time before blocking a valid generation request.
+    let category = resolveBusinessCategory(
+      user,
+      getBusinessCategory(user?.id ?? null),
+    ) ?? businessCategory;
+
+    if (!category?.categoryId) {
+      try {
+        const res = await apiGet('/auth/me');
+        const profileCategory = resolveBusinessCategory(res?.user, null);
+
+        if (profileCategory) {
+          category = profileCategory;
+          setBusinessCategory(profileCategory);
+          saveBusinessCategory(user?.id ?? res?.user?.id ?? null, profileCategory);
+        }
+      } catch (error) {
+        console.error('LOAD BUSINESS CATEGORY BEFORE GENERATE ERROR:', error);
+      }
     }
 
-    if (!user?.id) {
-      showMessage('Please log in again');
+    if (!category?.categoryId) {
+      showMessage('Please set your business category in Business Setup first');
       return;
     }
 
     isSubmittingRef.current = true;
 
     try {
-      setUploading(true);
+      setGenerating(true);
 
-      /*
-      |--------------------------------------------------------------------------
-      | STEP 1 — Upload image + selections
-      |--------------------------------------------------------------------------
-      */
+      showMessage('AI is generating your ad...');
 
-      const formData = new FormData();
-      formData.append('image', selectedFile);
-      formData.append('userId', String(user.id));
-      formData.append('categoryId', String(categoryId));
-
-      if (subcategoryId) {
-        formData.append('subcategoryId', String(subcategoryId));
-      }
-
-      if (childCategoryId) {
-        formData.append('childCategoryId', String(childCategoryId));
-      }
-
-      if (promptType) {
-        formData.append('promptType', promptType);
-      }
-
-      formData.append('promptDescription', promptDescription.trim());
-      formData.append('bannerColor', bannerColor);
-
-      console.log('Uploading product...');
-
-      const uploadResponse = await apiPost('/upload', formData);
-
-      console.log('UPLOAD RESPONSE:', uploadResponse);
-
-      if (!uploadResponse.success) {
-        throw new Error(uploadResponse.message || 'Upload failed');
-      }
-
-      const productId = uploadResponse.productId;
-      const uploadedImageUrl = uploadResponse.imageUrl || null;
-
-      if (!productId) {
-        throw new Error('Product ID was not returned');
-      }
-
-      console.log('PRODUCT ID:', productId);
-
-      showMessage('Image uploaded. AI is generating your banners...');
-
-      console.log('Starting AI analysis...');
-
-      const analyzeResponse: AnalyzeResponse = await apiPost('/products/analyze', {
+      // STEP 2 — analyze product + generate ad (product analyze API)
+      const analyzeResponse: AnalyzeResponse = await apiPost('/product/analyze', {
         productId,
+        categoryId: category.categoryId,
+        subcategoryId,
+        childCategoryId,
+        aspectRatio,
+        promptDescription: promptDescription.trim(),
       });
-
-      console.log('ANALYZE RESPONSE:', analyzeResponse);
 
       if (!analyzeResponse?.success) {
         throw new Error(analyzeResponse?.message || 'Product analysis failed');
@@ -762,12 +716,6 @@ const Upload: React.FC = () => {
       if (!aiProduct) {
         throw new Error('Product analysis returned no data');
       }
-
-      /*
-      |--------------------------------------------------------------------------
-      | Banners — only keep the ones that generated successfully
-      |--------------------------------------------------------------------------
-      */
 
       const rawBanners = analyzeResponse.banners ?? [];
 
@@ -781,27 +729,21 @@ const Upload: React.FC = () => {
           caption: b.caption,
         }));
 
-      const failedBanners = rawBanners.filter((b) => b.status === 'failed');
-
-      if (failedBanners.length > 0) {
-        console.warn('SOME BANNERS FAILED:', failedBanners);
+      if (rawBanners.some((b) => b.status === 'failed')) {
+        console.warn(
+          'SOME BANNERS FAILED:',
+          rawBanners.filter((b) => b.status === 'failed'),
+        );
       }
 
-      if (doneBanners.length > 0) {
-        showMessage('Product analyzed — banners generated!');
-      } else {
-        showMessage('Product analyzed, but banner generation failed. Check console.');
-      }
-
-      /*
-      |--------------------------------------------------------------------------
-      | Build state for the product details page
-      |--------------------------------------------------------------------------
-      */
+      showMessage(
+        doneBanners.length > 0
+          ? 'Ad generated successfully!'
+          : 'Product analyzed, but ad generation failed.',
+      );
 
       const productForDetailsPage: ProductDetailsState = {
         id: productId,
-
         status: (analyzeResponse.status as 'processing' | 'done' | 'failed') || 'done',
 
         originalImageUrl: uploadedImageUrl,
@@ -817,8 +759,7 @@ const Upload: React.FC = () => {
         description: aiProduct.description ?? null,
         metaDescription: aiProduct.metaDescription ?? null,
 
-        confidence:
-          typeof aiProduct.confidence === 'number' ? aiProduct.confidence : null,
+        confidence: typeof aiProduct.confidence === 'number' ? aiProduct.confidence : null,
 
         features: aiProduct.features ?? [],
         keywords: aiProduct.keywords ?? [],
@@ -828,13 +769,13 @@ const Upload: React.FC = () => {
         banners: doneBanners,
       };
 
-      navigate(`/products/${productId}`, {
+      navigate(`/product-details`, {
         state: { product: productForDetailsPage },
       });
     } catch (error: any) {
       console.error('UPLOAD / ANALYSIS ERROR:', error);
 
-      let message = 'Unable to process product';
+      let message = 'Unable to generate ad';
 
       if (error?.response?.data?.message) {
         message = error.response.data.message;
@@ -844,371 +785,400 @@ const Upload: React.FC = () => {
 
       showMessage(message);
     } finally {
-      setUploading(false);
+      setGenerating(false);
       isSubmittingRef.current = false;
     }
   };
 
-  const noSubcategories = subcategoriesFetched && !loadingSubcategories && subcategories.length === 0;
-  const noChildCategories = childCategoriesFetched && !loadingChildCategories && childCategories.length === 0;
-
-  const stepIndex = !previewUrl ? 0 : !categoryId ? 1 : 2;
-
-  const categoryOptions: DropdownOption[] = categories.map((c) => ({
-    id: c.id,
-    name: c.name,
-    icon: renderItemIcon(c.name, c.icon, tintFor(c.id).fg),
-  }));
-
-  const subcategoryOptions: DropdownOption[] = subcategories.map((s) => ({
-    id: s.id,
-    name: s.name,
-    icon: renderItemIcon(s.name, null, tintFor(s.id).fg),
-  }));
-
-  const childCategoryOptions: DropdownOption[] = childCategories.map((c) => ({
-    id: c.id,
-    name: c.name,
-    icon: renderItemIcon(c.name, null, tintFor(c.id).fg),
-  }));
-
-  const promptTypeOptions: DropdownOption[] = PROMPT_TYPES.map((p, i) => ({
-    id: p.value,
-    name: p.label,
-    icon: (
-      <IonIcon
-        icon={PROMPT_TYPE_ICON[p.value] || pricetagOutline}
-        style={{ fontSize: 16, color: tintFor(i).fg }}
-      />
-    ),
-  }));
+  // ==================================================
+  // RENDER
+  // ==================================================
 
   return (
     <IonPage>
-      {/* ================================================== HEADER ================================================== */}
-
+      {/* ---------- HEADER ---------- */}
       <IonHeader className="ion-no-border">
-        <IonToolbar
-          style={
-            {
-              '--background': `linear-gradient(90deg, ${brand.blue}, ${brand.teal})`,
-              '--color': '#FFFFFF',
-            } as React.CSSProperties
-          }
-        >
-          <IonButtons slot="start">
-            <IonBackButton
-              defaultHref="/home"
-              text=""
-              style={{ '--color': '#FFFFFF' } as React.CSSProperties}
-            />
-          </IonButtons>
-          <IonTitle style={{ fontWeight: 700 }}>Upload product</IonTitle>
+        <IonToolbar style={{ '--background': ui.white } as React.CSSProperties}>
+          <button
+            type="button"
+            onClick={handleBack}
+            aria-label="Back"
+            disabled={uploading}
+            style={{
+              position: 'absolute',
+              left: 12,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              background: 'transparent',
+              border: 0,
+              padding: 8,
+              display: 'flex',
+            }}
+          >
+            <IonIcon icon={arrowBack} style={{ fontSize: 22, color: ui.text }} />
+          </button>
+
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '6px 0' }}>
+            <Logo />
+          </div>
         </IonToolbar>
-        <div
-          style={{
-            background: `linear-gradient(90deg, ${brand.blue}, ${brand.teal})`,
-          }}
-        >
-          <StepProgress current={stepIndex} />
-        </div>
       </IonHeader>
 
-      {/* ================================================== CONTENT ================================================== */}
+      {/* ---------- CONTENT ---------- */}
+      <IonContent fullscreen style={{ '--background': ui.white } as React.CSSProperties}>
+        {/* hidden inputs (shared by both screens) */}
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          capture="environment"
+          className="hidden"
+          style={{ display: 'none' }}
+          onChange={handleFileSelect}
+        />
+        <input
+          ref={galleryInputRef}
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          style={{ display: 'none' }}
+          onChange={handleFileSelect}
+        />
 
-      <IonContent
-        fullscreen
-        style={
-          {
-            '--background': `linear-gradient(
-              180deg,
-              ${brand.pageBgFrom} 0%,
-              ${brand.pageBgTo} 40%,
-              #FFFFFF 40%
-            )`,
-          } as React.CSSProperties
-        }
-      >
-        <div style={{ padding: '20px 16px 12px' }}>
-          <p style={{ fontSize: 13, color: brand.ink, lineHeight: 1.5, marginBottom: 18 }}>
-            Take a clear photo of your product, choose a category, and set a
-            banner style — then we'll generate professional ad banners for
-            you.
-          </p>
-
-          {/* ================================================== STEP 1 — PHOTO ================================================== */}
-
+        {/* ================= SCREEN 1 — UPLOAD PRODUCT IMAGE ================= */}
+        {step === 'upload' && (
           <div
             style={{
-              background: brand.cardBg,
-              borderRadius: 20,
-              padding: 18,
-              border: `1px solid ${brand.border}`,
-              boxShadow: '0 10px 28px rgba(15,42,74,0.06)',
-              marginBottom: 16,
+              width: '100%',
+              maxWidth: 520,
+              margin: '0 auto',
+              padding: '24px 20px 36px',
+              boxSizing: 'border-box',
             }}
           >
-            {!previewUrl ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex w-full flex-col items-center justify-center rounded-xl px-5 py-9 text-center transition-colors active:opacity-80"
-                  style={{
-                    border: `2px dashed ${brand.teal}`,
-                    background: brand.pageBgFrom,
-                  }}
-                >
-                  <div
-                    className="mb-3 flex h-14 w-14 items-center justify-center rounded-full"
+            <p
+              style={{
+                margin: '0 0 8px',
+                color: ui.primary,
+                fontSize: 12,
+                fontWeight: 700,
+                letterSpacing: 0.6,
+                textTransform: 'uppercase',
+              }}
+            >
+              Step 1 of 2
+            </p>
+            <h1 style={{ fontSize: 26, lineHeight: 1.15, fontWeight: 800, color: ui.text, margin: '0 0 10px' }}>
+              Upload Product Image
+            </h1>
+            <p style={{ margin: '0 0 24px', color: ui.muted, fontSize: 14, lineHeight: 1.5 }}>
+              Add a clear product photo to start creating your ad.
+            </p>
+
+            <button
+              type="button"
+              onClick={handleTakePhoto}
+              disabled={uploadingImage}
+              style={{
+                width: '100%',
+                minHeight: 220,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 12,
+                padding: '28px 20px',
+                borderRadius: 18,
+                border: `1px solid ${ui.border}`,
+                background: `linear-gradient(145deg, ${ui.primarySoft} 0%, ${ui.surface} 72%)`,
+                textAlign: 'center',
+                boxShadow: '0 8px 24px rgba(15, 27, 45, 0.06)',
+              }}
+            >
+              {uploadingImage ? (
+                <>
+                  <IonSpinner name="crescent" style={{ color: ui.primary }} />
+                  <span style={{ fontSize: 15, fontWeight: 700, color: ui.text }}>
+                    Uploading image...
+                  </span>
+                  <span style={{ fontSize: 13, color: ui.muted }}>Please wait a moment</span>
+                </>
+              ) : (
+                <>
+                  <span
                     style={{
-                      background: `linear-gradient(135deg, ${brand.blue}, ${brand.teal})`,
+                      width: 64,
+                      height: 64,
+                      display: 'grid',
+                      placeItems: 'center',
+                      borderRadius: 18,
+                      background: ui.primary,
+                      color: ui.white,
+                      boxShadow: '0 8px 18px rgba(15, 111, 236, 0.24)',
                     }}
                   >
-                    <IonIcon icon={cameraOutline} style={{ fontSize: 24, color: '#FFFFFF' }} />
-                  </div>
-                  <h4 style={{ fontSize: 15, fontWeight: 700, color: brand.navy, margin: 0 }}>
-                    Tap to select an image
-                  </h4>
-                  <p style={{ fontSize: 12, color: brand.ink, marginTop: 6, maxWidth: 260 }}>
-                    Take a photo or choose one from your gallery — JPG, PNG or
-                    WEBP, up to 10MB.
-                  </p>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    capture="environment"
-                    className="hidden"
-                    onChange={handleFileSelect}
-                  />
-                </button>
-
-                <IonButton
-                  expand="block"
-                  fill="outline"
-                  style={
-                    {
-                      '--border-color': brand.border,
-                      '--color': brand.navy,
-                      '--border-radius': '12px',
-                      marginTop: 12,
-                    } as React.CSSProperties
-                  }
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <IonIcon slot="start" icon={imagesOutline} />
-                  Choose from gallery
-                </IonButton>
-              </>
-            ) : (
-              <div className="relative overflow-hidden rounded-2xl" style={{ border: `1px solid ${brand.border}` }}>
-                <img
-                  src={previewUrl}
-                  alt="Product preview"
-                  className="w-full object-cover"
-                  style={{ maxHeight: 280 }}
-                />
-                <button
-                  type="button"
-                  onClick={handleClear}
-                  disabled={uploading}
-                  className="absolute right-2 top-2 rounded-full p-1 backdrop-blur-sm"
-                  style={{ background: 'rgba(15,42,74,0.55)' }}
-                >
-                  <IonIcon icon={closeCircle} style={{ fontSize: 20, color: '#FFFFFF' }} />
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* ================================================== STEP 2 — CATEGORY ================================================== */}
-
-          {previewUrl && (
-            <div
-              style={{
-                background: brand.cardBg,
-                borderRadius: 20,
-                padding: 18,
-                border: `1px solid ${brand.border}`,
-                boxShadow: '0 10px 28px rgba(15,42,74,0.06)',
-                marginBottom: 16,
-              }}
-            >
-              <SectionLabel text="Category" />
-              <DropdownSelect
-                items={categoryOptions}
-                selectedId={categoryId}
-                loading={loadingCategories}
-                placeholder="Select a category"
-                onSelect={(id) => setCategoryId(Number(id))}
-              />
-
-              {categoryId && (
-                <div className="mt-5">
-                  <SectionLabel text="Subcategory (optional)" />
-                  <DropdownSelect
-                    items={subcategoryOptions}
-                    selectedId={subcategoryId}
-                    loading={loadingSubcategories}
-                    placeholder="Select a subcategory"
-                    emptyLabel={
-                      noSubcategories
-                        ? 'No subcategories for this category yet — you can continue without one.'
-                        : 'No options available'
-                    }
-                    onSelect={(id) => setSubcategoryId(Number(id))}
-                  />
-                </div>
+                    <IonIcon icon={camera} style={{ fontSize: 30 }} />
+                  </span>
+                  <span style={{ fontSize: 16, fontWeight: 700, color: ui.text }}>
+                    Take a product photo
+                  </span>
+                  <span style={{ fontSize: 13, color: ui.muted, lineHeight: 1.4 }}>
+                    Camera opens automatically on your phone
+                  </span>
+                </>
               )}
+            </button>
 
-              {subcategoryId && (
-                <div className="mt-5">
-                  <SectionLabel text="Child category (optional)" />
-                  <DropdownSelect
-                    items={childCategoryOptions}
-                    selectedId={childCategoryId}
-                    loading={loadingChildCategories}
-                    placeholder="Select a child category"
-                    emptyLabel={
-                      noChildCategories
-                        ? 'No child categories for this subcategory yet — you can continue without one.'
-                        : 'No options available'
-                    }
-                    onSelect={(id) => setChildCategoryId(Number(id))}
-                  />
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ================================================== STEP 3 — BANNER STYLE ================================================== */}
-
-          {previewUrl && (
-            <div
-              style={{
-                background: brand.cardBg,
-                borderRadius: 20,
-                padding: 18,
-                border: `1px solid ${brand.border}`,
-                boxShadow: '0 10px 28px rgba(15,42,74,0.06)',
-                marginBottom: 16,
-              }}
-            >
-              {/* Banner Color */}
-              <div className="mb-5">
-                <SectionLabel text="Banner color" />
-
-                <div
-                  className="flex items-center gap-3 rounded-xl p-3"
-                  style={{ border: `1px solid ${brand.border}` }}
-                >
-                  <label
-                    htmlFor="bannerColorPicker"
-                    className="relative flex h-12 w-12 shrink-0 cursor-pointer items-center justify-center rounded-full"
-                    style={{ backgroundColor: bannerColor, boxShadow: `0 0 0 1px ${brand.border}` }}
-                  >
-                    <input
-                      id="bannerColorPicker"
-                      type="color"
-                      value={bannerColor}
-                      onChange={(e) => setBannerColor(e.target.value)}
-                      className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                    />
-                  </label>
-                  <div className="flex-1">
-                    <p style={{ fontSize: 11, fontWeight: 500, color: brand.ink, marginBottom: 4 }}>
-                      Hex code
-                    </p>
-                    <input
-                      type="text"
-                      value={bannerColor}
-                      onChange={(e) => handleHexChange(e.target.value)}
-                      placeholder="#4F46E5"
-                      maxLength={7}
-                      className="w-full rounded-lg px-2.5 py-1.5 outline-none"
-                      style={{
-                        border: `1px solid ${brand.border}`,
-                        fontSize: 13,
-                        fontWeight: 500,
-                        color: brand.navy,
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Prompt Type */}
-              <div className="mb-5">
-                <SectionLabel text="Prompt type" />
-                <DropdownSelect
-                  items={promptTypeOptions}
-                  selectedId={promptType}
-                  placeholder="Select a prompt type"
-                  onSelect={(id) => setPromptType(String(id))}
-                />
-              </div>
-
-              {/* Prompt Description */}
-              <div>
-                <div className="mb-2 flex items-center gap-1.5">
-                  <IonIcon icon={chatbubbleEllipsesOutline} style={{ color: brand.ink, fontSize: 15 }} />
-                  <label style={{ fontSize: 11, fontWeight: 500, color: brand.ink }}>
-                    Prompt description <span style={{ color: '#A9B6C2' }}>(optional)</span>
-                  </label>
-                </div>
-                <div
-                  className="rounded-xl p-3"
-                  style={{ border: `1px solid ${brand.border}` }}
-                >
-                  <textarea
-                    value={promptDescription}
-                    onChange={(e) => setPromptDescription(e.target.value)}
-                    placeholder="e.g. Diwali sale banner with festive lights and gold accents"
-                    rows={3}
-                    className="block w-full resize-none border-0 bg-transparent p-0 outline-none"
-                    style={{ fontSize: 14, lineHeight: 1.5, color: brand.navy }}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ================================================== STICKY CTA ================================================== */}
-
-        {previewUrl && (
-          <div
-            className="shrink-0 px-4 py-3"
-            style={{
-              borderTop: `1px solid ${brand.border}`,
-              background: '#FFFFFF',
-              paddingBottom: 'calc(12px + env(safe-area-inset-bottom))',
-            }}
-          >
             <IonButton
               expand="block"
-              onClick={handleContinue}
-              disabled={uploading}
+              fill="outline"
+              onClick={() => galleryInputRef.current?.click()}
+              disabled={uploadingImage}
               style={
                 {
-                  '--background': `linear-gradient(90deg, ${brand.blue}, ${brand.teal})`,
-                  '--background-activated': `linear-gradient(90deg, ${brand.blue}, ${brand.teal})`,
+                  marginTop: 14,
+                  '--border-color': ui.border,
+                  '--border-width': '1px',
+                  '--color': ui.text,
                   '--border-radius': '12px',
-                  '--box-shadow': 'none',
+                  height: 48,
                   fontWeight: 600,
                 } as React.CSSProperties
               }
             >
-              {uploading ? (
+              <IonIcon slot="start" icon={imagesOutline} style={{ color: ui.primary }} />
+              Choose from gallery
+            </IonButton>
+
+            <p
+              style={{
+                margin: '18px 0 0',
+                textAlign: 'center',
+                color: ui.muted,
+                fontSize: 12,
+                lineHeight: 1.4,
+              }}
+            >
+              JPG, PNG or WEBP · Maximum {MAX_FILE_SIZE / (1024 * 1024)}MB
+            </p>
+          </div>
+        )}
+
+        {/* ================= SCREEN 2 — GENERATE AD ================= */}
+        {step === 'generate' && (
+          <div style={{ padding: '20px 20px 32px' }}>
+            <h1 style={{ fontSize: 22, fontWeight: 700, color: ui.text, margin: '8px 0 20px' }}>
+              Generate Ad
+            </h1>
+
+            {/* selected image (small) */}
+            {previewUrl && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: 10,
+                  marginBottom: 22,
+                  border: `1px solid ${ui.border}`,
+                  borderRadius: 12,
+                  background: ui.surface,
+                }}
+              >
+                <img
+                  src={previewUrl}
+                  alt="Selected product"
+                  style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'cover' }}
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: ui.text,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {selectedFile?.name}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={resetToUpload}
+                    disabled={uploading}
+                    style={{
+                      background: 'transparent',
+                      border: 0,
+                      padding: 0,
+                      marginTop: 2,
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: ui.primary,
+                    }}
+                  >
+                    Change image
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Aspect ratio */}
+            <FieldLabel text="Select Aspect Ratio" />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+              {ASPECT_OPTIONS.map((opt) => {
+                const active = aspectRatio === opt.value;
+
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setAspectRatio(opt.value)}
+                    aria-pressed={active}
+                    style={{
+                      height: 96,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      borderRadius: 12,
+                      border: `${active ? 2 : 1}px solid ${active ? ui.primary : ui.border}`,
+                      background: active ? ui.primarySoft : ui.white,
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: opt.w,
+                        height: opt.h,
+                        borderRadius: 3,
+                        border: `1.5px solid ${active ? ui.primary : ui.muted}`,
+                      }}
+                    />
+                    <span style={{ lineHeight: 1.25 }}>
+                      <span
+                        style={{
+                          display: 'block',
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: active ? ui.primary : ui.text,
+                        }}
+                      >
+                        {opt.ratio}
+                      </span>
+                      <span style={{ display: 'block', fontSize: 11, color: ui.muted }}>
+                        {opt.label}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Category (from Business Setup, read only) */}
+            {businessCategory?.categoryName && (
+              <div style={{ marginTop: 24 }}>
+                <FieldLabel text="Category" />
+                <div
+                  style={{
+                    height: 48,
+                    display: 'flex',
+                    alignItems: 'center',
+                    padding: '0 14px',
+                    borderRadius: 12,
+                    border: `1px solid ${ui.border}`,
+                    background: ui.surface,
+                    fontSize: 14,
+                    color: ui.text,
+                  }}
+                >
+                  {businessCategory.categoryName}
+                </div>
+              </div>
+            )}
+
+            {/* Subcategory — only when this category has some */}
+            {businessCategoryId && (loadingSubcategories || subcategories.length > 0) && (
+              <div style={{ marginTop: 16 }}>
+                <FieldLabel text="Subcategory (optional)" />
+                <SelectField
+                  value={subcategoryId}
+                  options={subcategories}
+                  placeholder="Select a subcategory"
+                  loading={loadingSubcategories}
+                  onChange={setSubcategoryId}
+                />
+              </div>
+            )}
+
+            {/* Child category — only when this subcategory has some */}
+            {subcategoryId && (loadingChildCategories || childCategories.length > 0) && (
+              <div style={{ marginTop: 16 }}>
+                <FieldLabel text="Child category (optional)" />
+                <SelectField
+                  value={childCategoryId}
+                  options={childCategories}
+                  placeholder="Select a child category"
+                  loading={loadingChildCategories}
+                  onChange={setChildCategoryId}
+                />
+              </div>
+            )}
+
+            {/* Description */}
+            <div style={{ marginTop: 24 }}>
+              <FieldLabel text="Product Description" />
+              <textarea
+                value={promptDescription}
+                onChange={(e) => setPromptDescription(e.target.value.slice(0, MAX_DESCRIPTION))}
+                placeholder="Enter product details..."
+                rows={4}
+                maxLength={MAX_DESCRIPTION}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  resize: 'none',
+                  borderRadius: 12,
+                  border: `1px solid ${ui.border}`,
+                  background: ui.white,
+                  padding: '12px 14px',
+                  fontSize: 14,
+                  lineHeight: 1.5,
+                  color: ui.text,
+                  outline: 'none',
+                }}
+              />
+              <p style={{ margin: '6px 2px 0', textAlign: 'right', fontSize: 12, color: ui.muted }}>
+                {promptDescription.length}/{MAX_DESCRIPTION}
+              </p>
+            </div>
+
+            {/* Generate */}
+            <IonButton
+              expand="block"
+              onClick={handleGenerate}
+              disabled={generating}
+              style={
+                {
+                  marginTop: 20,
+                  '--background': ui.primary,
+                  '--background-activated': ui.primary,
+                  '--border-radius': '10px',
+                  '--box-shadow': 'none',
+                  height: 50,
+                  fontWeight: 600,
+                } as React.CSSProperties
+              }
+            >
+              {generating ? (
                 <>
                   <IonSpinner slot="start" name="crescent" />
-                  Generating banners...
+                  Generating...
                 </>
               ) : (
                 <>
                   <IonIcon slot="start" icon={sparklesOutline} />
-                  Generate banners
+                  Generate Ad
                 </>
               )}
             </IonButton>

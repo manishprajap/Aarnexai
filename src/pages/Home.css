@@ -734,3 +734,50 @@ ion-modal.connect-sheet ion-content.cs-content {
   margin: 0;
   font-weight: 600;
 }
+
+.social-page-back {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--on-bg);
+  font-size: 22px;
+}
+
+.social-page-title {
+  flex: 1;
+  margin: 0;
+  color: var(--on-bg);
+  font-size: 18px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.social-page-spacer {
+  width: 40px;
+}
+
+.social-page-intro {
+  margin-top: 16px;
+}
+
+.social-page-eyebrow {
+  margin: 0 0 8px;
+  color: var(--brand-text);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.social-page-list {
+  margin-top: 20px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+}

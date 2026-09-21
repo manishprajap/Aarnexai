@@ -18,7 +18,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiPost } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { getDeviceId, getDeviceType, getDeviceName } from '../utils/device';
-import aarnaLogo from '../assets/aarna-logo.jpeg';
+import aarnaLogo from '../assets/aarna-logo.png';
 
 const RESEND_SECONDS = 30;
 

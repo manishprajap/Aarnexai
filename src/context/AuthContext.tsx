@@ -7,6 +7,7 @@ import React, {
 } from 'react';
 
 import { apiGet } from '../api';
+import { clearBusinessCategory } from '../utils/businessCategory';
 
 export interface AuthUser {
   id?: number;
@@ -15,6 +16,14 @@ export interface AuthUser {
   email: string | null;
   plan?: string;
   credits?: number;
+
+  // Business Setup details (returned by /auth/me)
+  category?: string | null;
+  categoryId?: number | null;
+  city?: string | null;
+  website?: string | null;
+  language?: string | null;
+  logo?: string | null;
 }
 
 interface AuthContextValue {
@@ -273,6 +282,9 @@ export const AuthProvider: React.FC<{
 
   const logout = () => {
 
+    // Clear the cached business category of this user as well
+    clearBusinessCategory(user?.id);
+
     localStorage.removeItem(
       AUTH_TOKEN_KEY
     );
@@ -365,4 +377,3 @@ export const useAuth = (): AuthContextValue => {
 
   return ctx;
 };
-
