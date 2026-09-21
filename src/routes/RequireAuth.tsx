@@ -25,16 +25,7 @@ const RequireAuth: React.FC<{
   const ionRouter = useIonRouter();
   const path = location.pathname;
 
-  /**
-   * Redirects are done imperatively via useIonRouter().push,
-   * NOT via <Navigate>. IonRouterOutlet manages its own view
-   * stack/visibility, and a declarative <Navigate> returned
-   * from inside a Route's element can leave the target view
-   * stuck with the "ion-page-invisible" class on first render
-   * (fixed only by a manual refresh). Pushing imperatively,
-   * the same way IonRouterOutlet itself expects navigation to
-   * happen, avoids that.
-   */
+  
   useEffect(() => {
 
     if (isInitializing) {

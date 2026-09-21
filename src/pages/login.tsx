@@ -160,11 +160,11 @@ const Login: React.FC = () => {
 
   return (
     <IonPage>
-      <IonContent fullscreen scrollY style={{ '--background': '#F7FAFC' } as any}>
+      <IonContent fullscreen scrollY style={{ '--background': '#F5FAFE' } as any}>
         <div className="login-page">
           <div className="login-header">
             <div className="logo-container">
-              <img src={aarnaLogo} alt="Aarna Market OS" className="aarna-logo" />
+              <img src={aarnaLogo} alt="Aarnex AI" className="aarna-logo" />
             </div>
 
             {stage === 'phone' ? (
@@ -292,7 +292,7 @@ const Login: React.FC = () => {
           <div className="login-footer">
             <p>By continuing, you agree to our</p>
             <p>Terms of Service &nbsp;•&nbsp; Privacy Policy</p>
-            <small>© {new Date().getFullYear()} Aarna Market OS</small>
+            <small>© {new Date().getFullYear()} Aarnex AI</small>
           </div>
         </div>
 
@@ -314,26 +314,36 @@ const Login: React.FC = () => {
           .login-page {
             min-height: 100%;
             width: 100%;
-            padding: 35px 20px 30px;
+            padding: 30px 20px 30px;
             display: flex;
             flex-direction: column;
             align-items: center;
-            background: radial-gradient(circle at top right, rgba(30,127,224,0.08), transparent 35%), #F7FAFC;
+            background:
+              radial-gradient(circle at 8% 0%, rgba(255,140,26,0.14), transparent 40%),
+              radial-gradient(circle at 100% 15%, rgba(41,198,246,0.16), transparent 45%),
+              #F5FAFE;
           }
 
           .login-header { width: 100%; max-width: 430px; text-align: center; }
 
           .logo-container {
-            width: 82px; height: 82px; margin: 0 auto 22px;
-            background: #FFFFFF; border-radius: 22px;
+            width: 100px; height: 100px; margin: 0 auto 14px;
+            background: #FFFFFF; border-radius: 26px;
             display: flex; align-items: center; justify-content: center;
-            box-shadow: 0 10px 30px rgba(15,42,74,0.12);
+            box-shadow: 0 12px 34px rgba(20,119,214,0.18);
+            border: 1px solid #E7EDF2;
+            padding: 8px;
           }
-          .aarna-logo { width: 64px; height: 64px; object-fit: contain; }
+          .aarna-logo { width: 100%; height: 100%; object-fit: contain; }
 
-          .welcome-text { margin: 0 0 12px; font-size: 18px; font-weight: 600; color: #5A6B7B; }
+          .welcome-text { margin: 0 0 10px; font-size: 18px; font-weight: 600; color: #5A6B7B; }
           .main-heading { margin: 0; font-size: 32px; line-height: 1.15; font-weight: 800; color: #0F2A4A; letter-spacing: -0.7px; }
-          .main-heading span { color: #1E7FE0; }
+          .main-heading span {
+            background: linear-gradient(90deg, #1E7FE0, #29C6F6);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+          }
           .subtitle { margin: 13px 0 28px; font-size: 14px; line-height: 1.5; color: #718096; }
 
           .login-card {
@@ -351,25 +361,27 @@ const Login: React.FC = () => {
             background: #FFFFFF; transition: all 0.2s ease;
           }
           .phone-input-wrapper:focus-within { border-color: #1E7FE0; box-shadow: 0 0 0 3px rgba(30,127,224,0.10); }
-          .phone-input-wrapper.valid { border-color: #12A19C; }
+          .phone-input-wrapper.valid { border-color: #FF8C1A; }
 
           .country-code { color: #0F2A4A; font-size: 16px; font-weight: 600; min-width: 34px; }
           .input-divider { height: 25px; width: 1px; background: #DCE4EB; margin: 0 8px; }
           .phone-input { flex: 1; border: none; outline: none; font-size: 16px; color: #0F2A4A; background: transparent; }
-          .valid-icon { font-size: 21px; color: #12A19C; }
+          .valid-icon { font-size: 21px; color: #FF8C1A; }
 
           .continue-button {
             margin: 18px 0 0; height: 52px; --border-radius: 13px;
-            --background: #1E7FE0; --background-hover: #176CC0; --box-shadow: none;
+            --background: linear-gradient(90deg, #1E7FE0, #29C6F6);
+            --background-hover: linear-gradient(90deg, #176CC0, #1FB4E0);
+            --box-shadow: 0 8px 20px rgba(30,127,224,0.28);
             font-size: 15px; font-weight: 700;
           }
           .continue-button[disabled] { opacity: 0.55; }
 
           .security-box {
             display: flex; gap: 11px; margin-top: 21px; padding: 13px;
-            border-radius: 12px; background: #F1F8FF; border: 1px solid #DDECF9;
+            border-radius: 12px; background: #FFF6EC; border: 1px solid #FBE1BF;
           }
-          .security-box > ion-icon { flex-shrink: 0; margin-top: 2px; font-size: 19px; color: #1E7FE0; }
+          .security-box > ion-icon { flex-shrink: 0; margin-top: 2px; font-size: 19px; color: #FF8C1A; }
           .security-box strong { display: block; font-size: 12px; color: #0F2A4A; }
           .security-box p { margin: 3px 0 0; font-size: 11px; line-height: 1.4; color: #718096; }
 
@@ -391,7 +403,7 @@ const Login: React.FC = () => {
 
           .otp-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
           .change-number-button { --color: #5A6B7B; font-size: 13px; }
-          .resend-button { --color: #1E7FE0; font-size: 13px; }
+          .resend-button { --color: #FF8C1A; font-size: 13px; }
           .resend-button[disabled] { --color: #A6B2BD; }
 
           .login-footer { width: 100%; max-width: 430px; text-align: center; margin-top: 24px; padding-bottom: 10px; }
@@ -399,11 +411,10 @@ const Login: React.FC = () => {
           .login-footer small { display: block; margin-top: 12px; font-size: 10px; color: #B0BAC3; }
 
           @media (max-width: 380px) {
-            .login-page { padding: 25px 15px; }
+            .login-page { padding: 22px 15px; }
             .main-heading { font-size: 28px; }
             .login-card { padding: 22px 17px; }
-            .logo-container { width: 72px; height: 72px; }
-            .aarna-logo { width: 55px; height: 55px; }
+            .logo-container { width: 120px; height: 120px; }
             .otp-box { height: 52px; font-size: 20px; }
           }
         `}

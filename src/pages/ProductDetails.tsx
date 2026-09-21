@@ -74,6 +74,7 @@ const ProductDetailsPage: React.FC = () => {
     navState?.product ?? null
   );
 
+  const [postedDays, setPostedDays] = useState<number[]>([]);
   const [loading, setLoading] = useState(!navState?.product);
   const [error, setError] = useState<string | null>(null);
   const [noProductYet, setNoProductYet] = useState(false);
@@ -157,16 +158,6 @@ const ProductDetailsPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productId]);
 
-  /*
-  |--------------------------------------------------------------------------
-  | Image URLs
-  |--------------------------------------------------------------------------
-  |
-  | The API already returns fully-qualified URLs (see `toFullUrl` in
-  | the /products/[productId] route), so we use them as-is here —
-  | no origin prefixing on the frontend.
-  |
-  */
 
   const heroUrl = product?.cleanImageUrl || product?.originalImageUrl || null;
 
@@ -184,6 +175,10 @@ const ProductDetailsPage: React.FC = () => {
     });
   };
 
+  const currentDay =
+    product?.banners
+      .filter((banner) => !postedDays.includes(banner.day))
+      .sort((a, b) => a.day - b.day)[0]?.day ?? 1;
   /*
   |--------------------------------------------------------------------------
   | UI
@@ -355,34 +350,69 @@ const ProductDetailsPage: React.FC = () => {
                   </h3>
 
                   <div className="-mx-1 flex snap-x gap-3 overflow-x-auto pb-1">
-                    {product.banners.map((banner) => (
-                      <div
-                        key={banner.id}
-                        className="w-64 shrink-0 snap-start rounded-xl border border-gray-100 bg-gray-50 p-2"
-                      >
-                        {banner.imageUrl ? (
-                          <img
-                            src={banner.imageUrl}
-                            alt={banner.caption || `Day ${banner.day} banner`}
-                            className="h-36 w-full rounded-lg object-cover"
-                          />
-                        ) : (
-                          <div className="flex h-36 w-full items-center justify-center rounded-lg bg-gray-100 text-xs text-gray-400">
-                            Banner not generated
+                    {product.banners.map((banner) => {
+                      const isPosted = postedDays.includes(banner.day);
+                      const isCurrentDay = banner.day === currentDay;
+                      const isLocked = !isPosted && !isCurrentDay;
+
+                      return (
+                        <div
+                          key={banner.id}
+                          className="relative w-64 shrink-0 snap-start overflow-hidden rounded-xl border border-gray-100 bg-gray-50 p-2"
+                        >
+                          {banner.imageUrl ? (
+                            <div className="relative overflow-hidden rounded-lg">
+                              <img
+                                src={banner.imageUrl}
+                                alt={banner.caption || `Day ${banner.day} banner`}
+                                className={`h-36 w-full rounded-lg object-cover transition ${isLocked ? 'scale-105 blur-md' : ''
+                                  }`}
+                              />
+
+                              {isLocked && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/25">
+                                  <div className="rounded-full bg-white/90 px-3 py-2 text-xs font-semibold text-gray-700 shadow">
+                                    🔒 Day {banner.day}
+                                  </div>
+                                </div>
+                              )}
+
+                              {isPosted && (
+                                <div className="absolute right-2 top-2 rounded-full bg-green-500 px-2 py-1 text-xs font-semibold text-white shadow">
+                                  ✓ Posted
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="flex h-36 w-full items-center justify-center rounded-lg bg-gray-100 text-xs text-gray-400">
+                              Banner not generated
+                            </div>
+                          )}
+
+                          <div className="mt-2 flex items-center justify-between">
+                            <span className="text-xs font-semibold text-gray-700">
+                              Day {banner.day}
+                            </span>
+
+                            <span className="text-xs text-gray-400">
+                              {formatBannerDate(banner.theme)}
+                            </span>
                           </div>
-                        )}
 
-                        <div className="mt-2 flex items-center justify-between">
-                          <span className="text-xs font-semibold text-gray-700">
-                            Day {banner.day}
-                          </span>
-
-                          <span className="text-xs text-gray-400">
-                            {formatBannerDate(banner.theme)}
-                          </span>
+                          {isCurrentDay && !isPosted && (
+                            <button
+                              type="button"
+                              className="mt-2 w-full rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white"
+                              onClick={() => {
+                                console.log('Post Day:', banner.day);
+                              }}
+                            >
+                              Post Day {banner.day}
+                            </button>
+                          )}
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}

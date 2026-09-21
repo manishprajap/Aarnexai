@@ -1,5 +1,5 @@
 {
-  "name": "ai-product-ads",
+  "name": "AarnexAi",
   "private": true,
   "version": "0.0.1",
   "type": "module",
@@ -14,6 +14,7 @@
   "dependencies": {
     "@capacitor/android": "^8.5.2",
     "@capacitor/app": "8.1.1",
+    "@capacitor/browser": "^8.0.4",
     "@capacitor/core": "^8.5.1",
     "@capacitor/haptics": "8.0.2",
     "@capacitor/keyboard": "8.0.5",

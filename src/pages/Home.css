@@ -1,159 +1,736 @@
-* {
-  font-family: 'Roboto', sans-serif;
+/* ==========================================================================
+   Tokens
+   The values below are FALLBACKS. useLogoTheme() overwrites them at runtime
+   with colors read from the logo (background + accent).
+   ========================================================================== */
+.home-page {
+  /* logo-driven */
+  --logo-bg: #ffffff;
+  --page-bg: #ffffff;
+  --on-bg: #0d2b2a;
+  --on-bg-muted: rgba(13, 30, 28, 0.62);
+  --eyebrow: #0f8b7d;
+  --edge: rgba(13, 30, 28, 0.1);
+  --edge-strong: rgba(13, 30, 28, 0.28);
+
+  --brand: #17a898;
+  --brand-light: #43beb1;
+  --brand-mid: #0c544c;
+  --brand-deep: #073631;
+  --brand-soft: #dcf4f0;
+  --brand-text: #0f8b7d;
+  --on-brand: #ffffff;
+  --ink: #052521;
+
+  /* fixed */
+  --surface: #ffffff;
+  --muted: #5f6b6a;
+  --line: #e8eeed;
 }
 
+/* ==========================================================================
+   Header
+   ========================================================================== */
 .app-toolbar {
-  --background: #28a398;
+  --background: var(--logo-bg);
   --border-width: 0;
-  --min-height: auto;
+  --padding-top: 0;
+  --padding-bottom: 0;
+  --padding-start: 0;
+  --padding-end: 0;
+  --min-height: 76px;
+}
+
+.app-header-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-height: 76px;
+  padding: 8px 16px;
+  box-sizing: border-box;
+  background: var(--logo-bg);
 }
 
 .header-logo {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  flex: none;
+  display: block;
+  height: 56px;
+  width: auto;
+  max-width: 240px;
+  object-fit: contain;
 }
 
-.bg-gray-50 {
-    background-color: oklch(0.91 0.04 176.74);
-}
-/* Header text (Welcome back + Hi, Name) */
-.header-text {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.header-text h1 {
-  font-size: 11px;
-  font-weight: 600;
-  line-height: 1.3;
-}
-
-.header-text p {
-  font-size: 18px;
-  font-weight: 500;
-  line-height: 1.25;
-  margin-top: 2px;
-}
-
-/* Avatar / account trigger */
 .avatar-trigger {
   display: flex;
-  height: 34px;
-  width: 34px;
-  flex: none;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
-  background: #0e2340;
-  border: none;
+  width: 40px;
+  height: 40px;
+  border: 2px solid var(--edge);
+  border-radius: 9999px;
+  background: linear-gradient(135deg, var(--brand), var(--brand-light));
+  color: var(--on-brand);
+  font-size: 16px;
+  font-weight: 700;
   cursor: pointer;
-  padding: 0;
 }
 
-.avatar-trigger span {
-  font-size: 13px;
-  font-weight: 600;
-  color: #ffffff;
+.avatar-trigger:focus-visible,
+.connect-btn:focus-visible,
+.social-btn:focus-visible,
+.feature-row-link:focus-visible,
+.empty-card:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
 
 .account-popover {
   --width: 180px;
-  --box-shadow: 0 8px 24px rgba(14, 35, 64, 0.14);
+  --border-radius: 14px;
+  --box-shadow: 0 10px 30px rgba(18, 40, 62, 0.15);
 }
 
-.account-menu ion-item {
-  --padding-start: 12px;
-  --inner-padding-end: 12px;
-  --min-height: 44px;
-  font-size: 13.5px;
-  font-weight: 500;
+.account-menu {
+  padding: 4px 0;
 }
 
-.account-menu ion-icon {
-  font-size: 17px;
-  margin-right: 4px;
+/* ==========================================================================
+   Page
+   ========================================================================== */
+.home-content {
+  --background: var(--page-bg);
 }
 
-/* Hero */
-.hero-card {
-  background: #0e2340;
+.home-container {
+  min-height: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 8px 16px 40px;
+  box-sizing: border-box;
+  background: var(--page-bg);
 }
 
-.hero-icon-chip {
-  background: linear-gradient(135deg, #1e88c9 0%, #2fb673 100%);
+.greeting {
+  margin: 4px 0 20px;
 }
 
-.hero-heading {
+.greeting h1 {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--on-bg);
+}
+
+.greeting p {
+  margin: 6px 0 0;
   font-size: 15px;
-  font-weight: 600;
-  line-height: 1.35;
+  color: var(--on-bg-muted);
+}
+
+.section {
+  margin-top: 28px;
+}
+
+.section-title {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--on-bg);
+}
+
+/* ==========================================================================
+   Hero
+   ========================================================================== */
+.hero {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  padding: 22px;
+  border-radius: 28px;
+  background: linear-gradient(150deg, var(--brand-mid) 0%, var(--brand-deep) 100%);
+  box-shadow: 0 0 0 1px var(--edge);
   color: #ffffff;
 }
 
-.hero-button {
-  --background: linear-gradient(135deg, #1e88c9 0%, #2fb673 100%);
-  --background-activated: linear-gradient(135deg, #1e88c9 0%, #2fb673 100%);
-  --background-hover: linear-gradient(135deg, #1e88c9 0%, #2fb673 100%);
-  --color: #ffffff;
-  --border-radius: 10px;
-  --box-shadow: none;
-  height: 46px;
-  font-size: 14px;
-  font-weight: 600;
-  text-transform: none;
-  letter-spacing: 0;
+/* soft ripple rings behind the content */
+.hero::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  top: -90px;
+  right: -70px;
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    0 0 0 28px rgba(255, 255, 255, 0.04),
+    0 0 0 56px rgba(255, 255, 255, 0.03);
 }
 
-/* Section headings */
-.section-title {
+.hero-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--brand), var(--brand-light));
+  color: var(--on-brand);
+  font-size: 22px;
+}
+
+.hero-heading {
+  margin: 16px 0 8px;
+  font-size: 23px;
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: #ffffff;
+}
+
+.hero-copy {
+  margin: 0;
+  max-width: 34ch;
+  font-size: 14px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.74);
+}
+
+.day-strip {
+  display: flex;
+  gap: 4px;
+  margin: 20px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.day-strip li {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.09);
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.day-strip li:first-child {
+  background: var(--brand);
+  color: var(--on-brand);
+}
+
+.hero-button {
+  --background: linear-gradient(90deg, var(--brand), var(--brand-light));
+  --background-activated: var(--brand);
+  --color: var(--on-brand);
+  --border-radius: 14px;
+  --box-shadow: none;
+  height: 50px;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  text-transform: none;
+}
+
+/* ==========================================================================
+   Feature panel
+   ========================================================================== */
+.feature-panel {
+  overflow: hidden;
+  border-radius: 22px;
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--edge);
+}
+
+.feature-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.feature-row + .feature-row {
+  border-top: 1px solid var(--line);
+}
+
+.feature-row-link {
+  cursor: pointer;
+}
+
+.feature-row-detect {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.feature-main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.tile {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--brand-soft);
+  color: var(--brand-text);
+  font-size: 20px;
+}
+
+.feature-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.feature-text h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.feature-text p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.row-chevron {
+  flex: none;
+  color: var(--muted);
+}
+
+/* Connect line inside Product detection */
+.connect-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-left: 54px; /* aligns with the text above (tile 40 + gap 14) */
+}
+
+.social-stack {
+  display: flex;
+}
+
+.social-stack span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin-left: -8px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  color: #ffffff;
+  font-size: 14px;
+}
+
+.social-stack span:first-child {
+  margin-left: 0;
+}
+
+.connect-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 9999px;
+  background: var(--brand);
+  color: var(--on-brand);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.connect-btn.is-connected {
+  background: var(--brand-soft);
+  color: var(--brand-text);
+}
+
+/* ==========================================================================
+   Recent campaigns (empty state)
+   ========================================================================== */
+.empty-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1.5px dashed var(--edge-strong);
+  border-radius: 20px;
+  background: transparent;
+  color: var(--on-bg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.empty-thumb {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: var(--edge);
+  color: var(--on-bg-muted);
+  font-size: 22px;
+}
+
+.empty-text {
+  min-width: 0;
+  flex: 1;
+}
+
+.empty-text h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--on-bg);
+}
+
+.empty-text p {
+  margin: 2px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--on-bg-muted);
+}
+
+.empty-arrow {
+  flex: none;
+  color: var(--on-bg-muted);
+}
+
+/* ==========================================================================
+   Brand colors (shared by the stack and the sheet)
+   ========================================================================== */
+.brand-instagram {
+  background: linear-gradient(45deg, #f9ce34 0%, #ee2a7b 50%, #6228d7 100%);
+}
+.brand-facebook  { background: #1877f2; }
+.brand-youtube   { background: #ff0000; }
+.brand-linkedin  { background: #0a66c2; }
+.brand-whatsapp  { background: #25d366; }
+
+/* ==========================================================================
+   Social accounts sheet
+   ========================================================================== */
+ion-modal.social-sheet {
+  --background: #ffffff;
+  --border-radius: 26px;
+}
+
+.sheet-content {
+  --background: #ffffff;
+}
+
+.sheet-body {
+  padding: 8px 20px 28px;
+}
+
+.sheet-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.sheet-sub {
+  margin: 4px 0 8px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.social-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.social-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+}
+
+.social-row + .social-row {
+  border-top: 1px solid var(--line);
+}
+
+.social-icon {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+  color: #ffffff;
+  font-size: 24px;
+}
+
+.social-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.social-info h4 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.social-info p {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
+.social-btn {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  height: 34px;
+  padding: 0 14px;
+  border: 1.5px solid var(--brand);
+  border-radius: 9999px;
+  background: transparent;
+  color: var(--brand-text);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.social-btn.is-connected {
+  border-color: var(--brand-soft);
+  background: var(--brand-soft);
+}
+
+.sheet-done {
+  --background: var(--brand);
+  --color: var(--on-brand);
+  --border-radius: 14px;
+  --box-shadow: none;
+  height: 50px;
+  margin: 20px 0 0;
+  font-size: 15px;
+  font-weight: 700;
+  text-transform: none;
+}
+/* =========================================================
+   Connect accounts sheet
+   Append to Home.css. You can delete the old .social-sheet,
+   .sheet-*, .social-list, .social-row, .social-icon,
+   .social-info and .social-btn rules – nothing uses them now.
+========================================================= */
+
+ion-modal.connect-sheet {
+  --border-radius: 24px 24px 0 0;
+  --background: #ffffff;
+  --box-shadow: 0 -12px 40px rgba(15, 42, 74, 0.18);
+}
+
+ion-modal.connect-sheet::part(handle) {
+  width: 40px;
+  height: 5px;
+  margin-top: 8px;
+  background: #cbd5e1;
+}
+
+ion-modal.connect-sheet ion-content.cs-content {
+  --background: #ffffff;
+  --padding-top: 0;
+  --padding-bottom: 0;
+}
+
+.cs-body {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  padding: 22px 20px 0;
+}
+
+.cs-head {
+  margin-bottom: 14px;
+}
+
+.cs-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: #0f2a4a;
+}
+
+.cs-sub {
+  margin: 4px 0 0;
+  font-size: 14px;
+  line-height: 1.4;
+  color: #6b7688;
+}
+
+/* ---------- rows ---------- */
+
+.cs-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.cs-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid rgba(15, 42, 74, 0.08);
+}
+
+.cs-row:last-child {
+  border-bottom: 0;
+}
+
+.cs-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  color: #ffffff;
+  font-size: 24px;
+}
+
+.cs-icon.is-instagram { background: linear-gradient(45deg, #f9a825, #ee2a7b 55%, #6228d7); }
+.cs-icon.is-facebook  { background: #1877f2; }
+.cs-icon.is-whatsapp  { background: #25d366; }
+.cs-icon.is-youtube   { background: #ff0000; }
+.cs-icon.is-linkedin  { background: #0a66c2; }
+
+.cs-info {
+  min-width: 0; /* lets long names/usernames truncate instead of pushing the button off-screen */
+}
+
+.cs-info h4 {
+  margin: 0;
   font-size: 15px;
   font-weight: 600;
-  color: #111827;
-  margin: 0 0 12px 0;
+  color: #0f2a4a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* Card titles/subtitles */
-.card-title {
-  font-size: 13px;
+.cs-info p {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  line-height: 1.35;
+  color: #6b7688;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.cs-info p.is-ok {
+  color: #0e8f6a;
+}
+
+/* ---------- action button ---------- */
+
+.cs-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 104px;
+  height: 36px;
+  padding: 0 14px;
+  border: 1.5px solid #1e7fe0;
+  border-radius: 999px;
+  background: transparent;
+  color: #1e7fe0;
+  font: inherit;
+  font-size: 13.5px;
   font-weight: 600;
-  color: #111827;
-  margin: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.card-subtitle {
-  font-size: 12px;
-  color: #6b7280;
-  margin: 2px 0 0 0;
-  line-height: 1.4;
+.cs-btn ion-icon {
+  font-size: 16px;
 }
 
-.upload-title {
-  font-size: 13px;
+.cs-btn:active:not(:disabled) {
+  background: rgba(30, 127, 224, 0.1);
+}
+
+.cs-btn:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.cs-btn.is-connected {
+  border-color: transparent;
+  background: rgba(14, 143, 106, 0.12);
+  color: #0e8f6a;
+  opacity: 1;
+}
+
+.cs-spinner {
+  width: 18px;
+  height: 18px;
+  color: #1e7fe0;
+}
+
+.cs-soon {
+  min-width: 104px;
+  text-align: center;
+  font-size: 12.5px;
   font-weight: 600;
-  color: #1f2937;
+  color: #8a94a6;
+}
+
+/* ---------- sticky Done button (always reachable, never cut off) ---------- */
+
+.cs-footer {
+  position: sticky;
+  bottom: 0;
+  margin: auto -20px 0;
+  padding: 12px 20px calc(14px + env(safe-area-inset-bottom));
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0), #ffffff 28%);
+}
+
+.cs-done {
+  --border-radius: 14px;
+  height: 48px;
   margin: 0;
-}
-
-.upload-desc {
-  font-size: 12px;
-  color: #6b7280;
-  line-height: 1.4;
-  margin: 6px 0 0 0;
-}
-
-.feature-title {
-  font-size: 13px;
   font-weight: 600;
-  color: #111827;
-  margin: 0;
-}
-
-.feature-desc {
-  font-size: 12px;
-  color: #6b7280;
-  line-height: 1.4;
-  margin: 6px 0 0 0;
 }

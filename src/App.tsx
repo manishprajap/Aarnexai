@@ -34,6 +34,7 @@ import Posters from './pages/Posters';
 import Campaigns from './pages/Campaigns';
 import CreateCampaign from './pages/CreateCampaign';
 import CampaignDetails from './pages/CampaignDetails';
+import Profile from './pages/profile';
 
 setupIonicReact();
 
@@ -159,7 +160,17 @@ const App: React.FC = () => (
                 <SelectCategory />
               </RequireAuth>
             }
-          />
+          /> 
+           <Route
+            path="/profile"
+            element={
+              <RequireAuth>
+                <Profile />
+              </RequireAuth>
+            }
+          /> 
+          
+          
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </IonRouterOutlet>
