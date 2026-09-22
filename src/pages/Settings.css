@@ -1,0 +1,105 @@
+* { box-sizing: border-box; }
+
+.settings-page {
+  --settings-blue: #0f6fec;
+  --settings-ink: #0f1b2d;
+  --settings-muted: #718096;
+  --settings-line: #e1e7ef;
+  --settings-soft: #f7faff;
+  background: #ffffff;
+}
+
+.settings-page ion-content { --background: #ffffff; }
+
+.settings-toolbar {
+  --background: #ffffff;
+  --border-width: 0;
+  --min-height: 64px;
+  display: flex;
+  align-items: center;
+  padding: 6px 16px;
+}
+
+.settings-back {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--settings-ink);
+  font-size: 21px;
+}
+
+.settings-logo {
+  width: 132px;
+  height: 42px;
+  margin: 0 auto;
+  object-fit: contain;
+}
+
+.settings-toolbar-spacer { width: 34px; }
+
+.settings-content {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 14px 16px 32px;
+}
+
+.settings-content h1 {
+  margin: 0 0 18px;
+  color: var(--settings-ink);
+  font-size: 24px;
+  line-height: 1.2;
+  font-weight: 800;
+}
+
+.settings-list {
+  overflow: hidden;
+  border: 1px solid var(--settings-line);
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.settings-row {
+  width: 100%;
+  min-height: 68px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 0;
+  border-bottom: 1px solid var(--settings-line);
+  background: #ffffff;
+  color: var(--settings-ink);
+  text-align: left;
+  font: inherit;
+}
+
+.settings-row:last-child { border-bottom: 0; }
+.settings-row:active { background: var(--settings-soft); }
+
+.settings-row-icon {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  color: var(--settings-blue);
+  font-size: 20px;
+}
+
+.settings-row-copy { min-width: 0; flex: 1; }
+.settings-row-copy strong { display: block; font-size: 14px; font-weight: 700; }
+.settings-row-copy small { display: block; margin-top: 3px; color: var(--settings-muted); font-size: 11px; }
+.settings-chevron { flex: none; color: #9aa8b8; font-size: 17px; }
+
+.settings-logout {
+  margin-top: 18px;
+  border: 1px solid #f5d0cc;
+  border-radius: 14px;
+  color: #e85d4a;
+}
+.settings-logout .settings-row-icon { color: #e85d4a; }

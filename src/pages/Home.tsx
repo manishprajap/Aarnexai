@@ -28,6 +28,7 @@ import {
   chevronForwardOutline,
   personOutline,
   logOutOutline,
+  settingsOutline,
   linkOutline,
   checkmarkCircleOutline,
   pricetagOutline,
@@ -140,6 +141,11 @@ const Home: React.FC = () => {
     ionRouter.push('/profile', 'forward');
   };
 
+  const goToSettings = () => {
+    popoverRef.current?.dismiss();
+    ionRouter.push('/settings', 'forward');
+  };
+
   return (
     <IonPage className="home-page" style={themeStyle}>
       {/* Header */}
@@ -168,6 +174,10 @@ const Home: React.FC = () => {
                 <IonItem button detail={false} onClick={goToProfile}>
                   <IonIcon icon={personOutline} slot="start" />
                   <IonLabel>Profile</IonLabel>
+                </IonItem>
+                <IonItem button detail={false} onClick={goToSettings}>
+                  <IonIcon icon={settingsOutline} slot="start" />
+                  <IonLabel>Settings</IonLabel>
                 </IonItem>
                 <IonItem button detail={false} onClick={handleLogout}>
                   <IonIcon icon={logOutOutline} slot="start" color="danger" />

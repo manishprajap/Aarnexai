@@ -17,7 +17,7 @@ const WHATSAPP_CONFIG_ID =
 
 const WHATSAPP_CONNECT_WEB_URL =
   (import.meta.env.VITE_WHATSAPP_CONNECT_WEB_URL as string | undefined)?.trim() ||
-  `${window.location.origin}/whatsapp-connect.html`;
+  `${typeof window !== 'undefined' ? window.location.origin : ''}/whatsapp-connect.html`;
 
 const WHATSAPP_APP_CALLBACK_SCHEME =
   (import.meta.env.VITE_WHATSAPP_APP_CALLBACK_SCHEME as string | undefined)?.trim() ||
@@ -27,13 +27,21 @@ const WHATSAPP_APP_CALLBACK_SCHEME =
    TYPES / CONSTANTS
 ========================================================= */
 
-export type PlatformKey = 'facebook' | 'instagram' | 'whatsapp' | 'google_business';
+export type PlatformKey =
+  | 'facebook'
+  | 'instagram'
+  | 'whatsapp'
+  | 'google_business'
+  | 'youtube'
+  | 'linkedin';
 
 export const CONNECTABLE_PLATFORMS: PlatformKey[] = [
   'facebook',
   'instagram',
   'whatsapp',
   'google_business',
+  'youtube',
+  'linkedin',
 ];
 
 export const isConnectable = (id: string): id is PlatformKey =>
@@ -44,6 +52,8 @@ const LABELS: Record<PlatformKey, string> = {
   instagram: 'Instagram',
   whatsapp: 'WhatsApp',
   google_business: 'Google Business Profile',
+  youtube: 'YouTube',
+  linkedin: 'LinkedIn',
 };
 
 const emptyFlags = (): Record<PlatformKey, boolean> => ({
@@ -51,6 +61,8 @@ const emptyFlags = (): Record<PlatformKey, boolean> => ({
   instagram: false,
   whatsapp: false,
   google_business: false,
+  youtube: false,
+  linkedin: false,
 });
 
 const emptyNames = (): Record<PlatformKey, string | null> => ({
@@ -58,12 +70,32 @@ const emptyNames = (): Record<PlatformKey, string | null> => ({
   instagram: null,
   whatsapp: null,
   google_business: null,
+  youtube: null,
+  linkedin: null,
 });
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   if (typeof error === 'string') return error;
   return 'Something went wrong. Please try again.';
+}
+
+function isConnectedResponse(response: unknown): boolean {
+  const root =
+    response && typeof response === 'object'
+      ? (response as Record<string, unknown>)
+      : {};
+  const data =
+    root.data && typeof root.data === 'object'
+      ? (root.data as Record<string, unknown>)
+      : {};
+  const connection =
+    root.connection && typeof root.connection === 'object'
+      ? (root.connection as Record<string, unknown>)
+      : {};
+  const value = root.connected ?? data.connected ?? connection.connected ?? connection.status;
+
+  return value === true || value === 1 || value === '1' || value === 'true' || value === 'connected';
 }
 
 /* =========================================================
@@ -84,7 +116,7 @@ export function useSocialConnections() {
     async (platform: PlatformKey): Promise<boolean> => {
       try {
         const response = await apiGet(`/${platform}/status`);
-        const isConnected = response?.connected === true;
+        const isConnected = isConnectedResponse(response);
 
         const name =
           response?.connection?.pageName ??
@@ -93,6 +125,8 @@ export function useSocialConnections() {
           response?.connection?.phoneNumber ??
           response?.[platform]?.username ??
           response?.[platform]?.name ??
+          response?.data?.username ??
+          response?.data?.name ??
           response?.username ??
           response?.name ??
           null;
@@ -107,8 +141,7 @@ export function useSocialConnections() {
         return isConnected;
       } catch (err) {
         console.error(`Failed to check ${platform} connection:`, err);
-        setConnected((prev) => ({ ...prev, [platform]: false }));
-        setUsernames((prev) => ({ ...prev, [platform]: null }));
+        // A failed status request means the state is unknown, not disconnected.
         return false;
       }
     },
@@ -123,6 +156,10 @@ export function useSocialConnections() {
       setChecking(false);
     }
   }, [checkOne]);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   /* ---------- WhatsApp (HTTPS browser + deep link) ---------- */
 
@@ -204,7 +241,7 @@ export function useSocialConnections() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const platform = (['facebook', 'instagram', 'google_business'] as PlatformKey[]).find((p) =>
+    const platform = (['facebook', 'instagram', 'google_business', 'youtube', 'linkedin'] as PlatformKey[]).find((p) =>
       params.has(p)
     );
 

@@ -8,21 +8,28 @@ import {
   IonSpinner,
   IonToast,
   IonToolbar,
+  useIonViewWillEnter,
 } from '@ionic/react';
 import {
   arrowBackOutline,
-  businessOutline,
   checkmarkCircleOutline,
   logoFacebook,
+  logoGoogle,
   logoInstagram,
   logoLinkedin,
   logoWhatsapp,
+  refreshOutline,
   logoYoutube,
 } from 'ionicons/icons';
 
 import BottomTabBar from '../components/BottomTabBar';
 import { useLogoTheme } from '../hooks/useLogoTheme';
-import { isConnectable, PlatformKey, useSocialConnections } from '../hooks/useSocialConnections';
+import {
+  CONNECTABLE_PLATFORMS,
+  isConnectable,
+  PlatformKey,
+  useSocialConnections,
+} from '../hooks/useSocialConnections';
 import './Home.css';
 
 type Social = {
@@ -36,23 +43,40 @@ const SOCIALS: Social[] = [
   { id: 'instagram', name: 'Instagram', note: 'Posters, reels and stories', icon: logoInstagram },
   { id: 'facebook', name: 'Facebook', note: 'Page posts and ads', icon: logoFacebook },
   { id: 'whatsapp', name: 'WhatsApp Business', note: 'Offers and catalogues for customers', icon: logoWhatsapp },
-  { id: 'google_business', name: 'Google Business Profile', note: 'Manage your business listing and local presence', icon: businessOutline },
+  { id: 'google_business', name: 'Google Business Profile', note: 'Manage your business listing and local presence', icon: logoGoogle },
   { id: 'youtube', name: 'YouTube', note: 'Video campaigns and shorts', icon: logoYoutube },
   { id: 'linkedin', name: 'LinkedIn', note: 'Updates for your business network', icon: logoLinkedin },
 ];
 
+const CONNECTABLE_COUNT = CONNECTABLE_PLATFORMS.length;
+
 const SocialConnections: React.FC = () => {
   const ionRouter = useIonRouter();
   const themeStyle = useLogoTheme();
-  const { connected, usernames, busy, error, success, clearError, clearSuccess, refresh, connect } =
+  const { connected, usernames, connectedCount, checking, busy, error, success, clearError, clearSuccess, refresh, connect } =
     useSocialConnections();
+
+  useIonViewWillEnter(() => {
+    void refresh();
+  });
 
   return (
     <IonPage className="home-page" style={themeStyle}>
       <IonHeader className="ion-no-border">
         <IonToolbar className="app-toolbar">
           <div className="app-header-inner">
-            <button type="button" className="social-page-back" onClick={() => ionRouter.back()} aria-label="Back">
+            <button
+              type="button"
+              className="social-page-back"
+              onClick={() => {
+                if (ionRouter.canGoBack()) {
+                  ionRouter.back();
+                } else {
+                  ionRouter.push('/dashboard', 'back');
+                }
+              }}
+              aria-label="Back"
+            >
               <IonIcon icon={arrowBackOutline} />
             </button>
             <h1 className="social-page-title">Social accounts</h1>
@@ -63,13 +87,26 @@ const SocialConnections: React.FC = () => {
 
       <IonContent fullscreen className="home-content">
         <div className="home-container">
-          <section className="greeting social-page-intro">
-            <p className="social-page-eyebrow">PUBLISHING CHANNELS</p>
-            <h1>Connect your accounts</h1>
-            <p>Connect your business channels to publish campaigns from AarnexAi.</p>
+          <section className="social-page-intro">
+            <div className="social-page-heading">
+              <div>
+                <p className="social-page-eyebrow">PUBLISHING CHANNELS</p>
+                <h1>Social accounts</h1>
+                <p>Connect your business channels to publish campaigns from AarnexAi.</p>
+              </div>
+              <div className="social-count" aria-label={`${connectedCount} accounts connected`}>
+                <strong>{connectedCount}</strong>
+                <span>of {CONNECTABLE_COUNT} connected</span>
+              </div>
+            </div>
           </section>
 
-          <ul className="cs-list social-page-list">
+          <div className="social-section-label">
+            <h2>Available channels</h2>
+            <span>{checking ? 'Checking status...' : 'Live connection status'}</span>
+          </div>
+
+          <ul className="cs-list social-page-list" aria-label="Social accounts">
             {SOCIALS.map((social) => {
               const platform: PlatformKey | null = isConnectable(social.id) ? social.id : null;
               const isConnected = platform ? connected[platform] : false;
@@ -78,7 +115,7 @@ const SocialConnections: React.FC = () => {
 
               return (
                 <li key={social.id} className="cs-row">
-                  <div className={`cs-icon is-${social.id}`}><IonIcon icon={social.icon} /></div>
+                  <div className={`cs-icon is-${social.id}`} aria-hidden="true"><IonIcon icon={social.icon} /></div>
                   <div className="cs-info">
                     <h4>{social.name}</h4>
                     <p className={isConnected ? 'is-ok' : ''}>
@@ -100,8 +137,9 @@ const SocialConnections: React.FC = () => {
             })}
           </ul>
 
-          <IonButton expand="block" fill="outline" onClick={() => void refresh()} style={{ marginTop: 18 }}>
-            Refresh connection status
+          <IonButton className="social-refresh" expand="block" fill="outline" onClick={() => void refresh()} disabled={checking}>
+            <IonIcon slot="start" icon={refreshOutline} />
+            {checking ? 'Checking status...' : 'Refresh connection status'}
           </IonButton>
         </div>
       </IonContent>

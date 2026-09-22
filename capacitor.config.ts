@@ -1,7 +1,15 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
-const config: CapacitorConfig = {
+/* const config: CapacitorConfig = {
   appId: 'io.ionic.starter',
+  appName: 'AarnexAi',
+  webDir: 'dist'
+};
+
+export default config; */
+
+const config: CapacitorConfig = {
+  appId: 'com.aarnexai.app',
   appName: 'AarnexAi',
   webDir: 'dist'
 };

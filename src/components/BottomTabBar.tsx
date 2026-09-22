@@ -58,7 +58,7 @@ const BottomTabBar: React.FC = () => {
                 .join(' ')}
               aria-current={active ? 'page' : undefined}
               onClick={() => {
-                if (!active) navigate(tab.path, { replace: true });
+                if (!active) navigate(tab.path === '/' ? '/dashboard' : tab.path);
               }}
             >
               <span className="tab-icon">

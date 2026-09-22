@@ -8,12 +8,12 @@
 
 .tab-bar {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   align-items: end;
-  padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+  padding: 4px 8px calc(4px + env(safe-area-inset-bottom));
   background: var(--ion-background-color, #ffffff);
   border-top: 1px solid rgba(15, 42, 74, 0.08);
-  box-shadow: 0 -6px 18px rgba(15, 42, 74, 0.06);
+  box-shadow: 0 -4px 14px rgba(15, 42, 74, 0.08);
 }
 
 .tab-item {
@@ -23,12 +23,12 @@
   justify-content: flex-end;
   gap: 2px;
   padding: 4px 0 2px;
-  min-height: 52px;
+  min-height: 48px;
   background: none;
   border: 0;
   color: var(--tab-muted-color);
   font: inherit;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   cursor: pointer;
   -webkit-tap-highlight-color: transparent;
@@ -43,9 +43,9 @@
 .tab-icon {
   display: grid;
   place-items: center;
-  width: 32px;
-  height: 28px;
-  font-size: 24px;
+  width: 30px;
+  height: 25px;
+  font-size: 21px;
 }
 
 .tab-item.is-active {
@@ -54,10 +54,10 @@
 
 /* Centre action: raised, filled, always accent-coloured */
 .tab-item.is-primary .tab-icon {
-  width: 46px;
-  height: 46px;
-  margin-top: -18px;
-  border-radius: 16px;
+  width: 42px;
+  height: 42px;
+  margin-top: -15px;
+  border-radius: 13px;
   background: var(--tab-accent-color);
   color: #ffffff;
   font-size: 26px;

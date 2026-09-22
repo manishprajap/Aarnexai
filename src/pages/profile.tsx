@@ -13,6 +13,11 @@ import {
   personOutline,
   callOutline,
   mailOutline,
+  locationOutline,
+  globeOutline,
+  cardOutline,
+  businessOutline,
+  walletOutline,
   createOutline,
   checkmarkOutline,
   closeOutline,
@@ -42,6 +47,8 @@ const Profile: React.FC = () => {
   const [name, setName] = useState(user?.name || '');
   const [email, setEmail] = useState(user?.email || '');
   const phone = user?.mobile || user?.phone || '';
+  const displayValue = (value: unknown) =>
+    typeof value === 'string' && value.trim() ? value.trim() : 'Not added';
 
   const initials = (user?.name || '?')
     .split(' ')
@@ -158,6 +165,49 @@ const Profile: React.FC = () => {
                 +91 {phone}
                 <span className="locked-tag">Verified</span>
               </div>
+            </div>
+
+            <div className="field-group">
+              <label className="field-label">
+                <IonIcon icon={mailOutline} />
+                Email Address
+              </label>
+              {isEditing ? (
+                <input
+                  type="email"
+                  className="field-input"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Enter your email address"
+                />
+              ) : (
+                <div className="field-value">{displayValue(user?.email)}</div>
+              )}
+            </div>
+
+            <div className="profile-section-divider" />
+            <p className="profile-section-title">Business Information</p>
+
+            <div className="profile-detail-grid">
+              <div className="detail-item">
+                <span className="detail-label"><IonIcon icon={businessOutline} /> Category</span>
+                <strong>{displayValue(user?.category)}</strong>
+              </div>
+              <div className="detail-item">
+                <span className="detail-label"><IonIcon icon={locationOutline} /> City</span>
+                <strong>{displayValue(user?.city)}</strong>
+              </div>
+              <div className="detail-item detail-item-wide">
+                <span className="detail-label"><IonIcon icon={globeOutline} /> Website</span>
+                <strong>{displayValue(user?.website)}</strong>
+              </div>
+            </div>
+
+            <div className="profile-section-divider" />
+            <p className="profile-section-title">Account Plan</p>
+            <div className="plan-summary">
+              <div><span><IonIcon icon={cardOutline} /> Plan</span><strong>{displayValue(user?.plan)}</strong></div>
+              <div><span><IonIcon icon={walletOutline} /> Credits</span><strong>{user?.credits ?? 'Not available'}</strong></div>
             </div>
 
          

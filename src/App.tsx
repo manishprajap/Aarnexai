@@ -37,6 +37,7 @@ import CreateCampaign from './pages/CreateCampaign';
 import CampaignDetails from './pages/CampaignDetails';
 import Profile from './pages/profile';
 import SocialConnections from './pages/SocialConnections';
+import Settings from './pages/Settings';
 import aarnaLogo from './assets/aarna-logo.png';
 import './splash.css';
 
@@ -190,6 +191,14 @@ const App: React.FC = () => {
               </RequireAuth>
             }
           /> 
+          <Route
+            path="/settings"
+            element={
+              <RequireAuth>
+                <Settings />
+              </RequireAuth>
+            }
+          />
           
           
           <Route path="/" element={<Navigate to="/login" replace />} />
