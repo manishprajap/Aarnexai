@@ -38,6 +38,7 @@ import CampaignDetails from './pages/CampaignDetails';
 import Profile from './pages/profile';
 import SocialConnections from './pages/SocialConnections';
 import Settings from './pages/Settings';
+import Analytics from './pages/Analytics';
 import aarnaLogo from './assets/aarna-logo.png';
 import './splash.css';
 
@@ -153,6 +154,15 @@ const App: React.FC = () => {
             element={
               <RequireAuth>
                 <SocialConnections />
+              </RequireAuth>
+            }
+          />
+
+          <Route
+            path="/analytics"
+            element={
+              <RequireAuth>
+                <Analytics />
               </RequireAuth>
             }
           />
