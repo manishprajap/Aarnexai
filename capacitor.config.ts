@@ -9,7 +9,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 export default config; */
 
 const config: CapacitorConfig = {
-  appId: 'com.aarnexai.app',
+  appId: 'com.aarnexai.appnew',
   appName: 'AarnexAi',
   webDir: 'dist'
 };
