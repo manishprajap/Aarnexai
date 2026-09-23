@@ -20,6 +20,9 @@ import {
   logoFacebook,
   logoInstagram,
   logoWhatsapp,
+  logoGoogle,
+  logoYoutube,
+  logoLinkedin,
   chevronDownOutline,
   chevronUpOutline,
   checkmarkCircle,
@@ -59,13 +62,21 @@ const brand = {
   ig2: '#DD2A7B',
   ig3: '#8134AF',
   wa: '#25D366',
+  gmb: '#4285F4',
+  yt: '#FF0000',
+  li: '#0A66C2',
 };
 
 const META_APP_ID = import.meta.env.VITE_META_APP_ID as string;
 const WHATSAPP_CONFIG_ID = import.meta.env.VITE_META_WHATSAPP_CONFIG_ID as string;
 
-
-type PlatformKey = 'facebook' | 'instagram' | 'whatsapp';
+type PlatformKey =
+  | 'facebook'
+  | 'instagram'
+  | 'whatsapp'
+  | 'google_business'
+  | 'youtube'
+  | 'linkedin';
 
 interface PlatformConfig {
   key: PlatformKey;
@@ -99,7 +110,31 @@ const PLATFORMS: PlatformConfig[] = [
     icon: logoWhatsapp,
     iconColor: brand.wa,
     statusEndpoint: '/whatsapp/status',
-    connectEndpoint: '/whatsapp/connect', // NOT used via startPlatformConnect — see connectWhatsAppAndPost
+    connectEndpoint: '/whatsapp/connect', // NOT used via startPlatformConnect — see connectWhatsApp* helpers
+  },
+  {
+    key: 'google_business',
+    label: 'Google Business',
+    icon: logoGoogle,
+    iconColor: brand.gmb,
+    statusEndpoint: '/google_business/status',
+    connectEndpoint: '/google_business/connect',
+  },
+  {
+    key: 'youtube',
+    label: 'YouTube',
+    icon: logoYoutube,
+    iconColor: brand.yt,
+    statusEndpoint: '/youtube/status',
+    connectEndpoint: '/youtube/connect',
+  },
+  {
+    key: 'linkedin',
+    label: 'LinkedIn',
+    icon: logoLinkedin,
+    iconColor: brand.li,
+    statusEndpoint: '/linkedin/status',
+    connectEndpoint: '/linkedin/connect',
   },
 ];
 
@@ -110,6 +145,18 @@ const PLATFORM_BY_KEY: Record<PlatformKey, PlatformConfig> = PLATFORMS.reduce(
   },
   {} as Record<PlatformKey, PlatformConfig>
 );
+
+const buildInitialStatus = (): Record<PlatformKey, boolean> =>
+  PLATFORMS.reduce((acc, p) => {
+    acc[p.key] = false;
+    return acc;
+  }, {} as Record<PlatformKey, boolean>);
+
+const buildInitialUsernames = (): Record<PlatformKey, string | null> =>
+  PLATFORMS.reduce((acc, p) => {
+    acc[p.key] = null;
+    return acc;
+  }, {} as Record<PlatformKey, string | null>);
 
 // Safely parse a field that may arrive as a JSON-stringified array.
 function parseList(raw?: string | null): string[] {
@@ -134,6 +181,103 @@ function formatDate(iso: string): string {
   }
 }
 
+function isConnectedResponse(response: unknown): boolean {
+  const root =
+    response && typeof response === 'object'
+      ? (response as Record<string, unknown>)
+      : {};
+  const data =
+    root.data && typeof root.data === 'object'
+      ? (root.data as Record<string, unknown>)
+      : {};
+  const connection =
+    root.connection && typeof root.connection === 'object'
+      ? (root.connection as Record<string, unknown>)
+      : {};
+  const value =
+    root.connected ?? data.connected ?? connection.connected ?? connection.status;
+
+  return (
+    value === true ||
+    value === 1 ||
+    value === '1' ||
+    value === 'true' ||
+    value === 'connected'
+  );
+}
+
+function getConnectionName(
+  response: unknown,
+  platform: PlatformKey
+): string | null {
+  const root =
+    response && typeof response === 'object'
+      ? (response as Record<string, any>)
+      : {};
+  const connection =
+    root.connection && typeof root.connection === 'object'
+      ? root.connection
+      : {};
+  const platformData =
+    root[platform] && typeof root[platform] === 'object'
+      ? root[platform]
+      : {};
+  const data = root.data && typeof root.data === 'object' ? root.data : {};
+  const name =
+    connection.pageName ??
+    connection.username ??
+    connection.businessName ??
+    connection.phoneNumber ??
+    platformData.username ??
+    platformData.name ??
+    data.username ??
+    data.name ??
+    root.username ??
+    root.name;
+
+  return typeof name === 'string' && name.trim() ? name.trim() : null;
+}
+
+async function publishBanner(bannerId: number, platforms: PlatformKey[]) {
+  let response: any;
+
+  try {
+    response = await apiPost('/banners/publish', { bannerId, platforms });
+  } catch (error: any) {
+    const results = error?.results;
+    const platformDetails = platforms
+      .map((platform) => results?.[platform]?.message)
+      .filter(Boolean);
+    const rawMessage = platformDetails.join('; ') || error?.message || '';
+    const message = rawMessage.includes('missing a locationId')
+      ? 'Google Business needs to be reconnected. Its business location is missing; reconnect Google Business and try again.'
+      : rawMessage;
+
+    throw new Error(
+      message || 'Failed to publish banner'
+    );
+  }
+
+  if (!response?.success) {
+    const platformErrors = response?.errors ?? response?.platformErrors;
+    const details = Array.isArray(platformErrors)
+      ? platformErrors
+          .map((item: any) => item?.message || item?.error || String(item))
+          .join('; ')
+      : typeof platformErrors === 'string'
+        ? platformErrors
+        : '';
+
+    throw new Error(
+      [response?.message || 'No platform was successfully published', details]
+        .filter(Boolean)
+        .join(': ')
+    );
+  }
+
+  return response;
+}
+
 const Posters: React.FC = () => {
   const [banners, setBanners] = useState<BannerItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -148,24 +292,23 @@ const Posters: React.FC = () => {
   const [selectedPlatforms, setSelectedPlatforms] = useState<PlatformKey[]>([]);
   const [posting, setPosting] = useState(false);
 
-  // Connection status + username, keyed by platform.
+  // Connection status + username, keyed by platform. Built dynamically from
+  // PLATFORMS so adding/removing a platform never leaves a stale key.
   const [connectionStatus, setConnectionStatus] = useState<
     Record<PlatformKey, boolean>
-  >({
-    facebook: false,
-    instagram: false,
-    whatsapp: false,
-  });
+  >(buildInitialStatus);
 
   const [connectionUsername, setConnectionUsername] = useState<
     Record<PlatformKey, string | null>
-  >({
-    facebook: null,
-    instagram: null,
-    whatsapp: null,
-  });
+  >(buildInitialUsernames);
 
   const [checkingConnections, setCheckingConnections] = useState(false);
+
+  // Which platform is currently mid-connect from the standalone
+  // "Connected accounts" section (as opposed to the post-a-banner flow).
+  const [connectingPlatform, setConnectingPlatform] = useState<PlatformKey | null>(
+    null
+  );
 
   useEffect(() => {
     const load = async () => {
@@ -192,7 +335,7 @@ const Posters: React.FC = () => {
     try {
       const res = await apiGet(PLATFORM_BY_KEY[platform].statusEndpoint);
 
-      const connected = res?.connected === true;
+      const connected = isConnectedResponse(res);
 
       setConnectionStatus((prev) => ({
         ...prev,
@@ -201,10 +344,7 @@ const Posters: React.FC = () => {
 
       setConnectionUsername((prev) => ({
         ...prev,
-        [platform]:
-          res?.[platform]?.username ??
-          res?.username ??
-          null,
+        [platform]: getConnectionName(res, platform),
       }));
 
       return connected;
@@ -234,11 +374,11 @@ const Posters: React.FC = () => {
 
   const startPlatformConnect = async (
     platform: PlatformKey,
-    bannerId: number,
+    bannerId: number | undefined,
     platforms: PlatformKey[]
   ): Promise<string> => {
     const res = await apiPost(PLATFORM_BY_KEY[platform].connectEndpoint, {
-      bannerId,
+      ...(bannerId ? { bannerId } : {}),
       platforms,
     });
 
@@ -261,7 +401,11 @@ const Posters: React.FC = () => {
     return authUrl;
   };
 
-  const connectWhatsAppAndPost = (bannerId: number): Promise<void> => {
+  // Shared WhatsApp Embedded Signup popup. `onSuccess` decides what happens
+  // once the account is linked — publish a banner, or just report connected.
+  const runWhatsAppEmbeddedSignup = (
+    onSuccess: (code: string, waba: { wabaId: string; phoneNumberId: string }) => Promise<void>
+  ): Promise<void> => {
     return new Promise((resolve, reject) => {
       loadFacebookSdk(META_APP_ID)
         .then(() => {
@@ -321,34 +465,12 @@ const Posters: React.FC = () => {
                 return;
               }
 
-              (async () => {
-                try {
-                  const connectRes = await apiPost('/whatsapp/connect', {
-                    code,
-                    wabaId: sessionInfo.wabaId,
-                    phoneNumberId: sessionInfo.phoneNumberId,
-                  });
-
-                  if (!connectRes?.success) {
-                    reject(new Error(connectRes?.message || 'WhatsApp connect failed'));
-                    return;
-                  }
-
-                  const publishRes = await apiPost('/banners/publish', {
-                    bannerId,
-                    platforms: ['whatsapp'],
-                  });
-
-                  if (!publishRes?.success) {
-                    reject(new Error(publishRes?.message || 'Failed to publish banner'));
-                    return;
-                  }
-
-                  resolve();
-                } catch (err: any) {
-                  reject(err);
-                }
-              })();
+              onSuccess(code, {
+                wabaId: sessionInfo.wabaId,
+                phoneNumberId: sessionInfo.phoneNumberId,
+              })
+                .then(resolve)
+                .catch(reject);
             },
             {
               config_id: WHATSAPP_CONFIG_ID,
@@ -366,6 +488,37 @@ const Posters: React.FC = () => {
         );
     });
   };
+
+  // Connect WhatsApp and immediately publish a specific banner to it.
+  const connectWhatsAppAndPost = (bannerId: number): Promise<void> =>
+    runWhatsAppEmbeddedSignup(async (code, waba) => {
+      const connectRes = await apiPost('/whatsapp/connect', {
+        code,
+        wabaId: waba.wabaId,
+        phoneNumberId: waba.phoneNumberId,
+      });
+
+      if (!connectRes?.success) {
+        throw new Error(connectRes?.message || 'WhatsApp connect failed');
+      }
+
+      await publishBanner(bannerId, ['whatsapp']);
+    });
+
+  // Connect WhatsApp only — used from the standalone "Connected accounts"
+  // section, with no banner to publish.
+  const connectWhatsAppOnly = (): Promise<void> =>
+    runWhatsAppEmbeddedSignup(async (code, waba) => {
+      const connectRes = await apiPost('/whatsapp/connect', {
+        code,
+        wabaId: waba.wabaId,
+        phoneNumberId: waba.phoneNumberId,
+      });
+
+      if (!connectRes?.success) {
+        throw new Error(connectRes?.message || 'WhatsApp connect failed');
+      }
+    });
 
   const groupedByDay = useMemo(() => {
     const map = new Map<number, BannerItem[]>();
@@ -398,16 +551,20 @@ const Posters: React.FC = () => {
   };
 
   /* =========================================================
-     OAUTH CALLBACK HANDLING (Facebook / Instagram only)
+     OAUTH CALLBACK HANDLING
+     (Facebook / Instagram / Google Business / YouTube / LinkedIn)
 
      WhatsApp never redirects the browser, so it never hits
      this handler — its whole flow (popup -> connect -> publish)
-     resolves in memory inside connectWhatsAppAndPost above.
+     resolves in memory inside connectWhatsApp* above.
 
      Backend should redirect back with a query param named
      after the platform, e.g.:
        ?instagram=connected
        ?facebook=connected
+       ?google_business=connected
+       ?youtube=connected
+       ?linkedin=connected
      with possible values: connected, cancelled, no_account,
      error, invalid_state, expired.
   ========================================================= */
@@ -473,10 +630,7 @@ const Posters: React.FC = () => {
               return;
             }
 
-            await apiPost('/banners/publish', {
-              bannerId: data.bannerId,
-              platforms: pendingPlatforms,
-            });
+            await publishBanner(data.bannerId, pendingPlatforms);
 
             localStorage.removeItem('pending_banner_publish');
 
@@ -502,7 +656,7 @@ const Posters: React.FC = () => {
 
       if (result === 'no_account') {
         setError(
-          `No ${platformLabel} professional account was found for this Meta account.`
+          `No ${platformLabel} professional account was found for this account.`
         );
       }
 
@@ -521,6 +675,36 @@ const Posters: React.FC = () => {
     handleOAuthCallback();
   }, []);
 
+  // Standalone connect — triggered from the "Connected accounts" section,
+  // not tied to posting any particular banner.
+  const handleStandaloneConnect = async (platform: PlatformKey) => {
+    if (connectionStatus[platform] || connectingPlatform) return;
+
+    try {
+      setConnectingPlatform(platform);
+
+      if (platform === 'whatsapp') {
+        await connectWhatsAppOnly();
+        await checkPlatformConnection('whatsapp');
+        setSuccessMsg('WhatsApp connected successfully');
+        return;
+      }
+
+      // Clear any stale pending-publish state so the OAuth callback
+      // treats this purely as a connect, not a resume-and-post.
+      localStorage.removeItem('pending_banner_publish');
+
+      const authUrl = await startPlatformConnect(platform, undefined, [platform]);
+      window.location.href = authUrl;
+    } catch (err: any) {
+      setError(
+        err?.message || `Failed to connect ${PLATFORM_BY_KEY[platform].label}`
+      );
+    } finally {
+      setConnectingPlatform(null);
+    }
+  };
+
   const handleConnectAndPost = async () => {
     if (!activeBanner || selectedPlatforms.length === 0) {
       return;
@@ -533,8 +717,8 @@ const Posters: React.FC = () => {
 
       /*
        * WhatsApp always needs its own Embedded Signup popup —
-       * handle it separately, before touching the Facebook/
-       * Instagram redirect flow below.
+       * handle it separately, before touching the redirect flow
+       * used by every other platform below.
        */
       if (selectedPlatforms.includes('whatsapp')) {
         const alreadyConnected =
@@ -543,14 +727,7 @@ const Posters: React.FC = () => {
         if (!alreadyConnected) {
           await connectWhatsAppAndPost(bannerId);
         } else {
-          const publishRes = await apiPost('/banners/publish', {
-            bannerId,
-            platforms: ['whatsapp'],
-          });
-
-          if (!publishRes?.success) {
-            throw new Error(publishRes?.message || 'Failed to publish banner');
-          }
+          await publishBanner(bannerId, ['whatsapp']);
         }
 
         // Any remaining non-WhatsApp platforms still go through the
@@ -577,14 +754,7 @@ const Posters: React.FC = () => {
         }
 
         if (otherPlatforms.length > 0) {
-          const response = await apiPost('/banners/publish', {
-            bannerId,
-            platforms: otherPlatforms,
-          });
-
-          if (!response?.success) {
-            throw new Error(response?.message || 'Failed to publish banner');
-          }
+          await publishBanner(bannerId, otherPlatforms);
         }
 
         const postedDay = activeBanner.day;
@@ -602,7 +772,8 @@ const Posters: React.FC = () => {
       }
 
       /*
-       * Facebook / Instagram only — unchanged original flow.
+       * Every other platform — Facebook, Instagram, Google Business,
+       * YouTube, LinkedIn — shares the same redirect-based connect flow.
        */
       for (const platform of selectedPlatforms) {
         let connected = connectionStatus[platform];
@@ -635,14 +806,7 @@ const Posters: React.FC = () => {
       /*
        * Every selected platform is connected — publish directly.
        */
-      const response = await apiPost('/banners/publish', {
-        bannerId,
-        platforms: selectedPlatforms,
-      });
-
-      if (!response?.success) {
-        throw new Error(response?.message || 'Failed to publish banner');
-      }
+      await publishBanner(bannerId, selectedPlatforms);
 
       const postedDay = activeBanner.day;
 
@@ -997,65 +1161,115 @@ const Posters: React.FC = () => {
                 </div>
               );
             })}
+
+          {/* Connected accounts — status for every platform, tap an
+              unconnected one to connect it standalone (no banner needed). */}
+          {!loading && (
+            <ConnectedAccountsSection
+              platforms={PLATFORMS}
+              status={connectionStatus}
+              usernames={connectionUsername}
+              connectingPlatform={connectingPlatform}
+              checking={checkingConnections}
+              onConnect={handleStandaloneConnect}
+            />
+          )}
         </div>
 
-        {/* Facebook / Instagram / WhatsApp connect sheet */}
+        {/* Platform picker sheet for posting a specific banner.
+            FIX: header / list / footer are now separate flex sections
+            inside a fixed-height wrapper, with the list as the only
+            scrollable area. This guarantees the "Post Now" button in
+            the footer is always visible, no matter how many platforms
+            are listed or how tall the device viewport is. */}
         <IonModal
           isOpen={!!activeBanner}
-          initialBreakpoint={0.55}
-          breakpoints={[0, 0.55]}
+          initialBreakpoint={0.75}
+          breakpoints={[0, 0.5, 0.75, 0.95]}
+          handleBehavior="cycle"
           onDidDismiss={() => setActiveBanner(null)}
         >
-          <div style={{ padding: '20px 20px 24px' }}>
-            <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
-              <h3 style={{ fontSize: 16, fontWeight: 700, color: brand.navy, margin: 0 }}>
-                Post this banner
-              </h3>
-              <IonIcon
-                icon={closeOutline}
-                style={{ fontSize: 20, color: brand.ink, cursor: 'pointer' }}
-                onClick={() => setActiveBanner(null)}
-              />
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              height: '70%',
+              maxHeight: '80vh',
+            }}
+          >
+            {/* Header — fixed, never scrolls */}
+            <div style={{ padding: '20px 20px 12px', flexShrink: 0 }}>
+              <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: brand.navy, margin: 0 }}>
+                  Post this banner
+                </h3>
+                <IonIcon
+                  icon={closeOutline}
+                  style={{ fontSize: 20, color: brand.ink, cursor: 'pointer' }}
+                  onClick={() => setActiveBanner(null)}
+                />
+              </div>
+              <p style={{ fontSize: 12, color: brand.ink, margin: 0 }}>
+                Choose one or more platforms to connect and publish.
+              </p>
             </div>
-            <p style={{ fontSize: 12, color: brand.ink, margin: '0 0 16px' }}>
-              Choose one or more platforms to connect and publish.
-            </p>
 
-            {PLATFORMS.map((platform) => (
-              <PlatformRow
-                key={platform.key}
-                icon={platform.icon}
-                iconColor={platform.iconColor}
-                label={platform.label}
-                checked={selectedPlatforms.includes(platform.key)}
-                onToggle={() => togglePlatform(platform.key)}
-              />
-            ))}
-
-            <IonButton
-              expand="block"
-              disabled={
-                selectedPlatforms.length === 0 || posting || checkingConnections
-              }
-              onClick={handleConnectAndPost}
+            {/* Platform list — the only part that scrolls */}
+            <div
               style={{
-                marginTop: 20,
-                '--border-radius': '12px',
-              } as React.CSSProperties}
+                flex: 1,
+                overflowY: 'auto',
+                padding: '8px 20px 0',
+                WebkitOverflowScrolling: 'touch',
+              }}
             >
-              {posting || checkingConnections ? (
-                <IonSpinner name="dots" />
-              ) : (
-                buttonLabel()
-              )}
-            </IonButton>
+              {PLATFORMS.map((platform) => (
+                <PlatformRow
+                  key={platform.key}
+                  icon={platform.icon}
+                  iconColor={platform.iconColor}
+                  label={platform.label}
+                  disabled={platform.key === 'youtube'}
+                  disabledReason={platform.key === 'youtube' ? 'Video required' : undefined}
+                  checked={selectedPlatforms.includes(platform.key)}
+                  onToggle={() => togglePlatform(platform.key)}
+                />
+              ))}
+            </div>
+
+            {/* Post button — fixed footer, always visible */}
+            <div
+              style={{
+                flexShrink: 0,
+                padding: '12px 20px 24px',
+                borderTop: `1px solid ${brand.border}`,
+                background: '#FFFFFF',
+              }}
+            >
+              <IonButton
+                expand="block"
+                disabled={
+                  selectedPlatforms.length === 0 || posting || checkingConnections
+                }
+                onClick={handleConnectAndPost}
+                style={{
+                  '--border-radius': '12px',
+                } as React.CSSProperties}
+              >
+                {posting || checkingConnections ? (
+                  <IonSpinner name="dots" />
+                ) : (
+                  buttonLabel()
+                )}
+              </IonButton>
+            </div>
           </div>
         </IonModal>
 
         <IonToast
           isOpen={!!error}
           message={error}
-          duration={3000}
+          duration={7000}
           color="danger"
           onDidDismiss={() => setError('')}
         />
@@ -1110,30 +1324,125 @@ const ChipRow: React.FC<{ label: string; items: string[]; chipColor?: string }> 
   </div>
 );
 
+// FIX: the IonCheckbox is now purely decorative (pointerEvents: 'none').
+// Previously it had its own onIonChange AND sat inside a div with
+// onClick — a tap on the checkbox fired both handlers, toggling the
+// selection twice (on, then instantly back off), so it looked like
+// clicking never checked it. Now the row's onClick is the single
+// source of truth for toggling, and the checkbox just reflects state.
 const PlatformRow: React.FC<{
   icon: string;
   iconColor: string;
   label: string;
+  disabled?: boolean;
+  disabledReason?: string;
   checked: boolean;
   onToggle: () => void;
-}> = ({ icon, iconColor, label, checked, onToggle }) => (
+}> = ({ icon, iconColor, label, disabled = false, disabledReason, checked, onToggle }) => (
   <div
-    onClick={onToggle}
+    onClick={disabled ? undefined : onToggle}
     className="flex items-center justify-between"
     style={{
       padding: '12px 14px',
       borderRadius: 12,
       border: `1px solid ${checked ? brand.blue : brand.border}`,
-      background: checked ? '#EFF6FF' : '#FFFFFF',
+      background: disabled ? '#F8FAFC' : checked ? '#EFF6FF' : '#FFFFFF',
       marginBottom: 10,
-      cursor: 'pointer',
+      cursor: disabled ? 'not-allowed' : 'pointer',
+      opacity: disabled ? 0.62 : 1,
     }}
   >
     <div className="flex items-center gap-3">
       <IonIcon icon={icon} style={{ fontSize: 22, color: iconColor }} />
-      <span style={{ fontSize: 14, fontWeight: 600, color: brand.navy }}>{label}</span>
+      <div>
+        <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: brand.navy }}>{label}</span>
+        {disabledReason && (
+          <span style={{ display: 'block', marginTop: 2, fontSize: 10.5, color: brand.ink }}>
+            {disabledReason}
+          </span>
+        )}
+      </div>
     </div>
-    <IonCheckbox checked={checked} onIonChange={onToggle} />
+    <IonCheckbox checked={checked} disabled={disabled} style={{ pointerEvents: 'none' }} />
+  </div>
+);
+
+// Status list shown below the poster feed: every supported platform, whether
+// it's connected (with username if known), and a tap-to-connect affordance
+// for anything not yet linked. This is independent of posting a banner.
+const ConnectedAccountsSection: React.FC<{
+  platforms: PlatformConfig[];
+  status: Record<PlatformKey, boolean>;
+  usernames: Record<PlatformKey, string | null>;
+  connectingPlatform: PlatformKey | null;
+  checking: boolean;
+  onConnect: (platform: PlatformKey) => void;
+}> = ({ platforms, status, usernames, connectingPlatform, checking, onConnect }) => (
+  <div
+    style={{
+      marginTop: 8,
+      marginBottom: 24,
+      background: '#FFFFFF',
+      borderRadius: 16,
+      border: `1px solid ${brand.border}`,
+      padding: '14px 16px 4px',
+    }}
+  >
+    <h4 style={{ fontSize: 13, fontWeight: 700, color: brand.navy, margin: '0 0 6px' }}>
+      Connected accounts
+    </h4>
+    <p style={{ fontSize: 11, color: brand.ink, margin: '0 0 10px' }}>
+      Tap a platform to connect it. Connected platforms show up here and in the post sheet.
+    </p>
+
+    {platforms.map((platform, i) => {
+      const isConnected = status[platform.key];
+      const isConnecting = connectingPlatform === platform.key;
+      const isLast = i === platforms.length - 1;
+
+      return (
+        <div
+          key={platform.key}
+          onClick={() => onConnect(platform.key)}
+          className="flex items-center justify-between"
+          style={{
+            padding: '10px 2px',
+            borderBottom: isLast ? 'none' : `1px solid ${brand.border}`,
+            cursor: isConnected ? 'default' : 'pointer',
+          }}
+        >
+          <div className="flex items-center gap-3">
+            <IonIcon icon={platform.icon} style={{ fontSize: 20, color: platform.iconColor }} />
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 600, color: brand.navy, margin: 0 }}>
+                {platform.label}
+              </p>
+              {isConnected && usernames[platform.key] && (
+                <p style={{ fontSize: 11, color: brand.ink, margin: 0 }}>
+                  {usernames[platform.key]}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {isConnecting ? (
+            <IonSpinner name="dots" style={{ width: 18, height: 18 }} />
+          ) : isConnected ? (
+            <span
+              className="flex items-center gap-1"
+              style={{ fontSize: 11, fontWeight: 700, color: brand.teal }}
+            >
+              <IonIcon icon={checkmarkCircle} style={{ fontSize: 15 }} />
+              Connected
+            </span>
+          ) : (
+            <span style={{ fontSize: 11, fontWeight: 700, color: brand.blue }}>
+              {checking ? '...' : 'Connect'}
+            </span>
+          )}
+        </div>
+      );
+    })}
   </div>
 );
 
