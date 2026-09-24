@@ -36,6 +36,8 @@ import {
   logoInstagram,
   logoFacebook,
   logoYoutube,
+  logoLinkedin,
+  logoWhatsapp,
   statsChartOutline,
 } from 'ionicons/icons';
 
@@ -47,36 +49,11 @@ import { useSocialConnections } from '../hooks/useSocialConnections';
 import { useLogoTheme } from '../hooks/useLogoTheme';
 import BottomTabBar from '../components/BottomTabBar';
 import { clearBusinessCategory, saveBusinessCategory } from '../utils/businessCategory';
-
-import { apiGet, apiPost } from '../api';
-
-type PromptPlanItem = {
-  day: number;
-  theme?: string | null;
-  prompt: string;
-};
-
-function getToken(authToken?: string | null): string | null {
-  return authToken || localStorage.getItem('token') || localStorage.getItem('authToken');
-}
-
-// -----------------------------------------------------------------------
-async function apiFetch(path: string, token: string | null, init: RequestInit = {}) {
-  const method = (init.method || 'GET').toUpperCase();
-  const body = init.body ? JSON.parse(init.body as string) : undefined;
-
-  if (method === 'POST') {
-    return await apiPost(path, body);
-  }
-
-  return await apiGet(path);
-}
+import { generatePromptPlan, getPlanDay, getPromptPlan, savePromptPlan, PromptPlanItem } from '../utils/promptPlan';
 
 const Home: React.FC = () => {
   const ionRouter = useIonRouter();
-  const { user, logout } = useAuth() as any;
-  const authToken: string | null = getToken(user?.token);
-
+  const { user, logout } = useAuth();
   const popoverRef = useRef<HTMLIonPopoverElement>(null);
   const themeStyle = useLogoTheme();
 
@@ -90,11 +67,8 @@ const Home: React.FC = () => {
   } = useSocialConnections();
 
   const [promptPlan, setPromptPlan] = useState<PromptPlanItem[]>([]);
-  const [todayPrompt, setTodayPrompt] = useState<PromptPlanItem | null>(null);
-  const [loadingPlan, setLoadingPlan] = useState(false);
   const [generatingPlan, setGeneratingPlan] = useState(false);
   const [promptMessage, setPromptMessage] = useState('');
-  const [promptMessageColor, setPromptMessageColor] = useState<'primary' | 'danger'>('primary');
 
   const firstName = user?.name?.split(' ')[0] ?? 'there';
   const initial = (user?.name || user?.email || '?').charAt(0).toUpperCase();
@@ -105,77 +79,31 @@ const Home: React.FC = () => {
   const businessCity = user?.city?.trim() || '';
   const hasBusinessInfo = Boolean(businessCategory || businessCity);
 
-  // -----------------------------------------------------------------------
-  // Load the user's existing saved plan from the DB on mount
-  // (replaces the old getPromptPlan(user.id) localStorage read).
-  // -----------------------------------------------------------------------
-  const loadPlan = async () => {
-    if (!user?.id) return;
-
-    setLoadingPlan(true);
-
-    try {
-      const data = await apiGet('/api/prompt-plan');
-      setPromptPlan(data?.items ?? []);
-      setTodayPrompt(data?.today ?? null);
-    } catch (err: any) {
-      // A missing plan (first-time user) is not an error worth surfacing.
-      console.warn('Could not load prompt plan:', err?.message);
-    } finally {
-      setLoadingPlan(false);
-    }
-  };
+  const todayPrompt = promptPlan.find((item) => item.day === getPlanDay());
 
   useEffect(() => {
-    void loadPlan();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (user?.id) {
+      setPromptPlan(getPromptPlan(user.id));
+    }
   }, [user?.id]);
 
-  // -----------------------------------------------------------------------
-  // Button click -> calls Gemini (via /api/prompt-plan/generate), which
-  // generates 30 DIFFERENT category-aware prompts and saves them to the DB.
-  // -----------------------------------------------------------------------
-  const handleGeneratePromptPlan = async () => {
-    if (!user?.id) {
-      setPromptMessageColor('danger');
-      setPromptMessage('Please log in again.');
-      return;
-    }
-
-    if (!businessCategory && !user?.categoryId) {
-      setPromptMessageColor('danger');
+  const handleGeneratePromptPlan = () => {
+    if (!user?.id || !businessCategory) {
       setPromptMessage('Please complete Business Setup first.');
       return;
     }
 
     if (promptPlan.length === 30) {
-      setPromptMessageColor('primary');
       setPromptMessage('Your saved 30-day prompt table is ready to use.');
       return;
     }
 
     setGeneratingPlan(true);
-    setPromptMessage('');
-
-    try {
-      const data = await apiFetch('/api/prompt-plan/generate', authToken, {
-        method: 'POST',
-        body: JSON.stringify({
-          categoryId: user?.categoryId ?? undefined,
-          businessName: businessName || undefined,
-        }),
-      });
-
-      setPromptPlan(data?.items ?? []);
-      setTodayPrompt(data?.today ?? null);
-      setPromptMessageColor('primary');
-      setPromptMessage('Your unique 30-day prompt plan is ready.');
-    } catch (err: any) {
-      setPromptMessageColor('danger');
-      setPromptMessage(err?.message || 'Could not generate your 30-day plan. Please try again.');
-    } finally {
-      setGeneratingPlan(false);
-    }
+    const plan = generatePromptPlan(businessCategory);
+    savePromptPlan(user.id, plan);
+    setPromptPlan(plan);
+    setPromptMessage('Your unique 30-day prompt plan is ready.');
+    setGeneratingPlan(false);
   };
 
   // Keep the localStorage cache (used by the Upload page) in sync with the server value.
@@ -192,7 +120,6 @@ const Home: React.FC = () => {
   // (e.g. after coming back from Posters or an OAuth redirect).
   useIonViewWillEnter(() => {
     void refresh();
-    void loadPlan();
   });
 
   const handleLogout = () => {
@@ -401,34 +328,15 @@ const Home: React.FC = () => {
                 </div>
                 <IonIcon icon={timeOutline} style={{ color: '#0F6FEC', fontSize: 24 }} />
               </div>
-
-              <IonButton
-                expand="block"
-                onClick={handleGeneratePromptPlan}
-                disabled={generatingPlan || loadingPlan || promptPlan.length === 30}
-                style={{ marginTop: 16 }}
-              >
-                {generatingPlan ? (
-                  <IonSpinner name="crescent" />
-                ) : loadingPlan ? (
-                  'Loading your plan…'
-                ) : promptPlan.length === 30 ? (
-                  '30-day table saved'
-                ) : (
-                  'Generate 30-day prompts'
-                )}
+              <IonButton expand="block" onClick={handleGeneratePromptPlan} disabled={generatingPlan || promptPlan.length === 30} style={{ marginTop: 16 }}>
+                {generatingPlan ? <IonSpinner name="crescent" /> : promptPlan.length === 30 ? '30-day table saved' : 'Generate 30-day prompts'}
               </IonButton>
-
               {todayPrompt && (
                 <div style={{ marginTop: 14, padding: 12, borderRadius: 12, background: '#F8FAFD' }}>
-                  <strong style={{ color: '#0F1B2D', fontSize: 13 }}>
-                    Today · Day {todayPrompt.day}
-                    {todayPrompt.theme ? ` · ${todayPrompt.theme}` : ''}
-                  </strong>
+                  <strong style={{ color: '#0F1B2D', fontSize: 13 }}>Today · Day {todayPrompt.day}</strong>
                   <p style={{ margin: '6px 0 0', color: '#526176', fontSize: 13, lineHeight: 1.45 }}>{todayPrompt.prompt}</p>
                 </div>
               )}
-
               {promptPlan.length === 30 && (
                 <div style={{ marginTop: 14, maxHeight: 360, overflowY: 'auto', border: '1px solid #E1E7EF', borderRadius: 12 }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -440,34 +348,16 @@ const Home: React.FC = () => {
                     </thead>
                     <tbody>
                       {promptPlan.map((item) => (
-                        <tr
-                          key={item.day}
-                          style={{
-                            borderTop: '1px solid #E1E7EF',
-                            background: item.day === todayPrompt?.day ? '#EAF3FF' : '#FFFFFF',
-                          }}
-                        >
+                        <tr key={item.day} style={{ borderTop: '1px solid #E1E7EF', background: item.day === getPlanDay() ? '#EAF3FF' : '#FFFFFF' }}>
                           <td style={{ padding: '10px 8px', verticalAlign: 'top', fontWeight: 700, color: '#0F1B2D' }}>{item.day}</td>
-                          <td style={{ padding: '10px 8px', lineHeight: 1.45, color: '#526176' }}>
-                            {item.theme && (
-                              <span style={{ display: 'block', fontWeight: 600, color: '#0F6FEC', fontSize: 11, marginBottom: 2 }}>
-                                {item.theme}
-                              </span>
-                            )}
-                            {item.prompt}
-                          </td>
+                          <td style={{ padding: '10px 8px', lineHeight: 1.45, color: '#526176' }}>{item.prompt}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
               )}
-
-              {promptMessage && (
-                <p style={{ margin: '10px 0 0', color: promptMessageColor === 'danger' ? '#D33' : '#0F6FEC', fontSize: 12 }}>
-                  {promptMessage}
-                </p>
-              )}
+              {promptMessage && <p style={{ margin: '10px 0 0', color: '#0F6FEC', fontSize: 12 }}>{promptMessage}</p>}
             </IonCardContent>
           </IonCard>
 
