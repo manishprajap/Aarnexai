@@ -32,11 +32,34 @@ import {
 } from '../hooks/useSocialConnections';
 import './Home.css';
 
+// ---------------------------------------------------------------------------
+// Ionicons has no official "Google Analytics" or "YouTube Analytics" mark —
+// only a generic statsChartOutline icon exists in that package. Using inline
+// SVGs here instead gives each row a real, recognizable, brand-colored icon.
+// Swap the paths below for your own licensed brand assets if you have them.
+// ---------------------------------------------------------------------------
+
+const GoogleAnalyticsIcon: React.FC = () => (
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true">
+    <rect x="3" y="12" width="4" height="9" rx="1" fill="#F9AB00" />
+    <rect x="10" y="7" width="4" height="14" rx="1" fill="#E37400" />
+    <rect x="17" y="3" width="4" height="18" rx="1" fill="#4285F4" />
+  </svg>
+);
+
+const YoutubeAnalyticsIcon: React.FC = () => (
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true">
+    <rect x="1" y="4" width="22" height="16" rx="5" fill="#FF0000" />
+    <path d="M10 8.5L16 12L10 15.5V8.5Z" fill="#FFFFFF" />
+  </svg>
+);
+
 type Social = {
   id: string;
   name: string;
   note: string;
-  icon: string;
+  icon?: string; // ionicon name, used when no custom SVG is provided
+  Custom?: React.FC; // inline SVG component, takes priority over `icon`
 };
 
 const SOCIALS: Social[] = [
@@ -46,6 +69,8 @@ const SOCIALS: Social[] = [
   { id: 'google_business', name: 'Google Business Profile', note: 'Manage your business listing and local presence', icon: logoGoogle },
   { id: 'youtube', name: 'YouTube', note: 'Video campaigns and shorts', icon: logoYoutube },
   { id: 'linkedin', name: 'LinkedIn', note: 'Updates for your business network', icon: logoLinkedin },
+  { id: 'google_analytics', name: 'Google Analytics', note: 'Track website and campaign performance', Custom: GoogleAnalyticsIcon },
+  { id: 'youtube_analytics', name: 'YouTube Analytics', note: 'Views, watch time and audience insights', Custom: YoutubeAnalyticsIcon },
 ];
 
 const CONNECTABLE_COUNT = CONNECTABLE_PLATFORMS.length;
@@ -115,7 +140,9 @@ const SocialConnections: React.FC = () => {
 
               return (
                 <li key={social.id} className="cs-row">
-                  <div className={`cs-icon is-${social.id}`} aria-hidden="true"><IonIcon icon={social.icon} /></div>
+                  <div className={`cs-icon is-${social.id}`} aria-hidden="true">
+                    {social.Custom ? <social.Custom /> : <IonIcon icon={social.icon} />}
+                  </div>
                   <div className="cs-info">
                     <h4>{social.name}</h4>
                     <p className={isConnected ? 'is-ok' : ''}>
