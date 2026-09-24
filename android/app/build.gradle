@@ -1,10 +1,10 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace = "com.aarnexai.app"
+    namespace = "com.aarnexai.appnew"
     compileSdk = rootProject.ext.compileSdkVersion
     defaultConfig {
-        applicationId "com.aarnexai.app"
+        applicationId "com.aarnexai.appnew"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1

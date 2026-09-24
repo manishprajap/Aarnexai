@@ -38,6 +38,7 @@ import {
   logoYoutube,
   logoLinkedin,
   logoWhatsapp,
+  statsChartOutline,
 } from 'ionicons/icons';
 
 import { useAuth } from '../context/AuthContext';
@@ -421,6 +422,21 @@ const Home: React.FC = () => {
                 <div className="feature-text">
                   <h4>AI posters</h4>
                   <p>Generates different professional designs.</p>
+                </div>
+                <IonIcon icon={chevronForwardOutline} className="row-chevron" />
+              </button>
+
+              <button
+                type="button"
+                className="feature-row feature-row-link"
+                onClick={() => ionRouter.push('/analytics')}
+              >
+                <div className="tile">
+                  <IonIcon icon={statsChartOutline} />
+                </div>
+                <div className="feature-text">
+                  <h4>Google and YouTube analytics</h4>
+                  <p>Review channel reach, engagement and published posts.</p>
                 </div>
                 <IonIcon icon={chevronForwardOutline} className="row-chevron" />
               </button>
