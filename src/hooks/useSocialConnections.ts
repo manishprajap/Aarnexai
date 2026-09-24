@@ -33,7 +33,9 @@ export type PlatformKey =
   | 'whatsapp'
   | 'google_business'
   | 'youtube'
-  | 'linkedin';
+  | 'linkedin'
+  | 'google_analytics'
+  | 'youtube_analytics';
 
 export const CONNECTABLE_PLATFORMS: PlatformKey[] = [
   'facebook',
@@ -42,6 +44,8 @@ export const CONNECTABLE_PLATFORMS: PlatformKey[] = [
   'google_business',
   'youtube',
   'linkedin',
+  'google_analytics',
+  'youtube_analytics',
 ];
 
 export const isConnectable = (id: string): id is PlatformKey =>
@@ -54,6 +58,8 @@ const LABELS: Record<PlatformKey, string> = {
   google_business: 'Google Business Profile',
   youtube: 'YouTube',
   linkedin: 'LinkedIn',
+  google_analytics: 'Google Analytics',
+  youtube_analytics: 'YouTube Analytics',
 };
 
 const emptyFlags = (): Record<PlatformKey, boolean> => ({
@@ -63,6 +69,8 @@ const emptyFlags = (): Record<PlatformKey, boolean> => ({
   google_business: false,
   youtube: false,
   linkedin: false,
+  google_analytics: false,
+  youtube_analytics: false,
 });
 
 const emptyNames = (): Record<PlatformKey, string | null> => ({
@@ -72,6 +80,8 @@ const emptyNames = (): Record<PlatformKey, string | null> => ({
   google_business: null,
   youtube: null,
   linkedin: null,
+  google_analytics: null,
+  youtube_analytics: null,
 });
 
 function getErrorMessage(error: unknown): string {
@@ -214,7 +224,9 @@ export function useSocialConnections() {
           return;
         }
 
-        // Facebook / Instagram: backend creates the OAuth state, returns the URL.
+        // Facebook / Instagram / Google Business / YouTube / LinkedIn /
+        // Google Analytics / YouTube Analytics: backend creates the OAuth
+        // state, returns the URL.
         const response = await apiPost(`/${platform}/connect`, {});
 
         const authUrl =
@@ -237,13 +249,19 @@ export function useSocialConnections() {
     [startWhatsApp]
   );
 
-  /* ---------- Facebook / Instagram OAuth return (?facebook=connected) ---------- */
+  /* ---------- OAuth return (?facebook=connected, ?google_analytics=connected, ...) ---------- */
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const platform = (['facebook', 'instagram', 'google_business', 'youtube', 'linkedin'] as PlatformKey[]).find((p) =>
-      params.has(p)
-    );
+    const platform = ([
+      'facebook',
+      'instagram',
+      'google_business',
+      'youtube',
+      'linkedin',
+      'google_analytics',
+      'youtube_analytics',
+    ] as PlatformKey[]).find((p) => params.has(p));
 
     if (!platform) return;
 
