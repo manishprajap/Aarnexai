@@ -51,14 +51,6 @@ export const CONNECTABLE_PLATFORMS: PlatformKey[] = [
 export const isConnectable = (id: string): id is PlatformKey =>
   (CONNECTABLE_PLATFORMS as string[]).includes(id);
 
-// A LinkedIn post target is either the literal string 'personal' or a
-// company page URN, e.g. 'urn:li:organization:12345'.
-export type LinkedInTarget = {
-  type: 'personal' | 'organization';
-  urn: string; // 'personal' key is looked up by matching type === 'personal'
-  name: string;
-};
-
 const LABELS: Record<PlatformKey, string> = {
   facebook: 'Facebook',
   instagram: 'Instagram',
@@ -139,11 +131,18 @@ export function useSocialConnections() {
   const [success, setSuccess] = useState<string | null>(null);
 
   /* =========================
-     LINKEDIN TARGET STATE (multi-select: personal / page / both)
+     LINKEDIN EXTRA STATE
   ========================= */
 
-  const [linkedinTargets, setLinkedinTargets] = useState<LinkedInTarget[]>([]);
-  const [selectedLinkedinTargets, setSelectedLinkedinTargets] = useState<string[]>([]);
+  const [linkedinPages, setLinkedinPages] = useState<
+    { urn: string; name: string }[]
+  >([]);
+
+  const [selectedLinkedinPage, setSelectedLinkedinPage] = useState<{
+    urn: string;
+    name: string;
+  } | null>(null);
+
   /* ---------- status ---------- */
 
   const checkOne = useCallback(
@@ -172,29 +171,30 @@ export function useSocialConnections() {
             typeof name === 'string' && name.trim() ? name.trim() : null,
         }));
 
+        /* =========================
+           FIX: LINKEDIN PAGE LOAD
+        ========================= */
+
         if (platform === 'linkedin') {
-          type RawLinkedInTarget = {
-            type?: string;
-            urn?: string;
-            name?: string;
-          };
+          const targets = response?.targets ?? [];
 
-          const targets: LinkedInTarget[] = (response?.targets ?? []).map(
-            (t: RawLinkedInTarget): LinkedInTarget => ({
-              type: t?.type === 'organization' ? 'organization' : 'personal',
-              urn: t?.type === 'organization' ? String(t?.urn ?? '') : 'personal',
-              name: String(t?.name ?? ''),
-            })
-          );
+          const pages = targets
+            .filter((t: any) => t.type === 'organization')
+            .map((t: any) => ({
+              urn: t.urn,
+              name: t.name,
+            }));
 
-          const selected: string[] = Array.isArray(response?.selectedTargets)
-            ? response.selectedTargets
-            : targets.some((t) => t.type === 'personal')
-              ? ['personal']
-              : [];
+          const savedSelected =
+            response?.connection?.metadata?.selectedOrgUrn ?? null;
 
-          setLinkedinTargets(targets);
-          setSelectedLinkedinTargets(selected);
+          const selected =
+            pages.find((p: { urn: any; }) => p.urn === savedSelected) ||
+            pages[0] ||
+            null;
+
+          setLinkedinPages(pages);
+          setSelectedLinkedinPage(selected);
         }
 
         return isConnected;
@@ -292,115 +292,17 @@ export function useSocialConnections() {
     [startWhatsApp]
   );
 
-  /* ---------- disconnect ---------- */
+  /* ---------- LinkedIn page selector ---------- */
 
-  const disconnect = useCallback(async (platform: PlatformKey) => {
-    setError(null);
-    setSuccess(null);
-    setBusy(platform);
+  const selectLinkedInPage = useCallback(
+    async (page: { urn: string; name: string }) => {
+      setSelectedLinkedinPage(page);
 
-    try {
-      const response = await apiPost(`/${platform}/disconnect`, {});
-
-      if (response?.success === false) {
-        throw new Error(
-          response?.message || `Failed to disconnect ${LABELS[platform]}.`
-        );
-      }
-
-      setConnected((prev) => ({ ...prev, [platform]: false }));
-      setUsernames((prev) => ({ ...prev, [platform]: null }));
-
-      if (platform === 'linkedin') {
-        setLinkedinTargets([]);
-        setSelectedLinkedinTargets([]);
-      }
-
-      if (platform === 'whatsapp') {
-        localStorage.removeItem('pending_whatsapp_connect');
-      }
-
-      setSuccess(`${LABELS[platform]} disconnected.`);
-    } catch (err) {
-      console.error(`Failed to disconnect ${platform}:`, err);
-      setError(getErrorMessage(err));
-    } finally {
-      setBusy(null);
-    }
-  }, []);
-
-  /* ---------- LinkedIn target selection (personal / page / both) ---------- */
-
-  const toggleLinkedInTarget = useCallback(
-    async (targetKey: string) => {
-      setSelectedLinkedinTargets((prev) => {
-        const next = prev.includes(targetKey)
-          ? prev.filter((t) => t !== targetKey)
-          : [...prev, targetKey];
-
-        void apiPost('/linkedin/select-targets', { targets: next }).catch(
-          (err) => {
-            console.error('Failed to save LinkedIn target selection:', err);
-            setError('Could not save your LinkedIn posting selection.');
-          }
-        );
-
-        return next;
+      await apiPost('/linkedin/select-organization', {
+        organizationUrn: page.urn,
       });
     },
     []
-  );
-
-  const setLinkedInTargets = useCallback(async (targetKeys: string[]) => {
-    setSelectedLinkedinTargets(targetKeys);
-    try {
-      await apiPost('/linkedin/select-targets', { targets: targetKeys });
-    } catch (err) {
-      console.error('Failed to save LinkedIn target selection:', err);
-      setError('Could not save your LinkedIn posting selection.');
-    }
-  }, []);
-
-  /* ---------- LinkedIn post ---------- */
-
-  const postToLinkedIn = useCallback(
-    async (text: string, imageAssetUrn?: string) => {
-      setError(null);
-      setSuccess(null);
-      setBusy('linkedin');
-
-      try {
-        const response = await apiPost('/linkedin/post', {
-          text,
-          imageAssetUrn,
-          targets: selectedLinkedinTargets,
-        });
-
-        if (!response?.success) {
-          const failedTargets = (response?.results ?? [])
-            .filter((r: any) => !r.ok)
-            .map((r: any) => r.error)
-            .filter(Boolean);
-          throw new Error(
-            failedTargets[0] || response?.message || 'LinkedIn post failed.'
-          );
-        }
-
-        if (response?.partialFailure) {
-          setSuccess('Posted to LinkedIn, but one target failed. Check details.');
-        } else {
-          setSuccess('Posted to LinkedIn successfully.');
-        }
-
-        return response;
-      } catch (err) {
-        setError(getErrorMessage(err));
-        throw err;
-      } finally {
-        setBusy(null);
-      }
-    },
-    [selectedLinkedinTargets]
   );
 
   /* ---------- OAuth return ---------- */
@@ -467,7 +369,7 @@ export function useSocialConnections() {
 
         try {
           await Browser.close();
-        } catch { }
+        } catch {}
 
         const parsed = new URL(url);
         const status = parsed.searchParams.get('status');
@@ -530,13 +432,10 @@ export function useSocialConnections() {
     clearSuccess: () => setSuccess(null),
     refresh,
     connect,
-    disconnect, // <-- naya
 
-    /* LINKEDIN */
-    linkedinTargets,
-    selectedLinkedinTargets,
-    toggleLinkedInTarget,
-    setLinkedInTargets,
-    postToLinkedIn,
+    /* LINKEDIN FIX */
+    linkedinPages,
+    selectedLinkedinPage,
+    selectLinkedInPage,
   };
 }

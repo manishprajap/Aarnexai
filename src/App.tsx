@@ -30,7 +30,6 @@ import SelectCategory from './pages/SelectCategory';
 import Login from './pages/login';
 import BusinessSetup from './pages/business-setup';
 import Subscription from './pages/subscription';
-import Posters from './pages/Posters';
 import Campaigns from './pages/Campaigns';
 import CreateCampaign from './pages/CreateCampaign';
 import CampaignDetails from './pages/CampaignDetails';
@@ -41,6 +40,7 @@ import Analytics from './pages/Analytics';
 import aarnaLogo from './assets/aarna-logo.png';
 import './splash.css';
 import Home from './pages/Home';
+import Posters from './pages/Posters';
 
 setupIonicReact();
 

@@ -28,8 +28,6 @@ import {
   checkmarkCircle,
   closeOutline,
   lockClosedOutline,
-  businessOutline,
-  personOutline,
 } from 'ionicons/icons';
 import { apiGet, apiPost } from '../api';
 import { loadFacebookSdk } from '../lib/facebookSdk';
@@ -79,14 +77,6 @@ type PlatformKey =
   | 'google_business'
   | 'youtube'
   | 'linkedin';
-
-// A LinkedIn post target is either the personal profile ('personal') or a
-// company page, identified by its URN (e.g. 'urn:li:organization:12345').
-interface LinkedInTarget {
-  type: 'personal' | 'organization';
-  urn: string; // 'personal' for the personal-profile row
-  name: string;
-}
 
 interface PlatformConfig {
   key: PlatformKey;
@@ -248,63 +238,11 @@ function getConnectionName(
   return typeof name === 'string' && name.trim() ? name.trim() : null;
 }
 
-// Parses the LinkedIn-specific fields from GET /linkedin/status
-// (`targets`: every postable target, `selectedTargets`: what's currently
-// chosen — see the earlier status-route.ts / useSocialConnections.ts).
-function getLinkedInTargets(response: unknown): {
-  targets: LinkedInTarget[];
-  selected: string[];
-} {
-  const root =
-    response && typeof response === 'object'
-      ? (response as Record<string, any>)
-      : {};
-
-const targets: LinkedInTarget[] = Array.isArray(root.targets)
-  ? root.targets
-      .map((t: any): LinkedInTarget => ({
-        type: t?.type === 'organization' ? 'organization' : 'personal',
-        urn: String(t?.urn || '').trim(),
-        name: String(t?.name || (t?.type === 'organization' ? 'Company page' : 'Personal profile')),
-      }))
-      .filter((t) => t.urn.length > 0)
-  : [];
-  const personalTarget = targets.find((t) => t.type === 'personal');
-
-  const rawSelected: string[] = Array.isArray(root.selectedTargets)
-    ? root.selectedTargets.filter((t: unknown) => typeof t === 'string')
-    : [];
-
-  const selected: string[] =
-    rawSelected.length > 0
-      ? rawSelected.map((t) => (t === 'personal' ? personalTarget?.urn || t : t))
-      : personalTarget
-      ? [personalTarget.urn]
-      : [];
-
-  return { targets, selected };
-}
-
-async function publishBanner(
-  bannerId: number,
-  platforms: PlatformKey[],
-  linkedinOwnerUrns?: string[]
-) {
+async function publishBanner(bannerId: number, platforms: PlatformKey[]) {
   let response: any;
 
   try {
-    response = await apiPost('/banners/publish', {
-      bannerId,
-      platforms,
-      // Matches PublishBody.linkedinOwnerUrns in
-      // src/app/api/banners/publish/route.ts — must be real
-      // urn:li:person:*/urn:li:organization:* strings, not the literal
-      // 'personal'. Only relevant when 'linkedin' is selected; if omitted,
-      // the backend falls back to the connected member's personal profile.
-      ...(platforms.includes('linkedin') && linkedinOwnerUrns?.length
-        ? { linkedinOwnerUrns }
-        : {}),
-    });
+    response = await apiPost('/banners/publish', { bannerId, platforms });
   } catch (error: any) {
     const results = error?.results;
     const platformDetails = platforms
@@ -372,21 +310,6 @@ const Posters: React.FC = () => {
     null
   );
 
-  /* =========================
-     LINKEDIN TARGET SELECTION
-     (personal profile / company page(s) / both)
-  ========================= */
-
-  // Every postable LinkedIn target for this account: personal profile +
-  // any connected company pages. Populated from GET /linkedin/status.
-  const [linkedinTargets, setLinkedinTargets] = useState<LinkedInTarget[]>([]);
-
-  // Which of the above are currently chosen for the banner about to be
-  // posted. Keys are 'personal' or an org urn.
-  const [selectedLinkedinTargets, setSelectedLinkedinTargets] = useState<
-    string[]
-  >([]);
-
   useEffect(() => {
     const load = async () => {
       try {
@@ -423,12 +346,6 @@ const Posters: React.FC = () => {
         ...prev,
         [platform]: getConnectionName(res, platform),
       }));
-
-      if (platform === 'linkedin') {
-        const { targets, selected } = getLinkedInTargets(res);
-        setLinkedinTargets(targets);
-        setSelectedLinkedinTargets(selected);
-      }
 
       return connected;
     } catch (error) {
@@ -623,10 +540,6 @@ const Posters: React.FC = () => {
   const openPlatformPicker = (banner: BannerItem) => {
     setActiveBanner(banner);
     setSelectedPlatforms([]);
-    // Reset to the account's saved default selection each time the sheet
-    // opens, rather than carrying over whatever was picked last time.
-    const defaultPersonal = linkedinTargets.find((t) => t.type === 'personal');
-    setSelectedLinkedinTargets(defaultPersonal ? [defaultPersonal.urn] : []);
   };
 
   const togglePlatform = (platform: PlatformKey) => {
@@ -634,14 +547,6 @@ const Posters: React.FC = () => {
       prev.includes(platform)
         ? prev.filter((p) => p !== platform)
         : [...prev, platform]
-    );
-  };
-
-  const toggleLinkedinTarget = (targetKey: string) => {
-    setSelectedLinkedinTargets((prev) =>
-      prev.includes(targetKey)
-        ? prev.filter((t) => t !== targetKey)
-        : [...prev, targetKey]
     );
   };
 
@@ -695,12 +600,6 @@ const Posters: React.FC = () => {
           try {
             const data = JSON.parse(pending);
             const pendingPlatforms: PlatformKey[] = data.platforms;
-            // Saved alongside platforms when the connect chain started —
-            // see handleConnectAndPost below. Real urn:li:person:*/
-            // urn:li:organization:* strings. Falls back to whatever the
-            // account's LinkedIn status just reported as selected.
-            const pendingLinkedinOwnerUrns: string[] | undefined =
-              data.linkedinOwnerUrns;
 
             const stillNeeded: PlatformKey[] = [];
 
@@ -718,7 +617,6 @@ const Posters: React.FC = () => {
                 JSON.stringify({
                   bannerId: data.bannerId,
                   platforms: pendingPlatforms,
-                  linkedinOwnerUrns: pendingLinkedinOwnerUrns,
                 })
               );
 
@@ -732,14 +630,7 @@ const Posters: React.FC = () => {
               return;
             }
 
-            await publishBanner(
-              data.bannerId,
-              pendingPlatforms,
-              pendingLinkedinOwnerUrns ??
-                (pendingPlatforms.includes('linkedin')
-                  ? selectedLinkedinTargets
-                  : undefined)
-            );
+            await publishBanner(data.bannerId, pendingPlatforms);
 
             localStorage.removeItem('pending_banner_publish');
 
@@ -782,7 +673,6 @@ const Posters: React.FC = () => {
     };
 
     handleOAuthCallback();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Standalone connect — triggered from the "Connected accounts" section,
@@ -817,18 +707,6 @@ const Posters: React.FC = () => {
 
   const handleConnectAndPost = async () => {
     if (!activeBanner || selectedPlatforms.length === 0) {
-      return;
-    }
-
-    // If LinkedIn is one of the chosen platforms but the account is
-    // already connected, require at least one target (personal/company)
-    // so we never silently post nowhere or to the wrong place.
-    if (
-      selectedPlatforms.includes('linkedin') &&
-      connectionStatus.linkedin &&
-      selectedLinkedinTargets.length === 0
-    ) {
-      setError('Choose where to post on LinkedIn — personal profile, page, or both.');
       return;
     }
 
@@ -867,13 +745,7 @@ const Posters: React.FC = () => {
           if (!connected) {
             localStorage.setItem(
               'pending_banner_publish',
-              JSON.stringify({
-                bannerId,
-                platforms: otherPlatforms,
-                linkedinOwnerUrns: otherPlatforms.includes('linkedin')
-                  ? selectedLinkedinTargets
-                  : undefined,
-              })
+              JSON.stringify({ bannerId, platforms: otherPlatforms })
             );
             const authUrl = await startPlatformConnect(platform, bannerId, otherPlatforms);
             window.location.href = authUrl;
@@ -882,11 +754,7 @@ const Posters: React.FC = () => {
         }
 
         if (otherPlatforms.length > 0) {
-          await publishBanner(
-            bannerId,
-            otherPlatforms,
-            otherPlatforms.includes('linkedin') ? selectedLinkedinTargets : undefined
-          );
+          await publishBanner(bannerId, otherPlatforms);
         }
 
         const postedDay = activeBanner.day;
@@ -922,9 +790,6 @@ const Posters: React.FC = () => {
             JSON.stringify({
               bannerId,
               platforms: selectedPlatforms,
-              linkedinOwnerUrns: selectedPlatforms.includes('linkedin')
-                ? selectedLinkedinTargets
-                : undefined,
             })
           );
 
@@ -941,11 +806,7 @@ const Posters: React.FC = () => {
       /*
        * Every selected platform is connected — publish directly.
        */
-      await publishBanner(
-        bannerId,
-        selectedPlatforms,
-        selectedPlatforms.includes('linkedin') ? selectedLinkedinTargets : undefined
-      );
+      await publishBanner(bannerId, selectedPlatforms);
 
       const postedDay = activeBanner.day;
 
@@ -1316,9 +1177,11 @@ const Posters: React.FC = () => {
         </div>
 
         {/* Platform picker sheet for posting a specific banner.
-            Header / list / footer are separate flex sections inside a
-            fixed-height wrapper, with the list as the only scrollable
-            area, so "Post Now" in the footer is always visible. */}
+            FIX: header / list / footer are now separate flex sections
+            inside a fixed-height wrapper, with the list as the only
+            scrollable area. This guarantees the "Post Now" button in
+            the footer is always visible, no matter how many platforms
+            are listed or how tall the device viewport is. */}
         <IonModal
           isOpen={!!activeBanner}
           initialBreakpoint={0.75}
@@ -1361,32 +1224,16 @@ const Posters: React.FC = () => {
               }}
             >
               {PLATFORMS.map((platform) => (
-                <React.Fragment key={platform.key}>
-                  <PlatformRow
-                    icon={platform.icon}
-                    iconColor={platform.iconColor}
-                    label={platform.label}
-                    disabled={platform.key === 'youtube'}
-                    disabledReason={platform.key === 'youtube' ? 'Video required' : undefined}
-                    checked={selectedPlatforms.includes(platform.key)}
-                    onToggle={() => togglePlatform(platform.key)}
-                  />
-
-                  {/* LinkedIn target sub-picker — only shown once LinkedIn
-                      is selected AND the account is already connected (if
-                      it isn't connected yet, the backend's own default
-                      applies and the user can change it afterwards from
-                      "Connected accounts"). */}
-                  {platform.key === 'linkedin' &&
-                    selectedPlatforms.includes('linkedin') &&
-                    connectionStatus.linkedin && (
-                      <LinkedInTargetSubPicker
-                        targets={linkedinTargets}
-                        selected={selectedLinkedinTargets}
-                        onToggle={toggleLinkedinTarget}
-                      />
-                    )}
-                </React.Fragment>
+                <PlatformRow
+                  key={platform.key}
+                  icon={platform.icon}
+                  iconColor={platform.iconColor}
+                  label={platform.label}
+                  disabled={platform.key === 'youtube'}
+                  disabledReason={platform.key === 'youtube' ? 'Video required' : undefined}
+                  checked={selectedPlatforms.includes(platform.key)}
+                  onToggle={() => togglePlatform(platform.key)}
+                />
               ))}
             </div>
 
@@ -1402,12 +1249,7 @@ const Posters: React.FC = () => {
               <IonButton
                 expand="block"
                 disabled={
-                  selectedPlatforms.length === 0 ||
-                  posting ||
-                  checkingConnections ||
-                  (selectedPlatforms.includes('linkedin') &&
-                    connectionStatus.linkedin &&
-                    selectedLinkedinTargets.length === 0)
+                  selectedPlatforms.length === 0 || posting || checkingConnections
                 }
                 onClick={handleConnectAndPost}
                 style={{
@@ -1482,9 +1324,12 @@ const ChipRow: React.FC<{ label: string; items: string[]; chipColor?: string }> 
   </div>
 );
 
-// The IonCheckbox is purely decorative (pointerEvents: 'none'). The row's
-// onClick is the single source of truth for toggling, so a tap never fires
-// two competing handlers.
+// FIX: the IonCheckbox is now purely decorative (pointerEvents: 'none').
+// Previously it had its own onIonChange AND sat inside a div with
+// onClick — a tap on the checkbox fired both handlers, toggling the
+// selection twice (on, then instantly back off), so it looked like
+// clicking never checked it. Now the row's onClick is the single
+// source of truth for toggling, and the checkbox just reflects state.
 const PlatformRow: React.FC<{
   icon: string;
   iconColor: string;
@@ -1521,85 +1366,6 @@ const PlatformRow: React.FC<{
     <IonCheckbox checked={checked} disabled={disabled} style={{ pointerEvents: 'none' }} />
   </div>
 );
-
-// Nested picker shown right under the LinkedIn row once it's selected:
-// lets the user choose Personal profile, one or more company pages, or
-// both. Same decorative-checkbox pattern as PlatformRow, just smaller
-// and indented so it visually reads as "part of" the LinkedIn row above.
-const LinkedInTargetSubPicker: React.FC<{
-  targets: LinkedInTarget[];
-  selected: string[];
-  onToggle: (targetKey: string) => void;
-}> = ({ targets, selected, onToggle }) => {
-  if (targets.length === 0) {
-    return (
-      <div
-        style={{
-          margin: '-4px 0 10px 14px',
-          paddingLeft: 12,
-          borderLeft: `2px solid ${brand.border}`,
-          fontSize: 11.5,
-          color: brand.ink,
-        }}
-      >
-        No LinkedIn pages found — will post to your personal profile.
-      </div>
-    );
-  }
-
-  return (
-    <div
-      style={{
-        margin: '-4px 0 10px 14px',
-        paddingLeft: 12,
-        borderLeft: `2px solid ${brand.border}`,
-      }}
-    >
-      <p
-        style={{
-          fontSize: 10,
-          fontWeight: 700,
-          color: '#A9B6C2',
-          margin: '0 0 6px',
-          textTransform: 'uppercase',
-          letterSpacing: 0.3,
-        }}
-      >
-        Post to
-      </p>
-
-      {targets.map((target) => {
-        const isChecked = selected.includes(target.urn);
-        return (
-          <div
-            key={target.urn}
-            onClick={() => onToggle(target.urn)}
-            className="flex items-center justify-between"
-            style={{
-              padding: '8px 10px',
-              borderRadius: 10,
-              border: `1px solid ${isChecked ? brand.li : brand.border}`,
-              background: isChecked ? '#EAF3FC' : '#FFFFFF',
-              marginBottom: 6,
-              cursor: 'pointer',
-            }}
-          >
-            <div className="flex items-center gap-2">
-              <IonIcon
-                icon={target.type === 'personal' ? personOutline : businessOutline}
-                style={{ fontSize: 15, color: brand.li }}
-              />
-              <span style={{ fontSize: 12.5, fontWeight: 600, color: brand.navy }}>
-                {target.type === 'personal' ? 'Personal profile' : target.name}
-              </span>
-            </div>
-            <IonCheckbox checked={isChecked} style={{ pointerEvents: 'none' }} />
-          </div>
-        );
-      })}
-    </div>
-  );
-};
 
 // Status list shown below the poster feed: every supported platform, whether
 // it's connected (with username if known), and a tap-to-connect affordance
