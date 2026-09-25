@@ -25,18 +25,13 @@ import {
   chevronBackOutline,
 } from 'ionicons/icons';
 import { useNavigate } from 'react-router-dom';
-import { apiPost } from '../api';
+import { apiPost, apiPut } from '../api';
 import { useAuth } from '../context/AuthContext';
 import './Profile.css';
 
 const Profile: React.FC = () => {
   const navigate = useNavigate();
   const { user, logout, updateUser } = useAuth() as any;
-  // NOTE: `updateUser` and the exact shape of `user` depend on what
-  // AuthContext exposes in this project. Adjust the field names below
-  // (user.name / user.mobile / user.email) to match your actual user model,
-  // and add an `updateUser` helper to AuthContext if it doesn't exist yet
-  // (it should just update the cached user object after a successful save).
 
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -47,6 +42,7 @@ const Profile: React.FC = () => {
   const [name, setName] = useState(user?.name || '');
   const [email, setEmail] = useState(user?.email || '');
   const phone = user?.mobile || user?.phone || '';
+  const isEmailEditable = !user?.email; 
   const displayValue = (value: unknown) =>
     typeof value === 'string' && value.trim() ? value.trim() : 'Not added';
 
@@ -75,27 +71,47 @@ const Profile: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!isValidName) {
-      setError('Please enter your name');
-      return;
+  if (!isValidName) {
+    setError('Please enter your name');
+    return;
+  }
+
+  if (!isValidEmail) {
+    setError('Invalid email');
+    return;
+  }
+
+  setLoading(true);
+  setError('');
+
+  try {
+    const payload: any = {
+      name: name.trim(),
+    };
+
+    // ✅ only send email if it is allowed
+    if (!user?.email && email.trim()) {
+      payload.email = email.trim();
     }
-  
-    setLoading(true);
-    setError('');
-    try {
-      const res = await apiPost('/user/update-profile', {
+
+    const res = await apiPut('/auth/profile', payload);
+
+    updateUser?.(
+      res?.user || {
+        ...user,
         name: name.trim(),
-        email: email.trim(),
-      });
-      updateUser?.(res?.user || { ...user, name: name.trim(), email: email.trim() });
-      setSuccess('Profile updated');
-      setIsEditing(false);
-    } catch (e: any) {
-      setError(getErrorMessage(e, 'Failed to update profile'));
-    } finally {
-      setLoading(false);
-    }
-  };
+        ...(payload.email ? { email: payload.email } : {}),
+      }
+    );
+
+    setSuccess('Profile updated');
+    setIsEditing(false);
+  } catch (e: any) {
+    setError(getErrorMessage(e, 'Failed to update profile'));
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleLogout = () => {
     logout?.();
@@ -172,16 +188,26 @@ const Profile: React.FC = () => {
                 <IonIcon icon={mailOutline} />
                 Email Address
               </label>
+
               {isEditing ? (
-                <input
-                  type="email"
-                  className="field-input"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Enter your email address"
-                />
+                isEmailEditable ? (
+                  <input
+                    type="email"
+                    className="field-input"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="Enter your email address"
+                  />
+                ) : (
+                  <div className="field-value locked">
+                    {displayValue(user?.email)}
+                    <span className="locked-tag">Locked</span>
+                  </div>
+                )
               ) : (
-                <div className="field-value">{displayValue(user?.email)}</div>
+                <div className="field-value">
+                  {displayValue(user?.email)}
+                </div>
               )}
             </div>
 
@@ -210,7 +236,7 @@ const Profile: React.FC = () => {
               <div><span><IonIcon icon={walletOutline} /> Credits</span><strong>{user?.credits ?? 'Not available'}</strong></div>
             </div>
 
-         
+
 
             {isEditing && (
               <IonButton

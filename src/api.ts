@@ -67,3 +67,26 @@ export const apiGet = async (endpoint: string) => {
 
   return json;
 };
+
+export const apiPut = async (endpoint: string, data: unknown) => {
+  const token = getToken();
+  const isFormData = data instanceof FormData;
+
+  const response = await fetch(`${BASE_URL}${endpoint}`, {
+    method: 'PUT',
+    headers: {
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+      'Accept': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
+    body: isFormData ? (data as FormData) : JSON.stringify(data),
+  });
+
+  const json = await parseJsonSafely(response);
+
+  if (!response.ok) {
+    throw json ?? { message: `Request failed with status ${response.status}` };
+  }
+
+  return json;
+};

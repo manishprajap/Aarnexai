@@ -6,7 +6,7 @@
 .home-page {
   /* logo-driven */
   --logo-bg: #ffffff;
-  --page-bg: #ffffff;
+  --page-bg: #f5f7fa;
   --on-bg: #0d2b2a;
   --on-bg-muted: rgba(13, 30, 28, 0.62);
   --eyebrow: #0f8b7d;
@@ -78,9 +78,9 @@
 }
 
 .avatar-trigger:focus-visible,
-.connect-btn:focus-visible,
-.social-btn:focus-visible,
-.feature-row-link:focus-visible,
+.overview-link:focus-visible,
+.quick-card:focus-visible,
+.quick-link-chip:focus-visible,
 .empty-card:focus-visible {
   outline: 2px solid var(--brand);
   outline-offset: 2px;
@@ -107,28 +107,47 @@
   min-height: 100%;
   max-width: 480px;
   margin: 0 auto;
-  padding: 12px 16px 28px;
+  padding: 16px 16px 28px;
   box-sizing: border-box;
   background: var(--page-bg);
 }
 
+/* ==========================================================================
+   Greeting
+   ========================================================================== */
 .greeting {
-  margin: 4px 0 20px;
+  margin: 4px 0 18px;
+}
+
+.greeting-eyebrow {
+  margin: 0;
+  font-size: 14px;
+  color: var(--on-bg-muted);
 }
 
 .greeting h1 {
-  margin: 0;
-  font-size: 25px;
+  margin: 2px 0 8px;
+  font-size: 24px;
   font-weight: 800;
   line-height: 1.1;
   letter-spacing: -0.02em;
   color: var(--on-bg);
 }
 
-.greeting p {
-  margin: 6px 0 0;
-  font-size: 14px;
-  color: var(--on-bg-muted);
+.greeting-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--brand-soft);
+  color: var(--brand-text);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.greeting-badge ion-icon {
+  font-size: 15px;
 }
 
 .section {
@@ -143,231 +162,155 @@
 }
 
 /* ==========================================================================
-   Hero
+   Quick actions grid
    ========================================================================== */
-.hero {
-  position: relative;
-  overflow: hidden;
-  isolation: isolate;
-  padding: 18px;
-  border-radius: 14px;
-  background: var(--screen-blue-soft);
-  box-shadow: 0 0 0 1px var(--edge);
-  color: #0f1b2d;
+.quick-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin: 0 0 14px;
 }
 
-/* soft ripple rings behind the content */
-.hero::before {
-  content: '';
-  position: absolute;
-  z-index: -1;
-  top: -90px;
-  right: -70px;
-  width: 200px;
-  height: 200px;
-  border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  box-shadow:
-    0 0 0 28px rgba(255, 255, 255, 0.04),
-    0 0 0 56px rgba(255, 255, 255, 0.03);
+.quick-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 22px 14px 18px;
+  border: 0;
+  border-radius: 20px;
+  background: var(--surface);
+  box-shadow: 0 8px 20px rgba(15, 27, 45, 0.06);
+  text-align: center;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
 }
 
-.hero-chip {
+.quick-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  background: #ffffff;
-  color: var(--screen-blue);
-  font-size: 22px;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  font-size: 24px;
 }
 
-.hero-heading {
-  margin: 12px 0 6px;
-  font-size: 18px;
-  font-weight: 800;
-  line-height: 1.2;
-  letter-spacing: -0.01em;
-  color: #0f1b2d;
+.quick-icon-green  { background: #e3f8ee; color: #1faa65; }
+.quick-icon-blue   { background: #e8f1ff; color: #2e7df7; }
+.quick-icon-purple { background: #f1ebfc; color: #8b5cf6; }
+.quick-icon-orange { background: #fff2e2; color: #f5941f; }
+
+.quick-card h4 {
+  margin: 6px 0 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
 }
 
-.hero-copy {
+.quick-card p {
   margin: 0;
-  max-width: 34ch;
-  font-size: 14px;
-  line-height: 1.5;
-  color: #526176;
+  min-height: 34px;
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: var(--muted);
 }
 
-.day-strip {
+.quick-arrow {
   display: flex;
-  gap: 4px;
-  margin: 20px 0;
-  padding: 0;
-  list-style: none;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  margin-top: 4px;
+  border-radius: 50%;
+  font-size: 16px;
+  color: #ffffff;
 }
 
-.day-strip li {
+.quick-arrow-green  { background: #1faa65; }
+.quick-arrow-blue   { background: #2e7df7; }
+.quick-arrow-purple { background: #8b5cf6; }
+.quick-arrow-orange { background: #f5941f; }
+
+/* Secondary links row */
+.quick-links-row {
+  display: flex;
+  gap: 10px;
+  margin: 0 0 22px;
+}
+
+.quick-link-chip {
   display: flex;
   flex: 1;
   align-items: center;
-  justify-content: center;
-  aspect-ratio: 1;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.09);
-  color: rgba(255, 255, 255, 0.55);
-  font-size: 11px;
-  font-weight: 700;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 0 0 1px var(--edge);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
 }
 
-.day-strip li:first-child {
-  background: var(--brand);
-  color: var(--on-brand);
+.quick-link-chip > ion-icon:first-child {
+  font-size: 18px;
+  color: var(--brand-text);
 }
 
-.hero-button {
-  --background: var(--screen-blue);
-  --background-activated: #0959c5;
-  --color: #ffffff;
-  --border-radius: 8px;
-  --box-shadow: none;
-  height: 44px;
-  margin: 0;
-  font-size: 15px;
-  font-weight: 700;
-  text-transform: none;
+.quick-link-chip .row-chevron {
+  margin-left: auto;
+  font-size: 16px;
+  color: var(--muted);
 }
 
 /* ==========================================================================
-   Feature panel
+   Overview card (recent campaigns)
    ========================================================================== */
-.feature-panel {
-  overflow: hidden;
-  border-radius: 14px;
+.overview-card {
+  margin-top: 22px;
+  padding: 18px;
+  border-radius: 18px;
   background: var(--surface);
   box-shadow: 0 0 0 1px var(--edge);
 }
 
-.feature-row {
+.overview-head {
   display: flex;
   align-items: center;
-  gap: 14px;
-  width: 100%;
-  padding: 12px 14px;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
+  justify-content: space-between;
+  margin-bottom: 14px;
 }
 
-.feature-row + .feature-row {
-  border-top: 1px solid var(--line);
-}
-
-.feature-row-link {
-  cursor: pointer;
-}
-
-.feature-row-detect {
-  flex-direction: column;
-  align-items: stretch;
-  gap: 12px;
-}
-
-.feature-main {
+.overview-head h3 {
   display: flex;
   align-items: center;
-  gap: 14px;
-}
-
-.tile {
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: var(--brand-soft);
-  color: var(--brand-text);
-  font-size: 20px;
-}
-
-.feature-text {
-  min-width: 0;
-  flex: 1;
-}
-
-.feature-text h4 {
+  gap: 8px;
   margin: 0;
   font-size: 15px;
   font-weight: 700;
   color: var(--ink);
 }
 
-.feature-text p {
-  margin: 2px 0 0;
-  font-size: 13px;
-  line-height: 1.4;
-  color: var(--muted);
+.overview-head h3 ion-icon {
+  font-size: 18px;
+  color: var(--brand-text);
 }
 
-.row-chevron {
-  flex: none;
-  color: var(--muted);
-}
-
-/* Connect line inside Product detection */
-.connect-line {
+.overview-link {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding-left: 54px; /* aligns with the text above (tile 40 + gap 14) */
-}
-
-.social-stack {
-  display: flex;
-}
-
-.social-stack span {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  margin-left: -8px;
-  border: 2px solid var(--surface);
-  border-radius: 50%;
-  color: #ffffff;
-  font-size: 14px;
-}
-
-.social-stack span:first-child {
-  margin-left: 0;
-}
-
-.connect-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 36px;
-  padding: 0 16px;
+  gap: 2px;
   border: 0;
-  border-radius: 9999px;
-  background: var(--brand);
-  color: var(--on-brand);
+  background: transparent;
+  color: var(--brand-text);
   font-size: 13px;
   font-weight: 700;
   cursor: pointer;
-}
-
-.connect-btn.is-connected {
-  background: var(--brand-soft);
-  color: var(--brand-text);
 }
 
 /* ==========================================================================
@@ -380,7 +323,7 @@
   width: 100%;
   padding: 14px 16px;
   border: 1.5px dashed var(--edge-strong);
-  border-radius: 20px;
+  border-radius: 16px;
   background: transparent;
   color: var(--on-bg);
   font: inherit;
@@ -436,121 +379,8 @@
 .brand-linkedin  { background: #0a66c2; }
 .brand-whatsapp  { background: #25d366; }
 
-/* ==========================================================================
-   Social accounts sheet
-   ========================================================================== */
-ion-modal.social-sheet {
-  --background: #ffffff;
-  --border-radius: 26px;
-}
-
-.sheet-content {
-  --background: #ffffff;
-}
-
-.sheet-body {
-  padding: 8px 20px 28px;
-}
-
-.sheet-title {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 800;
-  letter-spacing: -0.01em;
-  color: var(--ink);
-}
-
-.sheet-sub {
-  margin: 4px 0 8px;
-  font-size: 14px;
-  color: var(--muted);
-}
-
-.social-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.social-row {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 12px 0;
-}
-
-.social-row + .social-row {
-  border-top: 1px solid var(--line);
-}
-
-.social-icon {
-  display: flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 13px;
-  color: #ffffff;
-  font-size: 24px;
-}
-
-.social-info {
-  min-width: 0;
-  flex: 1;
-}
-
-.social-info h4 {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--ink);
-}
-
-.social-info p {
-  margin: 2px 0 0;
-  font-size: 12.5px;
-  line-height: 1.35;
-  color: var(--muted);
-}
-
-.social-btn {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: 4px;
-  height: 34px;
-  padding: 0 14px;
-  border: 1.5px solid var(--brand);
-  border-radius: 9999px;
-  background: transparent;
-  color: var(--brand-text);
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.social-btn.is-connected {
-  border-color: var(--brand-soft);
-  background: var(--brand-soft);
-}
-
-.sheet-done {
-  --background: var(--brand);
-  --color: var(--on-brand);
-  --border-radius: 14px;
-  --box-shadow: none;
-  height: 50px;
-  margin: 20px 0 0;
-  font-size: 15px;
-  font-weight: 700;
-  text-transform: none;
-}
 /* =========================================================
    Connect accounts sheet
-   Append to Home.css. You can delete the old .social-sheet,
-   .sheet-*, .social-list, .social-row, .social-icon,
-   .social-info and .social-btn rules – nothing uses them now.
 ========================================================= */
 
 ion-modal.connect-sheet {
@@ -886,5 +716,13 @@ ion-modal.connect-sheet ion-content.cs-content {
 
   .social-page-intro {
     padding: 18px;
+  }
+
+  .quick-card {
+    padding: 18px 10px 14px;
+  }
+
+  .quick-card p {
+    min-height: 40px;
   }
 }

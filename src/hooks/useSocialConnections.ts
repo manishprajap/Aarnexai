@@ -103,9 +103,19 @@ function isConnectedResponse(response: unknown): boolean {
     root.connection && typeof root.connection === 'object'
       ? (root.connection as Record<string, unknown>)
       : {};
-  const value = root.connected ?? data.connected ?? connection.connected ?? connection.status;
+  const value =
+    root.connected ??
+    data.connected ??
+    connection.connected ??
+    connection.status;
 
-  return value === true || value === 1 || value === '1' || value === 'true' || value === 'connected';
+  return (
+    value === true ||
+    value === 1 ||
+    value === '1' ||
+    value === 'true' ||
+    value === 'connected'
+  );
 }
 
 /* =========================================================
@@ -119,6 +129,19 @@ export function useSocialConnections() {
   const [busy, setBusy] = useState<PlatformKey | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+
+  /* =========================
+     LINKEDIN EXTRA STATE
+  ========================= */
+
+  const [linkedinPages, setLinkedinPages] = useState<
+    { urn: string; name: string }[]
+  >([]);
+
+  const [selectedLinkedinPage, setSelectedLinkedinPage] = useState<{
+    urn: string;
+    name: string;
+  } | null>(null);
 
   /* ---------- status ---------- */
 
@@ -148,10 +171,35 @@ export function useSocialConnections() {
             typeof name === 'string' && name.trim() ? name.trim() : null,
         }));
 
+        /* =========================
+           FIX: LINKEDIN PAGE LOAD
+        ========================= */
+
+        if (platform === 'linkedin') {
+          const targets = response?.targets ?? [];
+
+          const pages = targets
+            .filter((t: any) => t.type === 'organization')
+            .map((t: any) => ({
+              urn: t.urn,
+              name: t.name,
+            }));
+
+          const savedSelected =
+            response?.connection?.metadata?.selectedOrgUrn ?? null;
+
+          const selected =
+            pages.find((p: { urn: any; }) => p.urn === savedSelected) ||
+            pages[0] ||
+            null;
+
+          setLinkedinPages(pages);
+          setSelectedLinkedinPage(selected);
+        }
+
         return isConnected;
       } catch (err) {
         console.error(`Failed to check ${platform} connection:`, err);
-        // A failed status request means the state is unknown, not disconnected.
         return false;
       }
     },
@@ -171,7 +219,7 @@ export function useSocialConnections() {
     void refresh();
   }, [refresh]);
 
-  /* ---------- WhatsApp (HTTPS browser + deep link) ---------- */
+  /* ---------- WhatsApp ---------- */
 
   const startWhatsApp = useCallback(async () => {
     if (!META_APP_ID) {
@@ -193,7 +241,6 @@ export function useSocialConnections() {
       throw new Error('WhatsApp session was not created by the server.');
     }
 
-    // No bannerId: this is a "connect only" flow started from Home.
     localStorage.setItem(
       'pending_whatsapp_connect',
       JSON.stringify({ sessionId })
@@ -210,7 +257,7 @@ export function useSocialConnections() {
     });
   }, []);
 
-  /* ---------- public connect() ---------- */
+  /* ---------- connect ---------- */
 
   const connect = useCallback(
     async (platform: PlatformKey) => {
@@ -224,11 +271,7 @@ export function useSocialConnections() {
           return;
         }
 
-        // Facebook / Instagram / Google Business / YouTube / LinkedIn /
-        // Google Analytics / YouTube Analytics: backend creates the OAuth
-        // state, returns the URL.
         const response = await apiPost(`/${platform}/connect`, {});
-
         const authUrl =
           response?.redirectUrl ?? response?.authUrl ?? response?.url;
 
@@ -249,19 +292,34 @@ export function useSocialConnections() {
     [startWhatsApp]
   );
 
-  /* ---------- OAuth return (?facebook=connected, ?google_analytics=connected, ...) ---------- */
+  /* ---------- LinkedIn page selector ---------- */
+
+  const selectLinkedInPage = useCallback(
+    async (page: { urn: string; name: string }) => {
+      setSelectedLinkedinPage(page);
+
+      await apiPost('/linkedin/select-organization', {
+        organizationUrn: page.urn,
+      });
+    },
+    []
+  );
+
+  /* ---------- OAuth return ---------- */
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const platform = ([
-      'facebook',
-      'instagram',
-      'google_business',
-      'youtube',
-      'linkedin',
-      'google_analytics',
-      'youtube_analytics',
-    ] as PlatformKey[]).find((p) => params.has(p));
+    const platform = (
+      [
+        'facebook',
+        'instagram',
+        'google_business',
+        'youtube',
+        'linkedin',
+        'google_analytics',
+        'youtube_analytics',
+      ] as PlatformKey[]
+    ).find((p) => params.has(p));
 
     if (!platform) return;
 
@@ -292,7 +350,7 @@ export function useSocialConnections() {
     }
   }, [checkOne]);
 
-  /* ---------- WhatsApp deep-link return (aarnamarket://whatsapp-callback) ---------- */
+  /* ---------- WhatsApp deep-link ---------- */
 
   useEffect(() => {
     let active = true;
@@ -305,22 +363,13 @@ export function useSocialConnections() {
         const pendingRaw = localStorage.getItem('pending_whatsapp_connect');
         if (!pendingRaw) return;
 
-        let pending: { sessionId?: string; bannerId?: string };
-        try {
-          pending = JSON.parse(pendingRaw);
-        } catch {
-          localStorage.removeItem('pending_whatsapp_connect');
-          return;
-        }
+        const pending = JSON.parse(pendingRaw);
 
-        // A banner is waiting to be published -> the Posters page owns this flow.
         if (pending.bannerId) return;
 
         try {
           await Browser.close();
-        } catch {
-          // Browser may already be closed.
-        }
+        } catch {}
 
         const parsed = new URL(url);
         const status = parsed.searchParams.get('status');
@@ -345,16 +394,13 @@ export function useSocialConnections() {
         );
 
         if (sessionStatus?.connected !== true) {
-          throw new Error(
-            sessionStatus?.message || 'WhatsApp connection could not be verified.'
-          );
+          throw new Error(sessionStatus?.message || 'WhatsApp verification failed.');
         }
 
         localStorage.removeItem('pending_whatsapp_connect');
         await checkOne('whatsapp');
         setSuccess('WhatsApp connected successfully.');
       } catch (err) {
-        console.error('WhatsApp callback handling failed:', err);
         setError(getErrorMessage(err));
       }
     }).then((h) => {
@@ -370,7 +416,9 @@ export function useSocialConnections() {
 
   /* ---------- derived ---------- */
 
-  const connectedCount = CONNECTABLE_PLATFORMS.filter((p) => connected[p]).length;
+  const connectedCount = CONNECTABLE_PLATFORMS.filter(
+    (p) => connected[p]
+  ).length;
 
   return {
     connected,
@@ -384,5 +432,10 @@ export function useSocialConnections() {
     clearSuccess: () => setSuccess(null),
     refresh,
     connect,
+
+    /* LINKEDIN FIX */
+    linkedinPages,
+    selectedLinkedinPage,
+    selectLinkedInPage,
   };
 }
