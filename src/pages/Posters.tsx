@@ -20,8 +20,6 @@ import {
   logoFacebook,
   logoInstagram,
   logoWhatsapp,
-  logoGoogle,
-  logoYoutube,
   logoLinkedin,
   chevronDownOutline,
   chevronUpOutline,
@@ -30,7 +28,8 @@ import {
   lockClosedOutline,
 } from 'ionicons/icons';
 import { apiGet, apiPost } from '../api';
-import { loadFacebookSdk } from '../lib/facebookSdk';
+import { Browser } from '@capacitor/browser';
+import { App } from '@capacitor/app';
 
 interface BannerItem {
   id: number;
@@ -62,21 +61,21 @@ const brand = {
   ig2: '#DD2A7B',
   ig3: '#8134AF',
   wa: '#25D366',
-  gmb: '#4285F4',
-  yt: '#FF0000',
-  li: '#0A66C2',
+  linkedin: '#0A66C2',
 };
 
 const META_APP_ID = import.meta.env.VITE_META_APP_ID as string;
 const WHATSAPP_CONFIG_ID = import.meta.env.VITE_META_WHATSAPP_CONFIG_ID as string;
+const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, '') ?? '';
+const WHATSAPP_CONNECT_WEB_URL =
+  (import.meta.env.VITE_WHATSAPP_CONNECT_WEB_URL as string | undefined)?.trim() ||
+  `${window.location.origin}/whatsapp-connect.html`;
+const WHATSAPP_APP_CALLBACK_SCHEME =
+  (import.meta.env.VITE_WHATSAPP_APP_CALLBACK_SCHEME as string | undefined)?.trim() ||
+  'aarnamarket://whatsapp-callback';
 
-type PlatformKey =
-  | 'facebook'
-  | 'instagram'
-  | 'whatsapp'
-  | 'google_business'
-  | 'youtube'
-  | 'linkedin';
+
+type PlatformKey = 'facebook' | 'instagram' | 'whatsapp' | 'linkedin';
 
 interface PlatformConfig {
   key: PlatformKey;
@@ -85,6 +84,16 @@ interface PlatformConfig {
   iconColor: string;
   statusEndpoint: string;
   connectEndpoint: string;
+}
+
+interface LinkedInTarget {
+  type: 'personal' | 'organization';
+  urn: string;
+  name: string;
+  id?: string;
+  vanityName?: string | null;
+  role?: string | null;
+  connected?: boolean;
 }
 
 const PLATFORMS: PlatformConfig[] = [
@@ -110,29 +119,13 @@ const PLATFORMS: PlatformConfig[] = [
     icon: logoWhatsapp,
     iconColor: brand.wa,
     statusEndpoint: '/whatsapp/status',
-    connectEndpoint: '/whatsapp/connect', // NOT used via startPlatformConnect — see connectWhatsApp* helpers
-  },
-  {
-    key: 'google_business',
-    label: 'Google Business',
-    icon: logoGoogle,
-    iconColor: brand.gmb,
-    statusEndpoint: '/google_business/status',
-    connectEndpoint: '/google_business/connect',
-  },
-  {
-    key: 'youtube',
-    label: 'YouTube',
-    icon: logoYoutube,
-    iconColor: brand.yt,
-    statusEndpoint: '/youtube/status',
-    connectEndpoint: '/youtube/connect',
+    connectEndpoint: '/whatsapp/connect', // NOT used via startPlatformConnect — see connectWhatsAppAndPost
   },
   {
     key: 'linkedin',
     label: 'LinkedIn',
     icon: logoLinkedin,
-    iconColor: brand.li,
+    iconColor: brand.linkedin,
     statusEndpoint: '/linkedin/status',
     connectEndpoint: '/linkedin/connect',
   },
@@ -145,18 +138,6 @@ const PLATFORM_BY_KEY: Record<PlatformKey, PlatformConfig> = PLATFORMS.reduce(
   },
   {} as Record<PlatformKey, PlatformConfig>
 );
-
-const buildInitialStatus = (): Record<PlatformKey, boolean> =>
-  PLATFORMS.reduce((acc, p) => {
-    acc[p.key] = false;
-    return acc;
-  }, {} as Record<PlatformKey, boolean>);
-
-const buildInitialUsernames = (): Record<PlatformKey, string | null> =>
-  PLATFORMS.reduce((acc, p) => {
-    acc[p.key] = null;
-    return acc;
-  }, {} as Record<PlatformKey, string | null>);
 
 // Safely parse a field that may arrive as a JSON-stringified array.
 function parseList(raw?: string | null): string[] {
@@ -181,103 +162,6 @@ function formatDate(iso: string): string {
   }
 }
 
-function isConnectedResponse(response: unknown): boolean {
-  const root =
-    response && typeof response === 'object'
-      ? (response as Record<string, unknown>)
-      : {};
-  const data =
-    root.data && typeof root.data === 'object'
-      ? (root.data as Record<string, unknown>)
-      : {};
-  const connection =
-    root.connection && typeof root.connection === 'object'
-      ? (root.connection as Record<string, unknown>)
-      : {};
-  const value =
-    root.connected ?? data.connected ?? connection.connected ?? connection.status;
-
-  return (
-    value === true ||
-    value === 1 ||
-    value === '1' ||
-    value === 'true' ||
-    value === 'connected'
-  );
-}
-
-function getConnectionName(
-  response: unknown,
-  platform: PlatformKey
-): string | null {
-  const root =
-    response && typeof response === 'object'
-      ? (response as Record<string, any>)
-      : {};
-  const connection =
-    root.connection && typeof root.connection === 'object'
-      ? root.connection
-      : {};
-  const platformData =
-    root[platform] && typeof root[platform] === 'object'
-      ? root[platform]
-      : {};
-  const data = root.data && typeof root.data === 'object' ? root.data : {};
-  const name =
-    connection.pageName ??
-    connection.username ??
-    connection.businessName ??
-    connection.phoneNumber ??
-    platformData.username ??
-    platformData.name ??
-    data.username ??
-    data.name ??
-    root.username ??
-    root.name;
-
-  return typeof name === 'string' && name.trim() ? name.trim() : null;
-}
-
-async function publishBanner(bannerId: number, platforms: PlatformKey[]) {
-  let response: any;
-
-  try {
-    response = await apiPost('/banners/publish', { bannerId, platforms });
-  } catch (error: any) {
-    const results = error?.results;
-    const platformDetails = platforms
-      .map((platform) => results?.[platform]?.message)
-      .filter(Boolean);
-    const rawMessage = platformDetails.join('; ') || error?.message || '';
-    const message = rawMessage.includes('missing a locationId')
-      ? 'Google Business needs to be reconnected. Its business location is missing; reconnect Google Business and try again.'
-      : rawMessage;
-
-    throw new Error(
-      message || 'Failed to publish banner'
-    );
-  }
-
-  if (!response?.success) {
-    const platformErrors = response?.errors ?? response?.platformErrors;
-    const details = Array.isArray(platformErrors)
-      ? platformErrors
-          .map((item: any) => item?.message || item?.error || String(item))
-          .join('; ')
-      : typeof platformErrors === 'string'
-        ? platformErrors
-        : '';
-
-    throw new Error(
-      [response?.message || 'No platform was successfully published', details]
-        .filter(Boolean)
-        .join(': ')
-    );
-  }
-
-  return response;
-}
-
 const Posters: React.FC = () => {
   const [banners, setBanners] = useState<BannerItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -290,25 +174,30 @@ const Posters: React.FC = () => {
   // Platform-select modal state.
   const [activeBanner, setActiveBanner] = useState<BannerItem | null>(null);
   const [selectedPlatforms, setSelectedPlatforms] = useState<PlatformKey[]>([]);
+  const [selectedLinkedInOwnerUrns, setSelectedLinkedInOwnerUrns] = useState<string[]>([]);
+  const [linkedinTargets, setLinkedInTargets] = useState<LinkedInTarget[]>([]);
   const [posting, setPosting] = useState(false);
 
-  // Connection status + username, keyed by platform. Built dynamically from
-  // PLATFORMS so adding/removing a platform never leaves a stale key.
+  // Connection status + username, keyed by platform.
   const [connectionStatus, setConnectionStatus] = useState<
     Record<PlatformKey, boolean>
-  >(buildInitialStatus);
+  >({
+    facebook: false,
+    instagram: false,
+    whatsapp: false,
+    linkedin: false,
+  });
 
   const [connectionUsername, setConnectionUsername] = useState<
     Record<PlatformKey, string | null>
-  >(buildInitialUsernames);
+  >({
+    facebook: null,
+    instagram: null,
+    whatsapp: null,
+    linkedin: null,
+  });
 
   const [checkingConnections, setCheckingConnections] = useState(false);
-
-  // Which platform is currently mid-connect from the standalone
-  // "Connected accounts" section (as opposed to the post-a-banner flow).
-  const [connectingPlatform, setConnectingPlatform] = useState<PlatformKey | null>(
-    null
-  );
 
   useEffect(() => {
     const load = async () => {
@@ -335,7 +224,23 @@ const Posters: React.FC = () => {
     try {
       const res = await apiGet(PLATFORM_BY_KEY[platform].statusEndpoint);
 
-      const connected = isConnectedResponse(res);
+      const connected = res?.connected === true;
+
+      if (platform === 'linkedin') {
+        const targets = Array.isArray(res?.targets)
+          ? (res.targets as LinkedInTarget[])
+          : [];
+
+        setLinkedInTargets(targets);
+
+        setConnectionUsername((prev) => ({
+          ...prev,
+          linkedin:
+            targets.find((target) => target.type === 'personal')?.name ??
+            res?.personal?.name ??
+            null,
+        }));
+      }
 
       setConnectionStatus((prev) => ({
         ...prev,
@@ -344,7 +249,10 @@ const Posters: React.FC = () => {
 
       setConnectionUsername((prev) => ({
         ...prev,
-        [platform]: getConnectionName(res, platform),
+        [platform]:
+          res?.[platform]?.username ??
+          res?.username ??
+          null,
       }));
 
       return connected;
@@ -372,13 +280,26 @@ const Posters: React.FC = () => {
     }
   };
 
+  /*
+   * Kick off OAuth for Facebook/Instagram: POST to our backend's
+   * connect endpoint (not GET-navigate to it — that's what
+   * produced the 405 Method Not Allowed) and get back the
+   * real Meta authorization URL to redirect to.
+   *
+   * NOT used for WhatsApp — see connectWhatsAppAndPost below.
+   *
+   * The backend route requires `platforms` to include this
+   * platform's key — and uses `bannerId` for logging/context —
+   * so both must be sent in the body, or it responds 400
+   * "platform was not selected".
+   */
   const startPlatformConnect = async (
     platform: PlatformKey,
-    bannerId: number | undefined,
+    bannerId: number,
     platforms: PlatformKey[]
   ): Promise<string> => {
     const res = await apiPost(PLATFORM_BY_KEY[platform].connectEndpoint, {
-      ...(bannerId ? { bannerId } : {}),
+      bannerId,
       platforms,
     });
 
@@ -401,124 +322,76 @@ const Posters: React.FC = () => {
     return authUrl;
   };
 
-  // Shared WhatsApp Embedded Signup popup. `onSuccess` decides what happens
-  // once the account is linked — publish a banner, or just report connected.
-  const runWhatsAppEmbeddedSignup = (
-    onSuccess: (code: string, waba: { wabaId: string; phoneNumberId: string }) => Promise<void>
-  ): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      loadFacebookSdk(META_APP_ID)
-        .then(() => {
-          let sessionInfo: { wabaId?: string; phoneNumberId?: string } = {};
+  /*
+   * WhatsApp uses Embedded Signup (Facebook JS SDK popup),
+   * NOT the server-redirect OAuth flow that Facebook/Instagram
+   * use. FB.login() opens the popup; Meta posts session info
+   * (waba_id, phone_number_id) to us via a window 'message'
+   * event, and FB.login's own callback gives us the auth
+   * `code`. Both are required before we can call
+   * /api/whatsapp/connect, then /api/banners/publish.
+   */
+  /*
+   * WhatsApp Embedded Signup is NOT executed inside the Capacitor WebView.
+   *
+   * APK flow:
+   *   APK -> /whatsapp/session -> HTTPS browser page
+   *   -> Meta Embedded Signup -> backend -> aarnamarket://whatsapp-callback
+   *   -> APK -> publish banner
+   *
+   * The browser page is served from HTTPS and owns FB.login().
+   */
+  const connectWhatsAppAndPost = async (bannerId: number): Promise<void> => {
+    if (!META_APP_ID) {
+      throw new Error('VITE_META_APP_ID is missing.');
+    }
 
-          const handleMessage = (event: MessageEvent) => {
-            if (
-              event.origin !== 'https://www.facebook.com' &&
-              event.origin !== 'https://web.facebook.com'
-            ) {
-              return;
-            }
+    if (!WHATSAPP_CONFIG_ID) {
+      throw new Error('VITE_META_WHATSAPP_CONFIG_ID is missing.');
+    }
 
-            try {
-              const data = JSON.parse(event.data);
-              if (
-                data.type === 'WA_EMBEDDED_SIGNUP' &&
-                data.event === 'FINISH'
-              ) {
-                sessionInfo = {
-                  wabaId: data.data?.waba_id,
-                  phoneNumberId: data.data?.phone_number_id,
-                };
-              }
-            } catch {
-              // Not a JSON message meant for us — ignore.
-            }
-          };
+    if (!WHATSAPP_CONNECT_WEB_URL) {
+      throw new Error('WhatsApp HTTPS connect URL is missing.');
+    }
 
-          if (!window.FB || typeof window.FB.login !== 'function') {
-            reject(new Error('Facebook SDK loaded but FB.login is unavailable'));
-            return;
-          }
+    if (!WHATSAPP_APP_CALLBACK_SCHEME.startsWith('aarnamarket://')) {
+      throw new Error('Invalid WhatsApp APK callback scheme.');
+    }
 
-          window.addEventListener('message', handleMessage);
+    const sessionRes = await apiPost('/whatsapp/session', {
+      bannerId,
+      callbackUrl: WHATSAPP_APP_CALLBACK_SCHEME,
+    });
 
-          window.FB.login(
-            (response: any) => {
-              window.removeEventListener('message', handleMessage);
+    if (!sessionRes?.success || !sessionRes?.sessionId) {
+      throw new Error(
+        sessionRes?.message || 'Could not create WhatsApp connection session'
+      );
+    }
 
-              console.log('FB.login raw response:', response);
+    const sessionId = encodeURIComponent(String(sessionRes.sessionId));
 
-              const code = response?.authResponse?.code;
+    const separator = WHATSAPP_CONNECT_WEB_URL.includes('?') ? '&' : '?';
 
-              if (!code || !sessionInfo.wabaId || !sessionInfo.phoneNumberId) {
-                let reason = 'WhatsApp signup was cancelled or incomplete';
+    const launchUrl =
+      `${WHATSAPP_CONNECT_WEB_URL}${separator}` +
+      `session=${sessionId}` +
+      `&config_id=${encodeURIComponent(WHATSAPP_CONFIG_ID)}` +
+      `&app_id=${encodeURIComponent(META_APP_ID)}`;
 
-                if (response?.status === 'not_authorized') {
-                  reason =
-                    'App is not authorized for this account — check App Roles / Live mode in the Meta App Dashboard';
-                } else if (response?.status === 'unknown' || !response?.status) {
-                  reason =
-                    'Facebook login was blocked — verify this page is served over HTTPS and the Meta app is active';
-                }
+    localStorage.setItem(
+      'pending_whatsapp_connect',
+      JSON.stringify({
+        sessionId: String(sessionRes.sessionId),
+        bannerId,
+      })
+    );
 
-                reject(new Error(reason));
-                return;
-              }
-
-              onSuccess(code, {
-                wabaId: sessionInfo.wabaId,
-                phoneNumberId: sessionInfo.phoneNumberId,
-              })
-                .then(resolve)
-                .catch(reject);
-            },
-            {
-              config_id: WHATSAPP_CONFIG_ID,
-              response_type: 'code',
-              override_default_response_type: true,
-              extras: {
-                feature: 'whatsapp_embedded_signup',
-                sessionInfoVersion: '3',
-              },
-            }
-          );
-        })
-        .catch((err: any) =>
-          reject(err instanceof Error ? err : new Error('Failed to load Facebook SDK'))
-        );
+    await Browser.open({
+      url: launchUrl,
+      presentationStyle: 'fullscreen',
     });
   };
-
-  // Connect WhatsApp and immediately publish a specific banner to it.
-  const connectWhatsAppAndPost = (bannerId: number): Promise<void> =>
-    runWhatsAppEmbeddedSignup(async (code, waba) => {
-      const connectRes = await apiPost('/whatsapp/connect', {
-        code,
-        wabaId: waba.wabaId,
-        phoneNumberId: waba.phoneNumberId,
-      });
-
-      if (!connectRes?.success) {
-        throw new Error(connectRes?.message || 'WhatsApp connect failed');
-      }
-
-      await publishBanner(bannerId, ['whatsapp']);
-    });
-
-  // Connect WhatsApp only — used from the standalone "Connected accounts"
-  // section, with no banner to publish.
-  const connectWhatsAppOnly = (): Promise<void> =>
-    runWhatsAppEmbeddedSignup(async (code, waba) => {
-      const connectRes = await apiPost('/whatsapp/connect', {
-        code,
-        wabaId: waba.wabaId,
-        phoneNumberId: waba.phoneNumberId,
-      });
-
-      if (!connectRes?.success) {
-        throw new Error(connectRes?.message || 'WhatsApp connect failed');
-      }
-    });
 
   const groupedByDay = useMemo(() => {
     const map = new Map<number, BannerItem[]>();
@@ -540,6 +413,16 @@ const Posters: React.FC = () => {
   const openPlatformPicker = (banner: BannerItem) => {
     setActiveBanner(banner);
     setSelectedPlatforms([]);
+    setSelectedLinkedInOwnerUrns([]);
+    void checkPlatformConnection('linkedin');
+  };
+
+  const toggleLinkedInTarget = (urn: string) => {
+    setSelectedLinkedInOwnerUrns((prev) =>
+      prev.includes(urn)
+        ? prev.filter((item) => item !== urn)
+        : [...prev, urn]
+    );
   };
 
   const togglePlatform = (platform: PlatformKey) => {
@@ -551,23 +434,138 @@ const Posters: React.FC = () => {
   };
 
   /* =========================================================
-     OAUTH CALLBACK HANDLING
-     (Facebook / Instagram / Google Business / YouTube / LinkedIn)
+     OAUTH CALLBACK HANDLING (Facebook / Instagram only)
 
      WhatsApp never redirects the browser, so it never hits
      this handler — its whole flow (popup -> connect -> publish)
-     resolves in memory inside connectWhatsApp* above.
+     resolves in memory inside connectWhatsAppAndPost above.
 
      Backend should redirect back with a query param named
      after the platform, e.g.:
        ?instagram=connected
        ?facebook=connected
-       ?google_business=connected
-       ?youtube=connected
-       ?linkedin=connected
      with possible values: connected, cancelled, no_account,
      error, invalid_state, expired.
   ========================================================= */
+  /*
+   * Receive the result from the HTTPS WhatsApp signup page.
+   * The page redirects to:
+   *   aarnamarket://whatsapp-callback?session=...&status=success
+   */
+  useEffect(() => {
+    let listenerHandle: { remove: () => Promise<void> } | null = null;
+
+    const setupAppUrlListener = async () => {
+      listenerHandle = await App.addListener('appUrlOpen', async ({ url }) => {
+        if (!url.startsWith(WHATSAPP_APP_CALLBACK_SCHEME)) {
+          return;
+        }
+
+        try {
+          await Browser.close().catch(() => undefined);
+        } catch {
+          // Browser may already be closed by Android.
+        }
+
+        const parsed = new URL(url);
+        const status = parsed.searchParams.get('status');
+        const sessionId = parsed.searchParams.get('session');
+        const message = parsed.searchParams.get('message');
+
+        const pendingRaw = localStorage.getItem('pending_whatsapp_connect');
+
+        let pending: {
+          sessionId?: string;
+          bannerId?: number;
+        } | null = null;
+
+        try {
+          pending = pendingRaw ? JSON.parse(pendingRaw) : null;
+        } catch {
+          pending = null;
+        }
+
+        if (!sessionId || sessionId !== pending?.sessionId) {
+          setError('Invalid WhatsApp connection session.');
+          return;
+        }
+
+        if (status !== 'success') {
+          localStorage.removeItem('pending_whatsapp_connect');
+          setError(
+            message
+              ? decodeURIComponent(message)
+              : 'WhatsApp connection was cancelled or failed.'
+          );
+          return;
+        }
+
+        const bannerId = pending.bannerId;
+
+        if (!bannerId) {
+          localStorage.removeItem('pending_whatsapp_connect');
+          setError('WhatsApp connected, but the pending banner was not found.');
+          return;
+        }
+
+        try {
+          setPosting(true);
+
+          const statusRes = await apiGet(
+            `/whatsapp/session/status?sessionId=${encodeURIComponent(sessionId)}`
+          );
+
+          if (!statusRes?.success || statusRes?.connected !== true) {
+            throw new Error(
+              statusRes?.message ||
+                'WhatsApp signup finished, but the connection is not ready yet.'
+            );
+          }
+
+          const publishRes = await apiPost('/banners/publish', {
+            bannerId,
+            platforms: ['whatsapp'],
+          });
+
+          if (!publishRes?.success) {
+            throw new Error(
+              publishRes?.message || 'Failed to publish banner to WhatsApp'
+            );
+          }
+
+          await checkPlatformConnection('whatsapp');
+
+          localStorage.removeItem('pending_whatsapp_connect');
+
+          setSuccessMsg('WhatsApp connected and banner posted successfully');
+          setActiveBanner(null);
+          setSelectedPlatforms([]);
+
+          setBanners((prev) => prev.filter((banner) => banner.id !== bannerId));
+        } catch (error: any) {
+          console.error('WhatsApp callback error:', error);
+
+          setError(
+            error?.message ||
+              'WhatsApp connected, but publishing the banner failed.'
+          );
+        } finally {
+          setPosting(false);
+        }
+      });
+    };
+
+    setupAppUrlListener().catch((error) => {
+      console.error('Failed to register Android app URL listener:', error);
+    });
+
+    return () => {
+      if (listenerHandle) {
+        listenerHandle.remove().catch(() => undefined);
+      }
+    };
+  }, []);
+
   useEffect(() => {
     const handleOAuthCallback = async () => {
       const params = new URLSearchParams(window.location.search);
@@ -594,6 +592,11 @@ const Posters: React.FC = () => {
 
         await checkPlatformConnection(matchedPlatform);
 
+        /*
+         * Publish the banner that user selected
+         * before OAuth started (may need more than
+         * one platform connected before it can post).
+         */
         const pending = localStorage.getItem('pending_banner_publish');
 
         if (pending) {
@@ -601,6 +604,8 @@ const Posters: React.FC = () => {
             const data = JSON.parse(pending);
             const pendingPlatforms: PlatformKey[] = data.platforms;
 
+            // Check that every selected platform is now connected
+            // before trying to publish again.
             const stillNeeded: PlatformKey[] = [];
 
             for (const platform of pendingPlatforms) {
@@ -630,7 +635,38 @@ const Posters: React.FC = () => {
               return;
             }
 
-            await publishBanner(data.bannerId, pendingPlatforms);
+            if (pendingPlatforms.includes('linkedin')) {
+              const targetUrns = Array.isArray(data.linkedinOwnerUrns)
+                ? data.linkedinOwnerUrns.filter(
+                    (value: unknown): value is string => typeof value === 'string'
+                  )
+                : [];
+
+              if (targetUrns.length === 0) {
+                const pendingBanner = banners.find(
+                  (banner) => banner.id === Number(data.bannerId)
+                );
+
+                if (pendingBanner) {
+                  setActiveBanner(pendingBanner);
+                  setSelectedPlatforms(pendingPlatforms);
+                  setSelectedLinkedInOwnerUrns([]);
+                  localStorage.removeItem('pending_banner_publish');
+                  setError(
+                    'LinkedIn connected. Choose Personal Profile, AarnexAI, or Both, then tap Post Now.'
+                  );
+                  return;
+                }
+              }
+            }
+
+            await apiPost('/banners/publish', {
+              bannerId: data.bannerId,
+              platforms: pendingPlatforms,
+              ...(pendingPlatforms.includes('linkedin')
+                ? { linkedinOwnerUrns: Array.isArray(data.linkedinOwnerUrns) ? data.linkedinOwnerUrns : [] }
+                : {}),
+            });
 
             localStorage.removeItem('pending_banner_publish');
 
@@ -656,7 +692,7 @@ const Posters: React.FC = () => {
 
       if (result === 'no_account') {
         setError(
-          `No ${platformLabel} professional account was found for this account.`
+          `No ${platformLabel} professional account was found for this Meta account.`
         );
       }
 
@@ -675,35 +711,13 @@ const Posters: React.FC = () => {
     handleOAuthCallback();
   }, []);
 
-  // Standalone connect — triggered from the "Connected accounts" section,
-  // not tied to posting any particular banner.
-  const handleStandaloneConnect = async (platform: PlatformKey) => {
-    if (connectionStatus[platform] || connectingPlatform) return;
-
-    try {
-      setConnectingPlatform(platform);
-
-      if (platform === 'whatsapp') {
-        await connectWhatsAppOnly();
-        await checkPlatformConnection('whatsapp');
-        setSuccessMsg('WhatsApp connected successfully');
-        return;
-      }
-
-      // Clear any stale pending-publish state so the OAuth callback
-      // treats this purely as a connect, not a resume-and-post.
-      localStorage.removeItem('pending_banner_publish');
-
-      const authUrl = await startPlatformConnect(platform, undefined, [platform]);
-      window.location.href = authUrl;
-    } catch (err: any) {
-      setError(
-        err?.message || `Failed to connect ${PLATFORM_BY_KEY[platform].label}`
-      );
-    } finally {
-      setConnectingPlatform(null);
-    }
-  };
+  const getPublishPayload = (bannerId: number, platforms: PlatformKey[]) => ({
+    bannerId,
+    platforms,
+    ...(platforms.includes('linkedin')
+      ? { linkedinOwnerUrns: selectedLinkedInOwnerUrns }
+      : {}),
+  });
 
   const handleConnectAndPost = async () => {
     if (!activeBanner || selectedPlatforms.length === 0) {
@@ -715,10 +729,37 @@ const Posters: React.FC = () => {
 
       const bannerId = activeBanner.id;
 
+      if (selectedPlatforms.includes('linkedin')) {
+        if (!connectionStatus.linkedin) {
+          localStorage.setItem(
+            'pending_banner_publish',
+            JSON.stringify({
+              bannerId,
+              platforms: selectedPlatforms,
+              linkedinOwnerUrns: selectedLinkedInOwnerUrns,
+            })
+          );
+
+          const authUrl = await startPlatformConnect(
+            'linkedin',
+            bannerId,
+            selectedPlatforms
+          );
+          window.location.href = authUrl;
+          return;
+        }
+
+        if (selectedLinkedInOwnerUrns.length === 0) {
+          throw new Error(
+            'Please choose where to publish on LinkedIn: Personal Profile, AarnexAI, or Both.'
+          );
+        }
+      }
+
       /*
        * WhatsApp always needs its own Embedded Signup popup —
-       * handle it separately, before touching the redirect flow
-       * used by every other platform below.
+       * handle it separately, before touching the Facebook/
+       * Instagram redirect flow below.
        */
       if (selectedPlatforms.includes('whatsapp')) {
         const alreadyConnected =
@@ -727,7 +768,14 @@ const Posters: React.FC = () => {
         if (!alreadyConnected) {
           await connectWhatsAppAndPost(bannerId);
         } else {
-          await publishBanner(bannerId, ['whatsapp']);
+          const publishRes = await apiPost('/banners/publish', {
+            bannerId,
+            platforms: ['whatsapp'],
+          });
+
+          if (!publishRes?.success) {
+            throw new Error(publishRes?.message || 'Failed to publish banner');
+          }
         }
 
         // Any remaining non-WhatsApp platforms still go through the
@@ -754,7 +802,14 @@ const Posters: React.FC = () => {
         }
 
         if (otherPlatforms.length > 0) {
-          await publishBanner(bannerId, otherPlatforms);
+          const response = await apiPost(
+            '/banners/publish',
+            getPublishPayload(bannerId, otherPlatforms)
+          );
+
+          if (!response?.success) {
+            throw new Error(response?.message || 'Failed to publish banner');
+          }
         }
 
         const postedDay = activeBanner.day;
@@ -772,8 +827,7 @@ const Posters: React.FC = () => {
       }
 
       /*
-       * Every other platform — Facebook, Instagram, Google Business,
-       * YouTube, LinkedIn — shares the same redirect-based connect flow.
+       * Facebook / Instagram only — unchanged original flow.
        */
       for (const platform of selectedPlatforms) {
         let connected = connectionStatus[platform];
@@ -806,7 +860,14 @@ const Posters: React.FC = () => {
       /*
        * Every selected platform is connected — publish directly.
        */
-      await publishBanner(bannerId, selectedPlatforms);
+      const response = await apiPost(
+        '/banners/publish',
+        getPublishPayload(bannerId, selectedPlatforms)
+      );
+
+      if (!response?.success) {
+        throw new Error(response?.message || 'Failed to publish banner');
+      }
 
       const postedDay = activeBanner.day;
 
@@ -1161,115 +1222,151 @@ const Posters: React.FC = () => {
                 </div>
               );
             })}
-
-          {/* Connected accounts — status for every platform, tap an
-              unconnected one to connect it standalone (no banner needed). */}
-          {!loading && (
-            <ConnectedAccountsSection
-              platforms={PLATFORMS}
-              status={connectionStatus}
-              usernames={connectionUsername}
-              connectingPlatform={connectingPlatform}
-              checking={checkingConnections}
-              onConnect={handleStandaloneConnect}
-            />
-          )}
         </div>
 
-        {/* Platform picker sheet for posting a specific banner.
-            FIX: header / list / footer are now separate flex sections
-            inside a fixed-height wrapper, with the list as the only
-            scrollable area. This guarantees the "Post Now" button in
-            the footer is always visible, no matter how many platforms
-            are listed or how tall the device viewport is. */}
+        {/* Facebook / Instagram / WhatsApp connect sheet */}
         <IonModal
           isOpen={!!activeBanner}
-          initialBreakpoint={0.75}
-          breakpoints={[0, 0.5, 0.75, 0.95]}
-          handleBehavior="cycle"
+          initialBreakpoint={0.55}
+          breakpoints={[0, 0.55]}
           onDidDismiss={() => setActiveBanner(null)}
         >
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              height: '70%',
-              maxHeight: '80vh',
-            }}
-          >
-            {/* Header — fixed, never scrolls */}
-            <div style={{ padding: '20px 20px 12px', flexShrink: 0 }}>
-              <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: brand.navy, margin: 0 }}>
-                  Post this banner
-                </h3>
-                <IonIcon
-                  icon={closeOutline}
-                  style={{ fontSize: 20, color: brand.ink, cursor: 'pointer' }}
-                  onClick={() => setActiveBanner(null)}
-                />
-              </div>
-              <p style={{ fontSize: 12, color: brand.ink, margin: 0 }}>
-                Choose one or more platforms to connect and publish.
-              </p>
+          <div style={{ padding: '20px 20px 24px' }}>
+            <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: brand.navy, margin: 0 }}>
+                Post this banner
+              </h3>
+              <IonIcon
+                icon={closeOutline}
+                style={{ fontSize: 20, color: brand.ink, cursor: 'pointer' }}
+                onClick={() => setActiveBanner(null)}
+              />
             </div>
+            <p style={{ fontSize: 12, color: brand.ink, margin: '0 0 16px' }}>
+              Choose one or more platforms to connect and publish.
+            </p>
 
-            {/* Platform list — the only part that scrolls */}
-            <div
-              style={{
-                flex: 1,
-                overflowY: 'auto',
-                padding: '8px 20px 0',
-                WebkitOverflowScrolling: 'touch',
-              }}
-            >
-              {PLATFORMS.map((platform) => (
-                <PlatformRow
-                  key={platform.key}
-                  icon={platform.icon}
-                  iconColor={platform.iconColor}
-                  label={platform.label}
-                  disabled={platform.key === 'youtube'}
-                  disabledReason={platform.key === 'youtube' ? 'Video required' : undefined}
-                  checked={selectedPlatforms.includes(platform.key)}
-                  onToggle={() => togglePlatform(platform.key)}
-                />
-              ))}
-            </div>
+            {PLATFORMS.map((platform) => (
+              <PlatformRow
+                key={platform.key}
+                icon={platform.icon}
+                iconColor={platform.iconColor}
+                label={platform.label}
+                checked={selectedPlatforms.includes(platform.key)}
+                onToggle={() => togglePlatform(platform.key)}
+              />
+            ))}
 
-            {/* Post button — fixed footer, always visible */}
-            <div
-              style={{
-                flexShrink: 0,
-                padding: '12px 20px 24px',
-                borderTop: `1px solid ${brand.border}`,
-                background: '#FFFFFF',
-              }}
-            >
-              <IonButton
-                expand="block"
-                disabled={
-                  selectedPlatforms.length === 0 || posting || checkingConnections
-                }
-                onClick={handleConnectAndPost}
+            {selectedPlatforms.includes('linkedin') && (
+              <div
                 style={{
-                  '--border-radius': '12px',
-                } as React.CSSProperties}
+                  marginTop: 16,
+                  padding: 14,
+                  borderRadius: 14,
+                  background: '#F8FAFC',
+                  border: `1px solid ${brand.border}`,
+                }}
               >
-                {posting || checkingConnections ? (
-                  <IonSpinner name="dots" />
+                <div style={{ marginBottom: 10 }}>
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: brand.navy }}>
+                    Where should LinkedIn publish?
+                  </p>
+                  <p style={{ margin: '3px 0 0', fontSize: 11, color: brand.ink }}>
+                    Choose Personal Profile, AarnexAI, or Both.
+                  </p>
+                </div>
+
+                {linkedinTargets.length === 0 ? (
+                  <div
+                    style={{
+                      padding: 12,
+                      borderRadius: 10,
+                      background: '#FFFFFF',
+                      color: brand.ink,
+                      fontSize: 11,
+                    }}
+                  >
+                    No LinkedIn targets are available yet. Reconnect LinkedIn after granting organization posting access so AarnexAI can appear here.
+                  </div>
                 ) : (
-                  buttonLabel()
+                  linkedinTargets.map((target) => (
+                    <div
+                      key={target.urn}
+                      onClick={() => toggleLinkedInTarget(target.urn)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '10px 12px',
+                        marginBottom: 8,
+                        borderRadius: 10,
+                        border: `1px solid ${selectedLinkedInOwnerUrns.includes(target.urn) ? brand.blue : brand.border}`,
+                        background: selectedLinkedInOwnerUrns.includes(target.urn) ? '#EFF6FF' : '#FFFFFF',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <div>
+                        <p style={{ margin: 0, fontSize: 12, fontWeight: 700, color: brand.navy }}>
+                          {target.name}
+                        </p>
+                        <p style={{ margin: '2px 0 0', fontSize: 10, color: brand.ink }}>
+                          {target.type === 'organization'
+                            ? `Company Page${target.role ? ` • ${target.role}` : ''}`
+                            : 'Personal LinkedIn Profile'}
+                        </p>
+                      </div>
+                      <IonCheckbox
+                        checked={selectedLinkedInOwnerUrns.includes(target.urn)}
+                        onIonChange={(event) => {
+                          event.stopPropagation();
+                          toggleLinkedInTarget(target.urn);
+                        }}
+                      />
+                    </div>
+                  ))
                 )}
-              </IonButton>
-            </div>
+
+                {linkedinTargets.length >= 2 && (
+                  <IonButton
+                    fill="clear"
+                    size="small"
+                    onClick={() =>
+                      setSelectedLinkedInOwnerUrns(
+                        linkedinTargets.map((target) => target.urn)
+                      )
+                    }
+                    style={{ marginTop: 2 }}
+                  >
+                    Select Both
+                  </IonButton>
+                )}
+              </div>
+            )}
+
+            <IonButton
+              expand="block"
+              disabled={
+                selectedPlatforms.length === 0 || posting || checkingConnections
+              }
+              onClick={handleConnectAndPost}
+              style={{
+                marginTop: 20,
+                '--border-radius': '12px',
+              } as React.CSSProperties}
+            >
+              {posting || checkingConnections ? (
+                <IonSpinner name="dots" />
+              ) : (
+                buttonLabel()
+              )}
+            </IonButton>
           </div>
         </IonModal>
 
         <IonToast
           isOpen={!!error}
           message={error}
-          duration={7000}
+          duration={3000}
           color="danger"
           onDidDismiss={() => setError('')}
         />
@@ -1324,125 +1421,30 @@ const ChipRow: React.FC<{ label: string; items: string[]; chipColor?: string }> 
   </div>
 );
 
-// FIX: the IonCheckbox is now purely decorative (pointerEvents: 'none').
-// Previously it had its own onIonChange AND sat inside a div with
-// onClick — a tap on the checkbox fired both handlers, toggling the
-// selection twice (on, then instantly back off), so it looked like
-// clicking never checked it. Now the row's onClick is the single
-// source of truth for toggling, and the checkbox just reflects state.
 const PlatformRow: React.FC<{
   icon: string;
   iconColor: string;
   label: string;
-  disabled?: boolean;
-  disabledReason?: string;
   checked: boolean;
   onToggle: () => void;
-}> = ({ icon, iconColor, label, disabled = false, disabledReason, checked, onToggle }) => (
+}> = ({ icon, iconColor, label, checked, onToggle }) => (
   <div
-    onClick={disabled ? undefined : onToggle}
+    onClick={onToggle}
     className="flex items-center justify-between"
     style={{
       padding: '12px 14px',
       borderRadius: 12,
       border: `1px solid ${checked ? brand.blue : brand.border}`,
-      background: disabled ? '#F8FAFC' : checked ? '#EFF6FF' : '#FFFFFF',
+      background: checked ? '#EFF6FF' : '#FFFFFF',
       marginBottom: 10,
-      cursor: disabled ? 'not-allowed' : 'pointer',
-      opacity: disabled ? 0.62 : 1,
+      cursor: 'pointer',
     }}
   >
     <div className="flex items-center gap-3">
       <IonIcon icon={icon} style={{ fontSize: 22, color: iconColor }} />
-      <div>
-        <span style={{ display: 'block', fontSize: 14, fontWeight: 600, color: brand.navy }}>{label}</span>
-        {disabledReason && (
-          <span style={{ display: 'block', marginTop: 2, fontSize: 10.5, color: brand.ink }}>
-            {disabledReason}
-          </span>
-        )}
-      </div>
+      <span style={{ fontSize: 14, fontWeight: 600, color: brand.navy }}>{label}</span>
     </div>
-    <IonCheckbox checked={checked} disabled={disabled} style={{ pointerEvents: 'none' }} />
-  </div>
-);
-
-// Status list shown below the poster feed: every supported platform, whether
-// it's connected (with username if known), and a tap-to-connect affordance
-// for anything not yet linked. This is independent of posting a banner.
-const ConnectedAccountsSection: React.FC<{
-  platforms: PlatformConfig[];
-  status: Record<PlatformKey, boolean>;
-  usernames: Record<PlatformKey, string | null>;
-  connectingPlatform: PlatformKey | null;
-  checking: boolean;
-  onConnect: (platform: PlatformKey) => void;
-}> = ({ platforms, status, usernames, connectingPlatform, checking, onConnect }) => (
-  <div
-    style={{
-      marginTop: 8,
-      marginBottom: 24,
-      background: '#FFFFFF',
-      borderRadius: 16,
-      border: `1px solid ${brand.border}`,
-      padding: '14px 16px 4px',
-    }}
-  >
-    <h4 style={{ fontSize: 13, fontWeight: 700, color: brand.navy, margin: '0 0 6px' }}>
-      Connected accounts
-    </h4>
-    <p style={{ fontSize: 11, color: brand.ink, margin: '0 0 10px' }}>
-      Tap a platform to connect it. Connected platforms show up here and in the post sheet.
-    </p>
-
-    {platforms.map((platform, i) => {
-      const isConnected = status[platform.key];
-      const isConnecting = connectingPlatform === platform.key;
-      const isLast = i === platforms.length - 1;
-
-      return (
-        <div
-          key={platform.key}
-          onClick={() => onConnect(platform.key)}
-          className="flex items-center justify-between"
-          style={{
-            padding: '10px 2px',
-            borderBottom: isLast ? 'none' : `1px solid ${brand.border}`,
-            cursor: isConnected ? 'default' : 'pointer',
-          }}
-        >
-          <div className="flex items-center gap-3">
-            <IonIcon icon={platform.icon} style={{ fontSize: 20, color: platform.iconColor }} />
-            <div>
-              <p style={{ fontSize: 13, fontWeight: 600, color: brand.navy, margin: 0 }}>
-                {platform.label}
-              </p>
-              {isConnected && usernames[platform.key] && (
-                <p style={{ fontSize: 11, color: brand.ink, margin: 0 }}>
-                  {usernames[platform.key]}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {isConnecting ? (
-            <IonSpinner name="dots" style={{ width: 18, height: 18 }} />
-          ) : isConnected ? (
-            <span
-              className="flex items-center gap-1"
-              style={{ fontSize: 11, fontWeight: 700, color: brand.teal }}
-            >
-              <IonIcon icon={checkmarkCircle} style={{ fontSize: 15 }} />
-              Connected
-            </span>
-          ) : (
-            <span style={{ fontSize: 11, fontWeight: 700, color: brand.blue }}>
-              {checking ? '...' : 'Connect'}
-            </span>
-          )}
-        </div>
-      );
-    })}
+    <IonCheckbox checked={checked} onIonChange={onToggle} />
   </div>
 );
 
