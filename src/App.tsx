@@ -30,7 +30,7 @@ import SelectCategory from './pages/SelectCategory';
 import Login from './pages/login';
 import BusinessSetup from './pages/business-setup';
 import Subscription from './pages/subscription';
-import Home from './pages/Home';
+import Home from './pages/230926-Home.tsx';
 import Posters from './pages/Posters';
 import Campaigns from './pages/Campaigns';
 import CreateCampaign from './pages/CreateCampaign';
