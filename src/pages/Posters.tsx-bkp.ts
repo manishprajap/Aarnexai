@@ -34,7 +34,6 @@ import {
 } from 'ionicons/icons';
 import { apiGet, apiPost } from '../api';
 import { loadFacebookSdk } from '../lib/facebookSdk';
-import BottomTabBar from '../components/BottomTabBar';
 
 interface BannerItem {
   id: number;
@@ -447,6 +446,12 @@ const Posters: React.FC = () => {
 
   const [checkingConnections, setCheckingConnections] = useState(false);
 
+  // Which platform is currently mid-connect from the standalone
+  // "Connected accounts" section (as opposed to the post-a-banner flow).
+  const [connectingPlatform, setConnectingPlatform] = useState<PlatformKey | null>(
+    null
+  );
+
   /* =========================
      LINKEDIN TARGET SELECTION
      (personal profile / company page(s) / both)
@@ -695,6 +700,21 @@ const Posters: React.FC = () => {
       await publishBanner(bannerId, ['whatsapp']);
     });
 
+  // Connect WhatsApp only — used from the standalone "Connected accounts"
+  // section, with no banner to publish.
+  const connectWhatsAppOnly = (): Promise<void> =>
+    runWhatsAppEmbeddedSignup(async (code, waba) => {
+      const connectRes = await apiPost('/whatsapp/connect', {
+        code,
+        wabaId: waba.wabaId,
+        phoneNumberId: waba.phoneNumberId,
+      });
+
+      if (!connectRes?.success) {
+        throw new Error(connectRes?.message || 'WhatsApp connect failed');
+      }
+    });
+
   const groupedByDay = useMemo(() => {
     const map = new Map<number, BannerItem[]>();
     for (const banner of banners) {
@@ -920,6 +940,36 @@ const Posters: React.FC = () => {
     handleOAuthCallback();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Standalone connect — triggered from the "Connected accounts" section,
+  // not tied to posting any particular banner.
+  const handleStandaloneConnect = async (platform: PlatformKey) => {
+    if (connectionStatus[platform] || connectingPlatform) return;
+
+    try {
+      setConnectingPlatform(platform);
+
+      if (platform === 'whatsapp') {
+        await connectWhatsAppOnly();
+        await checkPlatformConnection('whatsapp');
+        setSuccessMsg('WhatsApp connected successfully');
+        return;
+      }
+
+      // Clear any stale pending-publish state so the OAuth callback
+      // treats this purely as a connect, not a resume-and-post.
+      localStorage.removeItem('pending_banner_publish');
+
+      const authUrl = await startPlatformConnect(platform, undefined, [platform]);
+      window.location.href = authUrl;
+    } catch (err: any) {
+      setError(
+        err?.message || `Failed to connect ${PLATFORM_BY_KEY[platform].label}`
+      );
+    } finally {
+      setConnectingPlatform(null);
+    }
+  };
 
   const handleConnectAndPost = async () => {
     if (!activeBanner || selectedPlatforms.length === 0) {
@@ -1450,6 +1500,19 @@ const Posters: React.FC = () => {
                 </div>
               );
             })}
+
+          {/* Connected accounts — status for every platform, tap an
+              unconnected one to connect it standalone (no banner needed). */}
+          {!loading && (
+            <ConnectedAccountsSection
+              platforms={PLATFORMS}
+              status={connectionStatus}
+              usernames={connectionUsername}
+              connectingPlatform={connectingPlatform}
+              checking={checkingConnections}
+              onConnect={handleStandaloneConnect}
+            />
+          )}
         </div>
 
         {/* Optional "Share to Personal Profile" prompt — shown right after
@@ -1664,7 +1727,7 @@ const Posters: React.FC = () => {
           onDidDismiss={() => setSuccessMsg('')}
         />
       </IonContent>
-      <BottomTabBar />
+      
     </IonPage>
   );
 };
@@ -1835,5 +1898,84 @@ const TargetSubPicker: React.FC<{
     </div>
   );
 };
+
+// Status list shown below the poster feed: every supported platform, whether
+// it's connected (with username if known), and a tap-to-connect affordance
+// for anything not yet linked. This is independent of posting a banner.
+const ConnectedAccountsSection: React.FC<{
+  platforms: PlatformConfig[];
+  status: Record<PlatformKey, boolean>;
+  usernames: Record<PlatformKey, string | null>;
+  connectingPlatform: PlatformKey | null;
+  checking: boolean;
+  onConnect: (platform: PlatformKey) => void;
+}> = ({ platforms, status, usernames, connectingPlatform, checking, onConnect }) => (
+  <div
+    style={{
+      marginTop: 8,
+      marginBottom: 24,
+      background: '#FFFFFF',
+      borderRadius: 16,
+      border: `1px solid ${brand.border}`,
+      padding: '14px 16px 4px',
+    }}
+  >
+    <h4 style={{ fontSize: 13, fontWeight: 700, color: brand.navy, margin: '0 0 6px' }}>
+      Connected accounts
+    </h4>
+    <p style={{ fontSize: 11, color: brand.ink, margin: '0 0 10px' }}>
+      Tap a platform to connect it. Connected platforms show up here and in the post sheet.
+    </p>
+
+    {platforms.map((platform, i) => {
+      const isConnected = status[platform.key];
+      const isConnecting = connectingPlatform === platform.key;
+      const isLast = i === platforms.length - 1;
+
+      return (
+        <div
+          key={platform.key}
+          onClick={() => onConnect(platform.key)}
+          className="flex items-center justify-between"
+          style={{
+            padding: '10px 2px',
+            borderBottom: isLast ? 'none' : `1px solid ${brand.border}`,
+            cursor: isConnected ? 'default' : 'pointer',
+          }}
+        >
+          <div className="flex items-center gap-3">
+            <IonIcon icon={platform.icon} style={{ fontSize: 20, color: platform.iconColor }} />
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 600, color: brand.navy, margin: 0 }}>
+                {platform.label}
+              </p>
+              {isConnected && usernames[platform.key] && (
+                <p style={{ fontSize: 11, color: brand.ink, margin: 0 }}>
+                  {usernames[platform.key]}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {isConnecting ? (
+            <IonSpinner name="dots" style={{ width: 18, height: 18 }} />
+          ) : isConnected ? (
+            <span
+              className="flex items-center gap-1"
+              style={{ fontSize: 11, fontWeight: 700, color: brand.teal }}
+            >
+              <IonIcon icon={checkmarkCircle} style={{ fontSize: 15 }} />
+              Connected
+            </span>
+          ) : (
+            <span style={{ fontSize: 11, fontWeight: 700, color: brand.blue }}>
+              {checking ? '...' : 'Connect'}
+            </span>
+          )}
+        </div>
+      );
+    })}
+  </div>
+);
 
 export default Posters;
