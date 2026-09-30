@@ -19,7 +19,6 @@ import {
   arrowBack,
   camera,
   chevronDownOutline,
-  cloudUpload,
   imagesOutline,
   sparklesOutline,
 } from 'ionicons/icons';
@@ -33,7 +32,6 @@ import {
   resolveBusinessCategory,
   saveBusinessCategory,
 } from '../utils/businessCategory';
-import { generatePromptPlan, getPlanDay, getPromptPlan } from '../utils/promptPlan';
 
 // ==================================================
 // BRAND / TOKENS
@@ -279,6 +277,9 @@ const Upload: React.FC = () => {
 
   const [promptDescription, setPromptDescription] = useState('');
 
+  // Today's TEMPLATE prompt from the server (contains {category} {subcategory} {childcategory})
+  const [planTemplate, setPlanTemplate] = useState< | null>(null);
+
   const [uploadingImage, setUploadingImage] = useState(false); // step 1: image upload
   const [generating, setGenerating] = useState(false); // step 2: analyze / generate ad
   const uploading = uploadingImage || generating;
@@ -457,32 +458,55 @@ const Upload: React.FC = () => {
     };
   }, [subcategoryId]);
 
+  /*
+  |--------------------------------------------------------------------------
+  | 1) Today's TEMPLATE prompt comes from the server (DB).
+  |    If the user has no plan yet (or only an old one without placeholders)
+  |    the API generates a fresh 30-day plan once via Gemini.
+  |--------------------------------------------------------------------------
+  */
+
   useEffect(() => {
     const categoryName = businessCategory?.categoryName?.trim();
-    const subcategoryName = subcategories.find((item) => item.id === subcategoryId)?.name ?? '';
-    const childCategoryName = childCategories.find((item) => item.id === childCategoryId)?.name ?? '';
 
-    if (!categoryName) {
+    if (!user?.id || !categoryName) {
       return;
     }
 
-    const generatedPlan = generatePromptPlan(categoryName, subcategoryName, childCategoryName);
-    const savedPlan = user?.id ? getPromptPlan(user.id) : [];
-    const plan = subcategoryName || childCategoryName ? generatedPlan : savedPlan.length ? savedPlan : generatedPlan;
-    const prompt = plan.find(
-      (item) => item.day === getPlanDay(),
-    );
+    let cancelled = false;
 
-    if (prompt) {
-      setPromptDescription(prompt.prompt);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, businessCategory?.categoryId, businessCategory?.categoryName]);
+
+  /*
+  |--------------------------------------------------------------------------
+  | 2) Fill {category} / {subcategory} / {childcategory} with the real names
+  |    whenever the selection changes. Works for businesses without
+  |    subcategories too (they fall back to the category name).
+  |--------------------------------------------------------------------------
+  */
+
+  useEffect(() => {
+    if (!planTemplate) {
+      return;
     }
+
+    const subcategoryName = subcategories.find((item) => item.id === subcategoryId)?.name ?? '';
+    const childCategoryName =
+      childCategories.find((item) => item.id === childCategoryId)?.name ?? '';
+
+  
   }, [
-    businessCategory?.categoryName,
+    planTemplate,
+    step,
     subcategoryId,
     childCategoryId,
     subcategories,
     childCategories,
-    user?.id,
+    businessCategory?.categoryName,
   ]);
 
   /*

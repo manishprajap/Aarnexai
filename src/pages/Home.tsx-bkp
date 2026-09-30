@@ -44,7 +44,6 @@ import {
 import { useAuth } from '../context/AuthContext';
 
 import logo from '../assets/aarna-logo.png';
-import './Home.css';
 import { useSocialConnections } from '../hooks/useSocialConnections';
 import { useLogoTheme } from '../hooks/useLogoTheme';
 import BottomTabBar from '../components/BottomTabBar';
@@ -87,24 +86,7 @@ const Home: React.FC = () => {
     }
   }, [user?.id]);
 
-  const handleGeneratePromptPlan = () => {
-    if (!user?.id || !businessCategory) {
-      setPromptMessage('Please complete Business Setup first.');
-      return;
-    }
-
-    if (promptPlan.length === 30) {
-      setPromptMessage('Your saved 30-day prompt table is ready to use.');
-      return;
-    }
-
-    setGeneratingPlan(true);
-    const plan = generatePromptPlan(businessCategory);
-    savePromptPlan(user.id, plan);
-    setPromptPlan(plan);
-    setPromptMessage('Your unique 30-day prompt plan is ready.');
-    setGeneratingPlan(false);
-  };
+  
 
   // Keep the localStorage cache (used by the Upload page) in sync with the server value.
   useEffect(() => {
@@ -304,7 +286,7 @@ const Home: React.FC = () => {
               <IonIcon icon={sparklesOutline} />
             </div>
 
-            <h2 className="hero-heading">Create professional ads with AI</h2>
+            <h2 className="hero-heading">onal ads with AI</h2>
             <p className="hero-copy">
               Upload a product photo and AI builds thirty days of posts, captions and
               hashtags for you.
@@ -328,7 +310,7 @@ const Home: React.FC = () => {
                 </div>
                 <IonIcon icon={timeOutline} style={{ color: '#0F6FEC', fontSize: 24 }} />
               </div>
-              <IonButton expand="block" onClick={handleGeneratePromptPlan} disabled={generatingPlan || promptPlan.length === 30} style={{ marginTop: 16 }}>
+              <IonButton expand="block"  disabled={generatingPlan || promptPlan.length === 30} style={{ marginTop: 16 }}>
                 {generatingPlan ? <IonSpinner name="crescent" /> : promptPlan.length === 30 ? '30-day table saved' : 'Generate 30-day prompts'}
               </IonButton>
               {todayPrompt && (

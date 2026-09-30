@@ -5,14 +5,15 @@ import { App } from '@capacitor/app';
 import { apiGet, apiPost } from '../api';
 
 /* =========================================================
-   ENV
+   ENV (same values the Posters page uses)
 ========================================================= */
 
 const META_APP_ID =
   (import.meta.env.VITE_META_APP_ID as string | undefined)?.trim() ?? '';
 
 const WHATSAPP_CONFIG_ID =
-  (import.meta.env.VITE_META_WHATSAPP_CONFIG_ID as string | undefined)?.trim() ?? '';
+  (import.meta.env.VITE_META_WHATSAPP_CONFIG_ID as string | undefined)?.trim() ??
+  '';
 
 const WHATSAPP_CONNECT_WEB_URL =
   (import.meta.env.VITE_WHATSAPP_CONNECT_WEB_URL as string | undefined)?.trim() ||
@@ -50,16 +51,13 @@ export const CONNECTABLE_PLATFORMS: PlatformKey[] = [
 export const isConnectable = (id: string): id is PlatformKey =>
   (CONNECTABLE_PLATFORMS as string[]).includes(id);
 
-// Generic multi-target shape — LinkedIn (personal/organization),
-// Facebook (page) aur Instagram (account) teeno isी shape ko follow karte hain.
-export type ConnectionTarget = {
-  type: 'personal' | 'organization' | 'page' | 'account';
-  urn: string;
+// A LinkedIn post target is either the literal string 'personal' or a
+// company page URN, e.g. 'urn:li:organization:12345'.
+export type LinkedInTarget = {
+  type: 'personal' | 'organization';
+  urn: string; // 'personal' key is looked up by matching type === 'personal'
   name: string;
 };
-
-// Purana naam alias ke taur par rakha, kahin aur import ho raha ho to na tute.
-export type LinkedInTarget = ConnectionTarget;
 
 const LABELS: Record<PlatformKey, string> = {
   facebook: 'Facebook',
@@ -101,33 +99,31 @@ function getErrorMessage(error: unknown): string {
 }
 
 function isConnectedResponse(response: unknown): boolean {
-  const root = response && typeof response === 'object' ? (response as Record<string, unknown>) : {};
-  const data = root.data && typeof root.data === 'object' ? (root.data as Record<string, unknown>) : {};
+  const root =
+    response && typeof response === 'object'
+      ? (response as Record<string, unknown>)
+      : {};
+  const data =
+    root.data && typeof root.data === 'object'
+      ? (root.data as Record<string, unknown>)
+      : {};
   const connection =
-    root.connection && typeof root.connection === 'object' ? (root.connection as Record<string, unknown>) : {};
-  const value = root.connected ?? data.connected ?? connection.connected ?? connection.status;
+    root.connection && typeof root.connection === 'object'
+      ? (root.connection as Record<string, unknown>)
+      : {};
+  const value =
+    root.connected ??
+    data.connected ??
+    connection.connected ??
+    connection.status;
 
-  return value === true || value === 1 || value === '1' || value === 'true' || value === 'connected';
-}
-
-// targets/selectedTargets ka generic parser — facebook/instagram/linkedin
-// teeno status routes isi shape ({ targets, selectedTargets }) me return karte hain.
-function parseTargetsResponse(response: unknown): { targets: ConnectionTarget[]; selected: string[] } {
-  const root = response && typeof response === 'object' ? (response as Record<string, any>) : {};
-
-  const targets: ConnectionTarget[] = Array.isArray(root.targets)
-    ? root.targets.map((t: any): ConnectionTarget => ({
-        type: t?.type === 'organization' ? 'organization' : t?.type === 'page' ? 'page' : t?.type === 'account' ? 'account' : 'personal',
-        urn: String(t?.urn ?? ''),
-        name: String(t?.name ?? ''),
-      })).filter((t: ConnectionTarget) => t.urn.length > 0)
-    : [];
-
-  const selected: string[] = Array.isArray(root.selectedTargets)
-    ? root.selectedTargets.filter((t: unknown) => typeof t === 'string')
-    : targets.map((t) => t.urn); // fallback: sab selected
-
-  return { targets, selected };
+  return (
+    value === true ||
+    value === 1 ||
+    value === '1' ||
+    value === 'true' ||
+    value === 'connected'
+  );
 }
 
 /* =========================================================
@@ -142,68 +138,73 @@ export function useSocialConnections() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  /* ---------- LINKEDIN ---------- */
-  const [linkedinTargets, setLinkedinTargets] = useState<ConnectionTarget[]>([]);
+  /* =========================
+     LINKEDIN TARGET STATE (multi-select: personal / page / both)
+  ========================= */
+
+  const [linkedinTargets, setLinkedinTargets] = useState<LinkedInTarget[]>([]);
   const [selectedLinkedinTargets, setSelectedLinkedinTargets] = useState<string[]>([]);
-
-  /* ---------- FACEBOOK ---------- */
-  const [facebookTargets, setFacebookTargets] = useState<ConnectionTarget[]>([]);
-  const [selectedFacebookTargets, setSelectedFacebookTargets] = useState<string[]>([]);
-
-  /* ---------- INSTAGRAM ---------- */
-  const [instagramTargets, setInstagramTargets] = useState<ConnectionTarget[]>([]);
-  const [selectedInstagramTargets, setSelectedInstagramTargets] = useState<string[]>([]);
-
   /* ---------- status ---------- */
 
-  const checkOne = useCallback(async (platform: PlatformKey): Promise<boolean> => {
-    try {
-      const response = await apiGet(`/${platform}/status`);
-      const isConnected = isConnectedResponse(response);
+  const checkOne = useCallback(
+    async (platform: PlatformKey): Promise<boolean> => {
+      try {
+        const response = await apiGet(`/${platform}/status`);
+        const isConnected = isConnectedResponse(response);
 
-      const name =
-        response?.connection?.pageName ??
-        response?.connection?.username ??
-        response?.connection?.businessName ??
-        response?.connection?.phoneNumber ??
-        response?.[platform]?.username ??
-        response?.[platform]?.name ??
-        response?.data?.username ??
-        response?.data?.name ??
-        response?.username ??
-        response?.name ??
-        null;
+        const name =
+          response?.connection?.pageName ??
+          response?.connection?.username ??
+          response?.connection?.businessName ??
+          response?.connection?.phoneNumber ??
+          response?.[platform]?.username ??
+          response?.[platform]?.name ??
+          response?.data?.username ??
+          response?.data?.name ??
+          response?.username ??
+          response?.name ??
+          null;
 
-      setConnected((prev) => ({ ...prev, [platform]: isConnected }));
-      setUsernames((prev) => ({
-        ...prev,
-        [platform]: typeof name === 'string' && name.trim() ? name.trim() : null,
-      }));
+        setConnected((prev) => ({ ...prev, [platform]: isConnected }));
+        setUsernames((prev) => ({
+          ...prev,
+          [platform]:
+            typeof name === 'string' && name.trim() ? name.trim() : null,
+        }));
 
-      if (platform === 'linkedin') {
-        const { targets, selected } = parseTargetsResponse(response);
-        setLinkedinTargets(targets);
-        setSelectedLinkedinTargets(selected);
+        if (platform === 'linkedin') {
+          type RawLinkedInTarget = {
+            type?: string;
+            urn?: string;
+            name?: string;
+          };
+
+          const targets: LinkedInTarget[] = (response?.targets ?? []).map(
+            (t: RawLinkedInTarget): LinkedInTarget => ({
+              type: t?.type === 'organization' ? 'organization' : 'personal',
+              urn: t?.type === 'organization' ? String(t?.urn ?? '') : 'personal',
+              name: String(t?.name ?? ''),
+            })
+          );
+
+          const selected: string[] = Array.isArray(response?.selectedTargets)
+            ? response.selectedTargets
+            : targets.some((t) => t.type === 'personal')
+              ? ['personal']
+              : [];
+
+          setLinkedinTargets(targets);
+          setSelectedLinkedinTargets(selected);
+        }
+
+        return isConnected;
+      } catch (err) {
+        console.error(`Failed to check ${platform} connection:`, err);
+        return false;
       }
-
-      if (platform === 'facebook') {
-        const { targets, selected } = parseTargetsResponse(response);
-        setFacebookTargets(targets);
-        setSelectedFacebookTargets(selected);
-      }
-
-      if (platform === 'instagram') {
-        const { targets, selected } = parseTargetsResponse(response);
-        setInstagramTargets(targets);
-        setSelectedInstagramTargets(selected);
-      }
-
-      return isConnected;
-    } catch (err) {
-      console.error(`Failed to check ${platform} connection:`, err);
-      return false;
-    }
-  }, []);
+    },
+    []
+  );
 
   const refresh = useCallback(async () => {
     setChecking(true);
@@ -221,17 +222,29 @@ export function useSocialConnections() {
   /* ---------- WhatsApp ---------- */
 
   const startWhatsApp = useCallback(async () => {
-    if (!META_APP_ID) throw new Error('WhatsApp configuration error: VITE_META_APP_ID is missing.');
-    if (!WHATSAPP_CONFIG_ID) throw new Error('WhatsApp configuration error: VITE_META_WHATSAPP_CONFIG_ID is missing.');
+    if (!META_APP_ID) {
+      throw new Error('WhatsApp configuration error: VITE_META_APP_ID is missing.');
+    }
+    if (!WHATSAPP_CONFIG_ID) {
+      throw new Error(
+        'WhatsApp configuration error: VITE_META_WHATSAPP_CONFIG_ID is missing.'
+      );
+    }
 
-    const sessionResponse = await apiPost('/whatsapp/session', { callbackUrl: WHATSAPP_APP_CALLBACK_SCHEME });
+    const sessionResponse = await apiPost('/whatsapp/session', {
+      callbackUrl: WHATSAPP_APP_CALLBACK_SCHEME,
+    });
+
     const sessionId = sessionResponse?.sessionId ?? sessionResponse?.session;
 
     if (typeof sessionId !== 'string' || !sessionId.trim()) {
       throw new Error('WhatsApp session was not created by the server.');
     }
 
-    localStorage.setItem('pending_whatsapp_connect', JSON.stringify({ sessionId }));
+    localStorage.setItem(
+      'pending_whatsapp_connect',
+      JSON.stringify({ sessionId })
+    );
 
     const params = new URLSearchParams({
       session: sessionId,
@@ -239,7 +252,9 @@ export function useSocialConnections() {
       app_id: META_APP_ID,
     });
 
-    await Browser.open({ url: `${WHATSAPP_CONNECT_WEB_URL}?${params.toString()}` });
+    await Browser.open({
+      url: `${WHATSAPP_CONNECT_WEB_URL}?${params.toString()}`,
+    });
   }, []);
 
   /* ---------- connect ---------- */
@@ -257,10 +272,13 @@ export function useSocialConnections() {
         }
 
         const response = await apiPost(`/${platform}/connect`, {});
-        const authUrl = response?.redirectUrl ?? response?.authUrl ?? response?.url;
+        const authUrl =
+          response?.redirectUrl ?? response?.authUrl ?? response?.url;
 
         if (typeof authUrl !== 'string' || !authUrl.trim()) {
-          throw new Error(`${LABELS[platform]} authorization URL was not returned by the server.`);
+          throw new Error(
+            `${LABELS[platform]} authorization URL was not returned by the server.`
+          );
         }
 
         window.location.href = authUrl;
@@ -285,7 +303,9 @@ export function useSocialConnections() {
       const response = await apiPost(`/${platform}/disconnect`, {});
 
       if (response?.success === false) {
-        throw new Error(response?.message || `Failed to disconnect ${LABELS[platform]}.`);
+        throw new Error(
+          response?.message || `Failed to disconnect ${LABELS[platform]}.`
+        );
       }
 
       setConnected((prev) => ({ ...prev, [platform]: false }));
@@ -294,14 +314,6 @@ export function useSocialConnections() {
       if (platform === 'linkedin') {
         setLinkedinTargets([]);
         setSelectedLinkedinTargets([]);
-      }
-      if (platform === 'facebook') {
-        setFacebookTargets([]);
-        setSelectedFacebookTargets([]);
-      }
-      if (platform === 'instagram') {
-        setInstagramTargets([]);
-        setSelectedInstagramTargets([]);
       }
 
       if (platform === 'whatsapp') {
@@ -317,66 +329,37 @@ export function useSocialConnections() {
     }
   }, []);
 
-  /* ---------- generic target-selection saver (linkedin/facebook/instagram) ---------- */
-
-  const saveTargetSelection = useCallback(
-    (platform: 'linkedin' | 'facebook' | 'instagram', setter: React.Dispatch<React.SetStateAction<string[]>>) =>
-      async (targetKeys: string[]) => {
-        setter(targetKeys);
-        try {
-          await apiPost(`/${platform}/select-targets`, { targets: targetKeys });
-        } catch (err) {
-          console.error(`Failed to save ${platform} target selection:`, err);
-          setError(`Could not save your ${LABELS[platform]} posting selection.`);
-        }
-      },
-    []
-  );
+  /* ---------- LinkedIn target selection (personal / page / both) ---------- */
 
   const toggleLinkedInTarget = useCallback(
     async (targetKey: string) => {
-      const next = selectedLinkedinTargets.includes(targetKey)
-        ? selectedLinkedinTargets.filter((t) => t !== targetKey)
-        : [...selectedLinkedinTargets, targetKey];
-      await saveTargetSelection('linkedin', setSelectedLinkedinTargets)(next);
+      setSelectedLinkedinTargets((prev) => {
+        const next = prev.includes(targetKey)
+          ? prev.filter((t) => t !== targetKey)
+          : [...prev, targetKey];
+
+        void apiPost('/linkedin/select-targets', { targets: next }).catch(
+          (err) => {
+            console.error('Failed to save LinkedIn target selection:', err);
+            setError('Could not save your LinkedIn posting selection.');
+          }
+        );
+
+        return next;
+      });
     },
-    [selectedLinkedinTargets, saveTargetSelection]
+    []
   );
 
-  const setLinkedInTargets = useCallback(
-    (targetKeys: string[]) => saveTargetSelection('linkedin', setSelectedLinkedinTargets)(targetKeys),
-    [saveTargetSelection]
-  );
-
-  const toggleFacebookTarget = useCallback(
-    async (targetKey: string) => {
-      const next = selectedFacebookTargets.includes(targetKey)
-        ? selectedFacebookTargets.filter((t) => t !== targetKey)
-        : [...selectedFacebookTargets, targetKey];
-      await saveTargetSelection('facebook', setSelectedFacebookTargets)(next);
-    },
-    [selectedFacebookTargets, saveTargetSelection]
-  );
-
-  const setFacebookTargetSelection = useCallback(
-    (targetKeys: string[]) => saveTargetSelection('facebook', setSelectedFacebookTargets)(targetKeys),
-    [saveTargetSelection]
-  );
-
-  const toggleInstagramTarget = useCallback(
-    async (targetKey: string) => {
-      const next = selectedInstagramTargets.includes(targetKey)
-        ? selectedInstagramTargets.filter((t) => t !== targetKey)
-        : [...selectedInstagramTargets, targetKey];
-      await saveTargetSelection('instagram', setSelectedInstagramTargets)(next);
-    },
-    [selectedInstagramTargets, saveTargetSelection]
-  );
-
-  const setInstagramTargetSelection = useCallback(
-    (targetKeys: string[]) => saveTargetSelection('instagram', setSelectedInstagramTargets)(targetKeys),
-    [saveTargetSelection]
-  );
+  const setLinkedInTargets = useCallback(async (targetKeys: string[]) => {
+    setSelectedLinkedinTargets(targetKeys);
+    try {
+      await apiPost('/linkedin/select-targets', { targets: targetKeys });
+    } catch (err) {
+      console.error('Failed to save LinkedIn target selection:', err);
+      setError('Could not save your LinkedIn posting selection.');
+    }
+  }, []);
 
   /* ---------- LinkedIn post ---------- */
 
@@ -398,7 +381,9 @@ export function useSocialConnections() {
             .filter((r: any) => !r.ok)
             .map((r: any) => r.error)
             .filter(Boolean);
-          throw new Error(failedTargets[0] || response?.message || 'LinkedIn post failed.');
+          throw new Error(
+            failedTargets[0] || response?.message || 'LinkedIn post failed.'
+          );
         }
 
         if (response?.partialFailure) {
@@ -423,7 +408,15 @@ export function useSocialConnections() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const platform = (
-      ['facebook', 'instagram', 'google_business', 'youtube', 'linkedin', 'google_analytics', 'youtube_analytics'] as PlatformKey[]
+      [
+        'facebook',
+        'instagram',
+        'google_business',
+        'youtube',
+        'linkedin',
+        'google_analytics',
+        'youtube_analytics',
+      ] as PlatformKey[]
     ).find((p) => params.has(p));
 
     if (!platform) return;
@@ -431,7 +424,11 @@ export function useSocialConnections() {
     const status = params.get(platform);
     const label = LABELS[platform];
 
-    window.history.replaceState({}, document.title, `${window.location.pathname}${window.location.hash}`);
+    window.history.replaceState(
+      {},
+      document.title,
+      `${window.location.pathname}${window.location.hash}`
+    );
 
     if (status === 'connected') {
       setSuccess(`${label} connected successfully.`);
@@ -465,15 +462,18 @@ export function useSocialConnections() {
         if (!pendingRaw) return;
 
         const pending = JSON.parse(pendingRaw);
+
         if (pending.bannerId) return;
 
         try {
           await Browser.close();
-        } catch {}
+        } catch { }
 
         const parsed = new URL(url);
         const status = parsed.searchParams.get('status');
-        const sessionId = parsed.searchParams.get('session') ?? parsed.searchParams.get('sessionId');
+        const sessionId =
+          parsed.searchParams.get('session') ??
+          parsed.searchParams.get('sessionId');
         const message = parsed.searchParams.get('message');
 
         if (!sessionId || sessionId !== pending.sessionId) {
@@ -487,7 +487,9 @@ export function useSocialConnections() {
           return;
         }
 
-        const sessionStatus = await apiGet(`/whatsapp/session/status?sessionId=${encodeURIComponent(sessionId)}`);
+        const sessionStatus = await apiGet(
+          `/whatsapp/session/status?sessionId=${encodeURIComponent(sessionId)}`
+        );
 
         if (sessionStatus?.connected !== true) {
           throw new Error(sessionStatus?.message || 'WhatsApp verification failed.');
@@ -512,7 +514,9 @@ export function useSocialConnections() {
 
   /* ---------- derived ---------- */
 
-  const connectedCount = CONNECTABLE_PLATFORMS.filter((p) => connected[p]).length;
+  const connectedCount = CONNECTABLE_PLATFORMS.filter(
+    (p) => connected[p]
+  ).length;
 
   return {
     connected,
@@ -526,7 +530,7 @@ export function useSocialConnections() {
     clearSuccess: () => setSuccess(null),
     refresh,
     connect,
-    disconnect,
+    disconnect, // <-- naya
 
     /* LINKEDIN */
     linkedinTargets,
@@ -534,17 +538,5 @@ export function useSocialConnections() {
     toggleLinkedInTarget,
     setLinkedInTargets,
     postToLinkedIn,
-
-    /* FACEBOOK */
-    facebookTargets,
-    selectedFacebookTargets,
-    toggleFacebookTarget,
-    setFacebookTargetSelection,
-
-    /* INSTAGRAM */
-    instagramTargets,
-    selectedInstagramTargets,
-    toggleInstagramTarget,
-    setInstagramTargetSelection,
   };
 }

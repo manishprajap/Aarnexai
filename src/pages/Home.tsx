@@ -21,9 +21,7 @@ import {
 import {
   cloudUploadOutline,
   imagesOutline,
-  sparklesOutline,
   timeOutline,
-  textOutline,
   arrowForwardOutline,
   chevronForwardOutline,
   personOutline,
@@ -31,11 +29,7 @@ import {
   settingsOutline,
   linkOutline,
   checkmarkCircleOutline,
-  pricetagOutline,
-  locationOutline,
-  logoInstagram,
-  logoFacebook,
-  logoYoutube,
+  shieldCheckmarkOutline,
   statsChartOutline,
 } from 'ionicons/icons';
 
@@ -48,7 +42,7 @@ import { useLogoTheme } from '../hooks/useLogoTheme';
 import BottomTabBar from '../components/BottomTabBar';
 import { clearBusinessCategory, saveBusinessCategory } from '../utils/businessCategory';
 
-import { apiGet, apiPost } from '../api';
+import { fetchPromptPlan, fillPromptTemplate, generatePromptPlan } from '../utils/promptPlan';
 
 type PromptPlanItem = {
   day: number;
@@ -56,26 +50,19 @@ type PromptPlanItem = {
   prompt: string;
 };
 
-function getToken(authToken?: string | null): string | null {
-  return authToken || localStorage.getItem('token') || localStorage.getItem('authToken');
-}
+// How long a generated 30-day plan stays locked before the user can regenerate it.
+// This is computed from the server's real plan.startDate, not from anything
+// stored on the device, so it survives reinstalls and works across devices.
+const REGENERATE_LOCK_DAYS = 30;
+const REGENERATE_LOCK_MS = REGENERATE_LOCK_DAYS * 24 * 60 * 60 * 1000;
 
-// -----------------------------------------------------------------------
-async function apiFetch(path: string, token: string | null, init: RequestInit = {}) {
-  const method = (init.method || 'GET').toUpperCase();
-  const body = init.body ? JSON.parse(init.body as string) : undefined;
-
-  if (method === 'POST') {
-    return await apiPost(path, body);
-  }
-
-  return await apiGet(path);
-}
+// How long we wait for the "generate" request before giving up and showing
+// an error, so the UI can never get stuck on a blank/pending state forever.
+const GENERATE_WATCHDOG_MS = 95_000;
 
 const Home: React.FC = () => {
   const ionRouter = useIonRouter();
   const { user, logout } = useAuth() as any;
-  const authToken: string | null = getToken(user?.token);
 
   const popoverRef = useRef<HTMLIonPopoverElement>(null);
   const themeStyle = useLogoTheme();
@@ -94,20 +81,46 @@ const Home: React.FC = () => {
   const [loadingPlan, setLoadingPlan] = useState(false);
   const [generatingPlan, setGeneratingPlan] = useState(false);
   const [promptMessage, setPromptMessage] = useState('');
+  const [planToastOpen, setPlanToastOpen] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
   const [promptMessageColor, setPromptMessageColor] = useState<'primary' | 'danger'>('primary');
+
+  // ms timestamp of when the current plan was generated, straight from the
+  // server (plan.startDate). null = no plan yet, so no lock.
+  const [planStartAt, setPlanStartAt] = useState<number | null>(null);
+
+  // Safety timer so a hung/killed request can never leave the button stuck
+  // on "Generating…" or the screen looking frozen.
+  const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const firstName = user?.name?.split(' ')[0] ?? 'there';
   const initial = (user?.name || user?.email || '?').charAt(0).toUpperCase();
 
   // Business details saved in Business Setup (come from /auth/me)
-  const businessName = user?.name?.trim() || '';
   const businessCategory = user?.category?.trim() || '';
   const businessCity = user?.city?.trim() || '';
-  const hasBusinessInfo = Boolean(businessCategory || businessCity);
+
+  const badgeText = businessCategory && businessCity
+    ? `${businessCategory} · ${businessCity}`
+    : businessCategory || businessCity || 'Your workspace is ready';
+
+  const nextAvailableAt = planStartAt ? planStartAt + REGENERATE_LOCK_MS : null;
+  const isRegenerateLocked = Boolean(nextAvailableAt && nextAvailableAt > Date.now());
+
+  const daysUntilUnlock = (() => {
+    if (!nextAvailableAt) return 0;
+    const msLeft = nextAvailableAt - Date.now();
+    return Math.max(1, Math.ceil(msLeft / (24 * 60 * 60 * 1000)));
+  })();
+
+  useEffect(() => {
+    return () => {
+      if (watchdogRef.current) clearTimeout(watchdogRef.current);
+    };
+  }, []);
 
   // -----------------------------------------------------------------------
-  // Load the user's existing saved plan from the DB on mount
-  // (replaces the old getPromptPlan(user.id) localStorage read).
+  // Load the user's existing saved plan from the DB
   // -----------------------------------------------------------------------
   const loadPlan = async () => {
     if (!user?.id) return;
@@ -115,12 +128,14 @@ const Home: React.FC = () => {
     setLoadingPlan(true);
 
     try {
-      const data = await apiGet('/api/prompt-plan');
-      setPromptPlan(data?.items ?? []);
+      const data = await fetchPromptPlan();
+      setPromptPlan(Array.isArray(data?.items) ? data.items : []);
       setTodayPrompt(data?.today ?? null);
+      setPlanStartAt(data?.startDate ? new Date(data.startDate).getTime() : null);
     } catch (err: any) {
-      // A missing plan (first-time user) is not an error worth surfacing.
-      console.warn('Could not load prompt plan:', err?.message);
+      console.error('Could not load prompt plan:', err);
+      setPromptMessageColor('danger');
+      setPromptMessage(err?.message || err?.error || 'Could not load your saved plan from the server.');
     } finally {
       setLoadingPlan(false);
     }
@@ -131,10 +146,6 @@ const Home: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  // -----------------------------------------------------------------------
-  // Button click -> calls Gemini (via /api/prompt-plan/generate), which
-  // generates 30 DIFFERENT category-aware prompts and saves them to the DB.
-  // -----------------------------------------------------------------------
   const handleGeneratePromptPlan = async () => {
     if (!user?.id) {
       setPromptMessageColor('danger');
@@ -142,38 +153,54 @@ const Home: React.FC = () => {
       return;
     }
 
-    if (!businessCategory && !user?.categoryId) {
-      setPromptMessageColor('danger');
-      setPromptMessage('Please complete Business Setup first.');
+    if (isRegenerateLocked || generatingPlan || loadingPlan) {
+      // Safety guard in case a disabled button somehow still fires a click.
       return;
     }
 
-    if (promptPlan.length === 30) {
-      setPromptMessageColor('primary');
-      setPromptMessage('Your saved 30-day prompt table is ready to use.');
-      return;
-    }
-
+    // Flip to the "Generating…" state immediately, before the request starts.
     setGeneratingPlan(true);
     setPromptMessage('');
 
+    // Belt-and-braces: even if the request layer's own timeout never fires
+    // for some reason, this guarantees the button un-sticks itself.
+    if (watchdogRef.current) clearTimeout(watchdogRef.current);
+    watchdogRef.current = setTimeout(() => {
+      setGeneratingPlan(false);
+      setPromptMessageColor('danger');
+      setPromptMessage('This is taking unusually long. Please check your connection and try again.');
+    }, GENERATE_WATCHDOG_MS);
+
     try {
-      const data = await apiFetch('/api/prompt-plan/generate', authToken, {
-        method: 'POST',
-        body: JSON.stringify({
-          categoryId: user?.categoryId ?? undefined,
-          businessName: businessName || undefined,
-        }),
+      const res = await generatePromptPlan({
+        categoryId: user?.categoryId ?? undefined,
+        categoryName: businessCategory || undefined,
+        businessName: user?.name || undefined,
       });
 
-      setPromptPlan(data?.items ?? []);
-      setTodayPrompt(data?.today ?? null);
+      const items: PromptPlanItem[] = Array.isArray(res?.items) ? res.items : [];
+
+      if (items.length === 0) {
+        throw new Error('The server returned an empty plan. Please try again.');
+      }
+
+      setPromptPlan(items);
+      setTodayPrompt(res?.today ?? items[0] ?? null);
+      setPlanStartAt(res?.startDate ? new Date(res.startDate).getTime() : Date.now());
       setPromptMessageColor('primary');
-      setPromptMessage('Your unique 30-day prompt plan is ready.');
+      setPromptMessage('Success! Your 30-day prompt plan is ready.');
+      setPlanToastOpen(true);
+
+      // bring the freshly generated list into view
+      setTimeout(() => listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 200);
     } catch (err: any) {
       setPromptMessageColor('danger');
-      setPromptMessage(err?.message || 'Could not generate your 30-day plan. Please try again.');
+      setPromptMessage(err?.message || err?.error || 'Could not generate your 30-day plan. Please try again.');
     } finally {
+      if (watchdogRef.current) {
+        clearTimeout(watchdogRef.current);
+        watchdogRef.current = null;
+      }
       setGeneratingPlan(false);
     }
   };
@@ -189,7 +216,6 @@ const Home: React.FC = () => {
   }, [user?.id, user?.categoryId, user?.category]);
 
   // Re-check live status every time Home becomes visible
-  // (e.g. after coming back from Posters or an OAuth redirect).
   useIonViewWillEnter(() => {
     void refresh();
     void loadPlan();
@@ -220,13 +246,41 @@ const Home: React.FC = () => {
     ionRouter.push('/settings', 'forward');
   };
 
+  const scrollToPlanner = () => {
+    document.getElementById('prompt-planner-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  // Decide what the generate button should say/do right now.
+  const renderGenerateButtonLabel = () => {
+    if (generatingPlan) {
+      return (
+        <>
+          <IonSpinner name="crescent" slot="start" />
+          Generating…
+        </>
+      );
+    }
+    if (loadingPlan) {
+      return 'Loading your plan…';
+    }
+    if (isRegenerateLocked) {
+      return `Available again in ${daysUntilUnlock} day${daysUntilUnlock === 1 ? '' : 's'}`;
+    }
+    if (promptPlan.length > 0) {
+      return 'Regenerate 30-day prompts';
+    }
+    return 'Generate 30-day prompts';
+  };
+
   return (
     <IonPage className="home-page" style={themeStyle}>
       {/* Header */}
       <IonHeader className="ion-no-border">
         <IonToolbar className="app-toolbar">
           <div className="app-header-inner">
-            <img src={logo} alt="Aarna Market OS" className="header-logo" />
+            <span className="header-logo-badge">
+              <img src={logo} alt="Aarna Market OS" className="header-logo" />
+            </span>
 
             <button
               id="account-trigger"
@@ -267,317 +321,209 @@ const Home: React.FC = () => {
         <div className="home-container">
           {/* Greeting */}
           <section className="greeting">
-            <h1>Hi, {firstName}</h1>
-            <p>What are we promoting today?</p>
+            <p className="greeting-eyebrow">Welcome back,</p>
+            <h1>{firstName}</h1>
+            <span className="greeting-badge">
+              <IonIcon icon={shieldCheckmarkOutline} />
+              {badgeText}
+            </span>
           </section>
 
-          {/* Business info (from Business Setup) */}
-          {hasBusinessInfo && (
-            <section
-              aria-label="Your business"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 12,
-                padding: '12px 14px',
-                margin: '0 0 16px',
-                borderRadius: 16,
-                border: '1px solid #E1E8EE',
-                background: '#FFFFFF',
-              }}
-            >
-              <div
-                style={{
-                  width: 42,
-                  height: 42,
-                  flexShrink: 0,
-                  borderRadius: '50%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: 17,
-                  fontWeight: 700,
-                  color: '#FFFFFF',
-                  background: 'linear-gradient(135deg, #1E7FE0, #12A19C)',
-                }}
-              >
-                {initial}
-              </div>
+          {/* Quick actions grid */}
+          <section className="quick-grid" aria-label="Quick actions">
+            <button type="button" className="quick-card" onClick={() => ionRouter.push('/upload', 'forward')}>
+              <span className="quick-icon quick-icon-green">
+                <IonIcon icon={cloudUploadOutline} />
+              </span>
+              <h4>Upload Product</h4>
+              <p>Turn a photo into ready-made ads</p>
+              <span className="quick-arrow quick-arrow-green">
+                <IonIcon icon={arrowForwardOutline} />
+              </span>
+            </button>
 
-              <div style={{ minWidth: 0, flex: 1 }}>
-                {businessName && (
-                  <p
+            <button type="button" className="quick-card" onClick={() => ionRouter.push('/posters', 'forward')}>
+              <span className="quick-icon quick-icon-blue">
+                <IonIcon icon={imagesOutline} />
+              </span>
+              <h4>AI Posters</h4>
+              <p>Browse your generated designs</p>
+              <span className="quick-arrow quick-arrow-blue">
+                <IonIcon icon={arrowForwardOutline} />
+              </span>
+            </button>
+
+            <button type="button" className="quick-card" onClick={scrollToPlanner}>
+              <span className="quick-icon quick-icon-purple">
+                <IonIcon icon={timeOutline} />
+              </span>
+              <h4>30-Day Prompts</h4>
+              <p>{promptPlan.length > 0 ? 'View your saved plan' : 'Generate daily content ideas'}</p>
+              <span className="quick-arrow quick-arrow-purple">
+                <IonIcon icon={arrowForwardOutline} />
+              </span>
+            </button>
+
+            <button type="button" className="quick-card" onClick={() => ionRouter.push('/social-connections', 'forward')}>
+              <span className="quick-icon quick-icon-orange">
+                <IonIcon icon={linkOutline} />
+              </span>
+              <h4>Connections</h4>
+              <p>{connectedCount ? `${connectedCount} account${connectedCount === 1 ? '' : 's'} linked` : 'Link Instagram, Facebook & more'}</p>
+              <span className="quick-arrow quick-arrow-orange">
+                <IonIcon icon={arrowForwardOutline} />
+              </span>
+            </button>
+          </section>
+
+          {/* Secondary links */}
+          <section className="quick-links-row">
+            <button type="button" className="quick-link-chip" onClick={goToProductDetails}>
+              <IonIcon icon={checkmarkCircleOutline} />
+              Product details
+              <IonIcon icon={chevronForwardOutline} className="row-chevron" />
+            </button>
+            <button type="button" className="quick-link-chip" onClick={() => ionRouter.push('/analytics', 'forward')}>
+              <IonIcon icon={statsChartOutline} />
+              Analytics
+              <IonIcon icon={chevronForwardOutline} className="row-chevron" />
+            </button>
+          </section>
+
+          {/* AI Prompt Planner */}
+          <div id="prompt-planner-section">
+            <IonCard style={{ margin: '0 0 0', borderRadius: 18, boxShadow: '0 8px 24px rgba(15, 27, 45, 0.08)' }}>
+              <IonCardContent>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+                  <div>
+                    <p style={{ margin: 0, color: '#0F6FEC', fontSize: 12, fontWeight: 700 }}>AI PROMPT PLANNER</p>
+                    <h3 style={{ margin: '5px 0 6px', color: '#0F1B2D', fontSize: 19 }}>Generate 30 days of ideas</h3>
+                    <p style={{ margin: 0, color: '#6B7A90', fontSize: 13, lineHeight: 1.45 }}>
+                      Unique daily prompts based on {businessCategory || 'your business category'}.
+                    </p>
+                  </div>
+                  <IonIcon icon={timeOutline} style={{ color: '#0F6FEC', fontSize: 24 }} />
+                </div>
+
+                <IonButton
+                  expand="block"
+                  color={generatingPlan ? 'medium' : 'primary'}
+                  onClick={handleGeneratePromptPlan}
+                  disabled={generatingPlan || loadingPlan || isRegenerateLocked}
+                  style={{ marginTop: 16 }}
+                >
+                  {renderGenerateButtonLabel()}
+                </IonButton>
+
+                {generatingPlan && (
+                  <div
                     style={{
-                      margin: 0,
-                      fontSize: 14,
-                      fontWeight: 700,
-                      color: '#0F2A4A',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
+                      marginTop: 14,
+                      padding: 12,
+                      borderRadius: 12,
+                      background: '#F1F7FF',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
                     }}
                   >
-                    {businessName}
-                  </p>
+                    <IonSpinner name="dots" style={{ color: '#0F6FEC', flexShrink: 0 }} />
+                    <span style={{ color: '#0F1B2D', fontSize: 13, lineHeight: 1.4 }}>
+                      Generating your 30 unique prompts. This can take up to a minute…
+                    </span>
+                  </div>
                 )}
 
-                <div
-                  style={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: 6,
-                    marginTop: businessName ? 5 : 0,
-                  }}
-                >
-                  {businessCategory && (
-                    <span
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 4,
-                        padding: '3px 9px',
-                        borderRadius: 999,
-                        fontSize: 12,
-                        fontWeight: 600,
-                        color: '#1E7FE0',
-                        background: '#EAF4FF',
-                      }}
-                    >
-                      <IonIcon icon={pricetagOutline} style={{ fontSize: 13 }} />
-                      {businessCategory}
-                    </span>
-                  )}
-
-                  {businessCity && (
-                    <span
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 4,
-                        padding: '3px 9px',
-                        borderRadius: 999,
-                        fontSize: 12,
-                        fontWeight: 600,
-                        color: '#12A19C',
-                        background: '#EAFBF8',
-                      }}
-                    >
-                      <IonIcon icon={locationOutline} style={{ fontSize: 13 }} />
-                      {businessCity}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </section>
-          )}
-
-          {/* Hero */}
-          <section className="hero">
-            <div className="hero-chip">
-              <IonIcon icon={sparklesOutline} />
-            </div>
-
-            <h2 className="hero-heading">Create professional ads with AI</h2>
-            <p className="hero-copy">
-              Upload a product photo and AI builds thirty days of posts, captions and
-              hashtags for you.
-            </p>
-
-            <IonButton routerLink="/upload" expand="block" className="hero-button">
-              <IonIcon slot="start" icon={cloudUploadOutline} />
-              Upload product
-            </IonButton>
-          </section>
-
-          <IonCard style={{ margin: '22px 0 0', borderRadius: 18, boxShadow: '0 8px 24px rgba(15, 27, 45, 0.08)' }}>
-            <IonCardContent>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
-                <div>
-                  <p style={{ margin: 0, color: '#0F6FEC', fontSize: 12, fontWeight: 700 }}>AI PROMPT PLANNER</p>
-                  <h3 style={{ margin: '5px 0 6px', color: '#0F1B2D', fontSize: 19 }}>Generate 30 days of ideas</h3>
-                  <p style={{ margin: 0, color: '#6B7A90', fontSize: 13, lineHeight: 1.45 }}>
-                    Unique daily prompts based on {businessCategory || 'your business category'}.
-                  </p>
-                </div>
-                <IonIcon icon={timeOutline} style={{ color: '#0F6FEC', fontSize: 24 }} />
-              </div>
-
-              <IonButton
-                expand="block"
-                onClick={handleGeneratePromptPlan}
-                disabled={generatingPlan || loadingPlan || promptPlan.length === 30}
-                style={{ marginTop: 16 }}
-              >
-                {generatingPlan ? (
-                  <IonSpinner name="crescent" />
-                ) : loadingPlan ? (
-                  'Loading your plan…'
-                ) : promptPlan.length === 30 ? (
-                  '30-day table saved'
-                ) : (
-                  'Generate 30-day prompts'
-                )}
-              </IonButton>
-
-              {todayPrompt && (
-                <div style={{ marginTop: 14, padding: 12, borderRadius: 12, background: '#F8FAFD' }}>
-                  <strong style={{ color: '#0F1B2D', fontSize: 13 }}>
-                    Today · Day {todayPrompt.day}
-                    {todayPrompt.theme ? ` · ${todayPrompt.theme}` : ''}
-                  </strong>
-                  <p style={{ margin: '6px 0 0', color: '#526176', fontSize: 13, lineHeight: 1.45 }}>{todayPrompt.prompt}</p>
-                </div>
-              )}
-
-              {promptPlan.length === 30 && (
-                <div style={{ marginTop: 14, maxHeight: 360, overflowY: 'auto', border: '1px solid #E1E7EF', borderRadius: 12 }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                    <thead>
-                      <tr style={{ position: 'sticky', top: 0, background: '#F8FAFD', zIndex: 1 }}>
-                        <th style={{ padding: '10px 8px', width: 54, textAlign: 'left', color: '#526176' }}>Day</th>
-                        <th style={{ padding: '10px 8px', textAlign: 'left', color: '#526176' }}>Saved prompt</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {promptPlan.map((item) => (
-                        <tr
-                          key={item.day}
-                          style={{
-                            borderTop: '1px solid #E1E7EF',
-                            background: item.day === todayPrompt?.day ? '#EAF3FF' : '#FFFFFF',
-                          }}
-                        >
-                          <td style={{ padding: '10px 8px', verticalAlign: 'top', fontWeight: 700, color: '#0F1B2D' }}>{item.day}</td>
-                          <td style={{ padding: '10px 8px', lineHeight: 1.45, color: '#526176' }}>
-                            {item.theme && (
-                              <span style={{ display: 'block', fontWeight: 600, color: '#0F6FEC', fontSize: 11, marginBottom: 2 }}>
-                                {item.theme}
-                              </span>
-                            )}
-                            {item.prompt}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {promptMessage && (
-                <p style={{ margin: '10px 0 0', color: promptMessageColor === 'danger' ? '#D33' : '#0F6FEC', fontSize: 12 }}>
-                  {promptMessage}
-                </p>
-              )}
-            </IonCardContent>
-          </IonCard>
-
-          {/* What AI can do */}
-          <section className="section">
-            <h3 className="section-title">What AI can do</h3>
-
-            <div className="feature-panel">
-              <div className="feature-row feature-row-detect">
-                <div className="feature-main">
-                  <div className="tile">
-                    <IonIcon icon={sparklesOutline} />
-                  </div>
-                  <div className="feature-text">
-                    <h4>Social Media Connection</h4>
-                    <p>Identifies brand, product and category.</p>
-                  </div>
-                </div>
-
-                <div className="connect-line">
-                  <div className="social-stack" aria-hidden="true">
-                    <span className="brand-instagram"><IonIcon icon={logoInstagram} /></span>
-                    <span className="brand-facebook"><IonIcon icon={logoFacebook} /></span>
-                    <span className="brand-youtube"><IonIcon icon={logoYoutube} /></span>
-                  </div>
-
-                  <button
-                    type="button"
-                    className={`connect-btn ${connectedCount ? 'is-connected' : ''}`}
-                    aria-haspopup="dialog"
-                    onClick={() => ionRouter.push('/social-connections', 'forward')}
+                {!generatingPlan && isRegenerateLocked && (
+                  <p
+                    style={{
+                      margin: '12px 0 0',
+                      fontSize: 12,
+                      color: '#6B7A90',
+                    }}
                   >
-                    <IonIcon icon={connectedCount ? checkmarkCircleOutline : linkOutline} />
-                    {connectedCount ? `${connectedCount} connected` : 'Connect'}
-                  </button>
-                </div>
-              </div>
+                    Your current 30-day plan is active. You can generate a new one once it unlocks.
+                  </p>
+                )}
 
-              <button
-                type="button"
-                className="feature-row feature-row-link"
-                onClick={goToProductDetails}
-              >
-                <div className="tile">
-                  <IonIcon icon={sparklesOutline} />
-                </div>
-                <div className="feature-text">
-                  <h4>Product details</h4>
-                  <p>View brand, product and category info.</p>
-                </div>
-                <IonIcon icon={chevronForwardOutline} className="row-chevron" />
+                {!generatingPlan && promptMessage && (
+                  <p
+                    style={{
+                      margin: '12px 0 0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: promptMessageColor === 'danger' ? '#D33' : '#1E9E5A',
+                    }}
+                  >
+                    {promptMessageColor !== 'danger' && <IonIcon icon={checkmarkCircleOutline} />}
+                    {promptMessage}
+                  </p>
+                )}
+
+                {todayPrompt && (
+                  <div style={{ marginTop: 14, padding: 12, borderRadius: 12, background: '#F8FAFD' }}>
+                    <strong style={{ color: '#0F1B2D', fontSize: 13 }}>
+                      Today · Day {todayPrompt.day}
+                      {todayPrompt.theme ? ` · ${todayPrompt.theme}` : ''}
+                    </strong>
+                    <p style={{ margin: '6px 0 0', color: '#526176', fontSize: 13, lineHeight: 1.45 }}>{fillPromptTemplate(todayPrompt.prompt, { category: businessCategory })}</p>
+                  </div>
+                )}
+
+                {promptPlan.length > 0 && (
+                  <div ref={listRef} style={{ marginTop: 14, maxHeight: 360, overflowY: 'auto', border: '1px solid #E1E7EF', borderRadius: 12 }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                      <thead>
+                        <tr style={{ position: 'sticky', top: 0, background: '#F8FAFD', zIndex: 1 }}>
+                          <th style={{ padding: '10px 8px', width: 54, textAlign: 'left', color: '#526176' }}>Day</th>
+                          <th style={{ padding: '10px 8px', textAlign: 'left', color: '#526176' }}>Saved prompt</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {promptPlan.map((item) => (
+                          <tr
+                            key={item.day}
+                            style={{
+                              borderTop: '1px solid #E1E7EF',
+                              background: item.day === todayPrompt?.day ? '#EAF3FF' : '#FFFFFF',
+                            }}
+                          >
+                            <td style={{ padding: '10px 8px', verticalAlign: 'top', fontWeight: 700, color: '#0F1B2D' }}>{item.day}</td>
+                            <td style={{ padding: '10px 8px', lineHeight: 1.45, color: '#526176' }}>
+                              {item.theme && (
+                                <span style={{ display: 'block', fontWeight: 600, color: '#0F6FEC', fontSize: 11, marginBottom: 2 }}>
+                                  {item.theme}
+                                </span>
+                              )}
+                              {fillPromptTemplate(item.prompt, { category: businessCategory })}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </IonCardContent>
+            </IonCard>
+          </div>
+
+          {/* Recent campaigns, styled as a File Overview card */}
+          <section className="overview-card">
+            <div className="overview-head">
+              <h3>
+                <IonIcon icon={cloudUploadOutline} />
+                Recent Campaigns
+              </h3>
+              <button type="button" className="overview-link" onClick={() => ionRouter.push('/posters', 'forward')}>
+                View All
+                <IonIcon icon={chevronForwardOutline} />
               </button>
-
-              <button
-                type="button"
-                className="feature-row feature-row-link"
-                onClick={() => ionRouter.push('/posters')}
-              >
-                <div className="tile">
-                  <IonIcon icon={imagesOutline} />
-                </div>
-                <div className="feature-text">
-                  <h4>AI posters</h4>
-                  <p>Generates different professional designs.</p>
-                </div>
-                <IonIcon icon={chevronForwardOutline} className="row-chevron" />
-              </button>
-
-              <button
-                type="button"
-                className="feature-row feature-row-link"
-                onClick={() => ionRouter.push('/analytics')}
-              >
-                <div className="tile">
-                  <IonIcon icon={statsChartOutline} />
-                </div>
-                <div className="feature-text">
-                  <h4>Google and YouTube analytics</h4>
-                  <p>Review channel reach, engagement and published posts.</p>
-                </div>
-                <IonIcon icon={chevronForwardOutline} className="row-chevron" />
-              </button>
-
-              <div className="feature-row">
-                <div className="tile">
-                  <IonIcon icon={textOutline} />
-                </div>
-                <div className="feature-text">
-                  <h4>AI content</h4>
-                  <p>Captions, descriptions, SEO and hashtags.</p>
-                </div>
-              </div>
-
-              <div className="feature-row">
-                <div className="tile">
-                  <IonIcon icon={timeOutline} />
-                </div>
-                <div className="feature-text">
-                  <h4>30-day plan</h4>
-                  <p>A different marketing post every day.</p>
-                </div>
-              </div>
             </div>
-          </section>
 
-          {/* Recent campaigns */}
-          <section className="section">
-            <h3 className="section-title">Recent campaigns</h3>
-
-            <button type="button" className="empty-card" onClick={() => ionRouter.push('/upload')}>
+            <button type="button" className="empty-card" onClick={() => ionRouter.push('/upload', 'forward')}>
               <div className="empty-thumb">
                 <IonIcon icon={imagesOutline} />
               </div>
@@ -591,7 +537,7 @@ const Home: React.FC = () => {
         </div>
       </IonContent>
 
-      {/* Bottom tabs (IonFooter, so IonContent automatically leaves room for it) */}
+      {/* Bottom tabs */}
       <BottomTabBar />
 
       {/* Feedback */}
@@ -610,6 +556,14 @@ const Home: React.FC = () => {
         position="top"
         color="danger"
         onDidDismiss={clearError}
+      />
+      <IonToast
+        isOpen={planToastOpen}
+        message="30-day prompt plan generated successfully"
+        duration={3000}
+        position="top"
+        color="success"
+        onDidDismiss={() => setPlanToastOpen(false)}
       />
     </IonPage>
   );
