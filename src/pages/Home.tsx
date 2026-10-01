@@ -31,6 +31,8 @@ import {
   checkmarkCircleOutline,
   shieldCheckmarkOutline,
   statsChartOutline,
+  cubeOutline,
+  chatbubblesOutline,
 } from 'ionicons/icons';
 
 import { useAuth } from '../context/AuthContext';
@@ -329,7 +331,25 @@ const Home: React.FC = () => {
             </span>
           </section>
 
+          <section className="dashboard-overview" aria-label="Workspace overview">
+            <div className="dashboard-overview-heading">
+              <div>
+                <p className="dashboard-kicker">WORKSPACE</p>
+                <h2>Your business at a glance</h2>
+              </div>
+              <span className="workspace-status"><span /> Active</span>
+            </div>
+            <div className="dashboard-metrics">
+              <div><strong>{connectedCount}</strong><span>Connected channels</span></div>
+              <div><strong>{promptPlan.length || '—'}</strong><span>Daily AI prompts</span></div>
+              <div><strong>{businessCategory || 'Set up'}</strong><span>Business category</span></div>
+            </div>
+          </section>
+
           {/* Quick actions grid */}
+          <div className="dashboard-section-heading">
+            <div><p className="dashboard-kicker">TOOLS</p><h2>Quick actions</h2></div>
+          </div>
           <section className="quick-grid" aria-label="Quick actions">
             <button type="button" className="quick-card" onClick={() => ionRouter.push('/upload', 'forward')}>
               <span className="quick-icon quick-icon-green">
@@ -390,9 +410,22 @@ const Home: React.FC = () => {
             </button>
           </section>
 
+          <section className="whatsapp-shortcuts" aria-label="WhatsApp tools">
+            <button type="button" onClick={() => ionRouter.push('/whatsapp', 'forward')}>
+              <span><IonIcon icon={cubeOutline} /></span>
+              <span><strong>WhatsApp Catalog</strong><small>Products, categories and Meta sync</small></span>
+              <IonIcon className="whatsapp-shortcut-arrow" icon={chevronForwardOutline} />
+            </button>
+            <button type="button" onClick={() => ionRouter.push('/whatsapp?view=inbox', 'forward')}>
+              <span><IonIcon icon={chatbubblesOutline} /></span>
+              <span><strong>WhatsApp Inbox</strong><small>Customer conversations and replies</small></span>
+              <IonIcon className="whatsapp-shortcut-arrow" icon={chevronForwardOutline} />
+            </button>
+          </section>
+
           {/* AI Prompt Planner */}
           <div id="prompt-planner-section">
-            <IonCard style={{ margin: '0 0 0', borderRadius: 18, boxShadow: '0 8px 24px rgba(15, 27, 45, 0.08)' }}>
+            <IonCard style={{ margin: '0 0 0', borderRadius: 12, boxShadow: '0 2px 12px rgba(15, 27, 45, 0.06)' }}>
               <IonCardContent>
                 <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
                   <div>
@@ -474,36 +507,21 @@ const Home: React.FC = () => {
                 )}
 
                 {promptPlan.length > 0 && (
-                  <div ref={listRef} style={{ marginTop: 14, maxHeight: 360, overflowY: 'auto', border: '1px solid #E1E7EF', borderRadius: 12 }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                      <thead>
-                        <tr style={{ position: 'sticky', top: 0, background: '#F8FAFD', zIndex: 1 }}>
-                          <th style={{ padding: '10px 8px', width: 54, textAlign: 'left', color: '#526176' }}>Day</th>
-                          <th style={{ padding: '10px 8px', textAlign: 'left', color: '#526176' }}>Saved prompt</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {promptPlan.map((item) => (
-                          <tr
-                            key={item.day}
-                            style={{
-                              borderTop: '1px solid #E1E7EF',
-                              background: item.day === todayPrompt?.day ? '#EAF3FF' : '#FFFFFF',
-                            }}
-                          >
-                            <td style={{ padding: '10px 8px', verticalAlign: 'top', fontWeight: 700, color: '#0F1B2D' }}>{item.day}</td>
-                            <td style={{ padding: '10px 8px', lineHeight: 1.45, color: '#526176' }}>
-                              {item.theme && (
-                                <span style={{ display: 'block', fontWeight: 600, color: '#0F6FEC', fontSize: 11, marginBottom: 2 }}>
-                                  {item.theme}
-                                </span>
-                              )}
-                              {fillPromptTemplate(item.prompt, { category: businessCategory })}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div ref={listRef} className="prompt-day-list" aria-label="Saved prompts by day">
+                    {promptPlan.map((item) => {
+                      const isToday = item.day === todayPrompt?.day;
+
+                      return (
+                        <article key={item.day} className={`prompt-day-item${isToday ? ' is-today' : ''}`}>
+                          <div className="prompt-day-heading">
+                            <strong>Day {item.day}</strong>
+                            {isToday && <span>Today</span>}
+                          </div>
+                          {item.theme && <h4>{item.theme}</h4>}
+                          <p>{fillPromptTemplate(item.prompt, { category: businessCategory })}</p>
+                        </article>
+                      );
+                    })}
                   </div>
                 )}
               </IonCardContent>

@@ -90,3 +90,23 @@ export const apiPut = async (endpoint: string, data: unknown) => {
 
   return json;
 };
+
+export const apiDelete = async (endpoint: string) => {
+  const token = getToken();
+
+  const response = await fetch(`${BASE_URL}${endpoint}`, {
+    method: 'DELETE',
+    headers: {
+      'Accept': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
+  });
+
+  const json = await parseJsonSafely(response);
+
+  if (!response.ok) {
+    throw json ?? { message: `Request failed with status ${response.status}` };
+  }
+
+  return json;
+};

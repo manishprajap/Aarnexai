@@ -74,11 +74,29 @@ const hasTokens = (items: PromptPlanItem[]) => items.some((i) => ANY_TOKEN.test(
 // In-memory only (refilled from the server). NOT localStorage.
 let cache: PromptPlanResponse = { items: [], today: null, startDate: null };
 
-const toResponse = (data: any): PromptPlanResponse => ({
-  items: Array.isArray(data?.items) ? data.items : [],
-  today: data?.today ?? null,
-  startDate: data?.plan?.startDate ?? data?.startDate ?? null,
-});
+export const normalizePromptPlanResponse = (response: any): PromptPlanResponse => {
+  const data = response?.data ?? response;
+  const plan = data?.plan ?? data;
+  const rawItems = Array.isArray(data?.items)
+    ? data.items
+    : Array.isArray(plan?.items)
+      ? plan.items
+      : [];
+  const items = rawItems
+    .filter((item: any) => Number.isFinite(Number(item?.day)) && typeof item?.prompt === 'string')
+    .map((item: any) => ({
+      day: Number(item.day),
+      prompt: item.prompt,
+      theme: typeof item.theme === 'string' ? item.theme : null,
+    }))
+    .sort((a: PromptPlanItem, b: PromptPlanItem) => a.day - b.day);
+
+  return {
+    items,
+    today: data?.today ?? plan?.today ?? null,
+    startDate: plan?.startDate ?? data?.startDate ?? null,
+  };
+};
 
 
 const withTimeout = <T>(promise: Promise<T>, ms: number, timeoutMessage: string): Promise<T> => {
@@ -103,7 +121,7 @@ const GENERATE_TIMEOUT_MS = 90_000;
 /** Loads the user's saved plan + today's prompt from the DB. */
 export const fetchPromptPlan = async (): Promise<PromptPlanResponse> => {
   try {
-    cache = toResponse(await apiGet('/prompt-plan'));
+    cache = normalizePromptPlanResponse(await apiGet('/prompt-plan'));
   } catch (e) {
     throw toError(e);
   }
@@ -137,7 +155,7 @@ export const generatePromptPlan = async (
   }
 
   try {
-    cache = toResponse(
+    cache = normalizePromptPlanResponse(
       await withTimeout(
         apiPost('/prompt-plan/generate', body),
         GENERATE_TIMEOUT_MS,
