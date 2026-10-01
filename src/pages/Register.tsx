@@ -63,7 +63,7 @@ const Register: React.FC = () => {
     // A brand-new account never has business details or an active
     // subscription yet, so these are always false right after registration.
     login(res.user, res.token, false, false);
-    navigate('/business-setup', { replace: true });
+    navigate('/onboarding', { replace: true });
   } catch (err: any) {
     setError(err?.error || 'Could not create your account. Please try again.');
   } finally {

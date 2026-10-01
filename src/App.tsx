@@ -43,6 +43,7 @@ import Home from './pages/Home';
 import Posters from './pages/Posters';
 import WhatsAppWorkspace from './pages/WhatsAppWorkspace';
 import { startWhatsAppResumeWatcher } from './services/whatsappResume';
+import Onboarding from './pages/Onboarding ';
 
 setupIonicReact();
 
@@ -84,10 +85,10 @@ const App: React.FC = () => {
 
             {/* Business details form - shown when hasBusiness is false */}
             <Route
-              path="/business-setup"
+              path="/onboarding"
               element={
                 <RequireAuth>
-                  <BusinessSetup />
+                  <Onboarding />
                 </RequireAuth>
               }
             />

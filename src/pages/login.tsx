@@ -136,7 +136,7 @@ const Login: React.FC = () => {
       setDevOtp('');
 
       if (!res.hasBusiness) {
-        navigate('/business-setup');
+        navigate('/onboarding');
       } else if (!res.hasSubscription) {
         navigate('/subscription');
       } else {

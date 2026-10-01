@@ -14,15 +14,15 @@ const PrivateRoute: React.FC = () => {
 
   const path = location.pathname;
 
-  if (!hasBusiness && path !== '/business-setup') {
-    return <Navigate to="/business-setup" replace />;
+  if (!hasBusiness && path !== '/onboarding') {
+    return <Navigate to="/onboarding" replace />;
   }
 
   if (hasBusiness && !hasSubscription && path !== '/subscription') {
     return <Navigate to="/subscription" replace />;
   }
 
-  if (hasBusiness && hasSubscription && (path === '/business-setup' || path === '/subscription')) {
+  if (hasBusiness && hasSubscription && (path === '/onboarding' || path === '/subscription')) {
     return <Navigate to="/dashboard" replace />;
   }
 

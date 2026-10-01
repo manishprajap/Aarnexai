@@ -31,10 +31,10 @@ const RedirectIfAuthed: React.FC<{
     /*
      * Onboarding takes priority: an unonboarded user can't land
      * on an arbitrary "from" route, since RequireAuth would just
-     * bounce them to /business-setup or /subscription anyway.
+     * bounce them to /onboarding or /subscription anyway.
      */
     if (!hasBusiness) {
-      ionRouter.push('/business-setup', 'root', 'replace');
+      ionRouter.push('/onboarding', 'root', 'replace');
       return;
     }
 

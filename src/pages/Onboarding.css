@@ -80,3 +80,7 @@ ion-toolbar.grad-bar ion-button { --color: #fff; }
 .progress > div { height: 100%; background: #fff; transition: width .25s ease; }
 .field-err { display: block; font-size: 11px; color: #b42318; margin: 2px 0 4px; }
 .seg-title { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: #1b2a49; margin: 4px 2px 8px; }
+
+/* loading / error state while dropdown data loads */
+.state-box { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 60%; padding: 40px 24px; text-align: center; }
+.state-box ion-spinner { color: #14a09a; }

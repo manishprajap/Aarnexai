@@ -37,8 +37,8 @@ const RequireAuth: React.FC<{
       return;
     }
 
-    if (!hasBusiness && path !== '/business-setup') {
-      ionRouter.push('/business-setup', 'root', 'replace');
+    if (!hasBusiness && path !== '/onboarding') {
+      ionRouter.push('/onboarding', 'root', 'replace');
       return;
     }
 
@@ -50,7 +50,7 @@ const RequireAuth: React.FC<{
     if (
       hasBusiness &&
       hasSubscription &&
-      (path === '/business-setup' || path === '/subscription')
+      (path === '/onboarding' || path === '/subscription')
     ) {
       ionRouter.push('/dashboard', 'root', 'replace');
       return;
@@ -90,12 +90,12 @@ const RequireAuth: React.FC<{
 
   const shouldBlock =
     !isAuthenticated ||
-    (!hasBusiness && path !== '/business-setup') ||
+    (!hasBusiness && path !== '/onboarding') ||
     (hasBusiness && !hasSubscription && path !== '/subscription') ||
     (
       hasBusiness &&
       hasSubscription &&
-      (path === '/business-setup' || path === '/subscription')
+      (path === '/onboarding' || path === '/subscription')
     );
 
   /**
