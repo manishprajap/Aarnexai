@@ -41,6 +41,8 @@ import aarnaLogo from './assets/aarna-logo.png';
 import './splash.css';
 import Home from './pages/Home';
 import Posters from './pages/Posters';
+import WhatsAppWorkspace from './pages/WhatsAppWorkspace';
+import { startWhatsAppResumeWatcher } from './services/whatsappResume';
 
 setupIonicReact();
 
@@ -52,167 +54,183 @@ const App: React.FC = () => {
     return () => window.clearTimeout(timer);
   }, []);
 
+  // App start / resume par pending WhatsApp connection ko claim karta hai
+  useEffect(() => {
+    const stop = startWhatsAppResumeWatcher();
+    return stop;
+  }, []);
+
   return (
     <IonApp>
       <AuthProvider>
         <IonReactRouter>
           <IonRouterOutlet>
-          <Route
-            path="/login"
-            element={
-              <RedirectIfAuthed>
-                <Login />
-              </RedirectIfAuthed>
-            }
-          />
-          <Route
-            path="/register"
-            element={
-              <RedirectIfAuthed>
-                <Register />
-              </RedirectIfAuthed>
-            }
-          />
+            <Route
+              path="/login"
+              element={
+                <RedirectIfAuthed>
+                  <Login />
+                </RedirectIfAuthed>
+              }
+            />
+            <Route
+              path="/register"
+              element={
+                <RedirectIfAuthed>
+                  <Register />
+                </RedirectIfAuthed>
+              }
+            />
 
-          {/* Business details form - shown when hasBusiness is false */}
-          <Route
-            path="/business-setup"
-            element={
-              <RequireAuth>
-                <BusinessSetup />
-              </RequireAuth>
-            }
-          />
+            {/* Business details form - shown when hasBusiness is false */}
+            <Route
+              path="/business-setup"
+              element={
+                <RequireAuth>
+                  <BusinessSetup />
+                </RequireAuth>
+              }
+            />
 
-          {/* Plan purchase - shown when hasBusiness is true but hasSubscription is false */}
-          <Route
-            path="/subscription"
-            element={
-              <RequireAuth>
-                <Subscription />
-              </RequireAuth>
-            }
-          />
+            {/* Plan purchase - shown when hasBusiness is true but hasSubscription is false */}
+            <Route
+              path="/subscription"
+              element={
+                <RequireAuth>
+                  <Subscription />
+                </RequireAuth>
+              }
+            />
 
-          <Route
-            path="/dashboard"
-            element={
-              <RequireAuth>
-                <Home />
-              </RequireAuth>
-            }
-          />
-          <Route path="/home" element={<Navigate to="/dashboard" replace />} />
+            <Route
+              path="/dashboard"
+              element={
+                <RequireAuth>
+                  <Home />
+                </RequireAuth>
+              }
+            />
+            <Route path="/home" element={<Navigate to="/dashboard" replace />} />
 
-          <Route
-            path="/campaigns"
-            element={
-              <RequireAuth>
-                <Campaigns />
-              </RequireAuth>
-            }
-          />
+            <Route
+              path="/campaigns"
+              element={
+                <RequireAuth>
+                  <Campaigns />
+                </RequireAuth>
+              }
+            />
 
-          <Route
-            path="/campaigns/create"
-            element={
-              <RequireAuth>
-                <CreateCampaign />
-              </RequireAuth>
-            }
-          />
+            <Route
+              path="/campaigns/create"
+              element={
+                <RequireAuth>
+                  <CreateCampaign />
+                </RequireAuth>
+              }
+            />
 
-          <Route
-            path="/campaigns/:campaignId"
-            element={
-              <RequireAuth>
-                <CampaignDetails />
-              </RequireAuth>
-            }
-          />
+            <Route
+              path="/campaigns/:campaignId"
+              element={
+                <RequireAuth>
+                  <CampaignDetails />
+                </RequireAuth>
+              }
+            />
 
-          <Route
-            path="/upload"
-            element={
-              <RequireAuth>
-                <Upload />
-              </RequireAuth>
-            }
-          />
+            <Route
+              path="/upload"
+              element={
+                <RequireAuth>
+                  <Upload />
+                </RequireAuth>
+              }
+            />
 
-          <Route
-            path="/posters"
-            element={
-              <RequireAuth>
-                <Posters />
-              </RequireAuth>
-            }
-          />
+            <Route
+              path="/posters"
+              element={
+                <RequireAuth>
+                  <Posters />
+                </RequireAuth>
+              }
+            />
 
-          <Route
-            path="/social-connections"
-            element={
-              <RequireAuth>
-                <SocialConnections />
-              </RequireAuth>
-            }
-          />
+            <Route
+              path="/social-connections"
+              element={
+                <RequireAuth>
+                  <SocialConnections />
+                </RequireAuth>
+              }
+            />
 
-          <Route
-            path="/analytics"
-            element={
-              <RequireAuth>
-                <Analytics />
-              </RequireAuth>
-            }
-          />
+            <Route
+              path="/whatsapp"
+              element={
+                <RequireAuth>
+                  <WhatsAppWorkspace />
+                </RequireAuth>
+              }
+            />
 
-          <Route
-            path="/products/:productId"
-            element={
-              <RequireAuth>
-                <ProductDetails />
-              </RequireAuth>
-            }
-          />
+            <Route
+              path="/analytics"
+              element={
+                <RequireAuth>
+                  <Analytics />
+                </RequireAuth>
+              }
+            />
 
-          <Route
-            path="/product-details"
-            element={
-              <RequireAuth>
-                <ProductDetails />
-              </RequireAuth>
-            }
-          />
+            <Route
+              path="/products/:productId"
+              element={
+                <RequireAuth>
+                  <ProductDetails />
+                </RequireAuth>
+              }
+            />
 
-          <Route
-            path="/products/:productId/customize"
-            element={
-              <RequireAuth>
-                <SelectCategory />
-              </RequireAuth>
-            }
-          /> 
-           <Route
-            path="/profile"
-            element={
-              <RequireAuth>
-                <Profile />
-              </RequireAuth>
-            }
-          /> 
-          <Route
-            path="/settings"
-            element={
-              <RequireAuth>
-                <Settings />
-              </RequireAuth>
-            }
-          />
-          
-          
-          <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route path="*" element={<Navigate to="/login" replace />} />
+            <Route
+              path="/product-details"
+              element={
+                <RequireAuth>
+                  <ProductDetails />
+                </RequireAuth>
+              }
+            />
+
+            <Route
+              path="/products/:productId/customize"
+              element={
+                <RequireAuth>
+                  <SelectCategory />
+                </RequireAuth>
+              }
+            />
+
+            <Route
+              path="/profile"
+              element={
+                <RequireAuth>
+                  <Profile />
+                </RequireAuth>
+              }
+            />
+
+            <Route
+              path="/settings"
+              element={
+                <RequireAuth>
+                  <Settings />
+                </RequireAuth>
+              }
+            />
+
+            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route path="*" element={<Navigate to="/login" replace />} />
           </IonRouterOutlet>
         </IonReactRouter>
 

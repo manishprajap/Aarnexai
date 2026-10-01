@@ -16,8 +16,8 @@ type Palette = { bg: RGB; accent: RGB };
 
 const BLACK: RGB = { r: 0, g: 0, b: 0 };
 const WHITE: RGB = { r: 255, g: 255, b: 255 };
-const FALLBACK_ACCENT: RGB = { r: 23, g: 168, b: 152 };
-const CACHE_KEY = 'aarna-logo-palette';
+const BRAND_BLUE: RGB = { r: 7, g: 134, b: 233 };
+const CACHE_KEY = 'aarna-logo-palette-v2';
 
 const mix = (a: RGB, b: RGB, t: number): RGB => ({
   r: Math.round(a.r + (b.r - a.r) * t),
@@ -26,8 +26,6 @@ const mix = (a: RGB, b: RGB, t: number): RGB => ({
 });
 const css = ({ r, g, b }: RGB) => `rgb(${r}, ${g}, ${b})`;
 const luminance = ({ r, g, b }: RGB) => 0.299 * r + 0.587 * g + 0.114 * b;
-const distance = (a: RGB, b: RGB) => Math.hypot(a.r - b.r, a.g - b.g, a.b - b.b);
-
 function analyse(img: HTMLImageElement): Palette | null {
   const size = 64;
   const canvas = document.createElement('canvas');
@@ -45,49 +43,24 @@ function analyse(img: HTMLImageElement): Palette | null {
     return { r: data[i], g: data[i + 1], b: data[i + 2] };
   };
 
-  // Background: average of the four corners
-  const corners = [at(1, 1), at(size - 2, 1), at(1, size - 2), at(size - 2, size - 2)];
-  const bg: RGB = {
-    r: Math.round(corners.reduce((s, c) => s + c.r, 0) / corners.length),
-    g: Math.round(corners.reduce((s, c) => s + c.g, 0) / corners.length),
-    b: Math.round(corners.reduce((s, c) => s + c.b, 0) / corners.length),
-  };
-
-  // Accent: most saturated color bucket that differs from the background
-  const buckets = new Map<number, { n: number; r: number; g: number; b: number; sat: number }>();
-  for (let i = 0; i < data.length; i += 4) {
-    if (data[i + 3] < 128) continue;
-    const px: RGB = { r: data[i], g: data[i + 1], b: data[i + 2] };
-    if (distance(px, bg) < 70) continue;
-
-    const sat = Math.max(px.r, px.g, px.b) - Math.min(px.r, px.g, px.b);
-    if (sat < 40) continue;
-
-    const key = ((px.r >> 5) << 6) | ((px.g >> 5) << 3) | (px.b >> 5);
-    const cur = buckets.get(key) ?? { n: 0, r: 0, g: 0, b: 0, sat: 0 };
-    cur.n += 1;
-    cur.r += px.r;
-    cur.g += px.g;
-    cur.b += px.b;
-    cur.sat += sat;
-    buckets.set(key, cur);
-  }
-
-  const candidates = Array.from(buckets.values());
-  let best = candidates[0];
-  for (const c of candidates) {
-    if (c.sat > best.sat) best = c;
-  }
-
-  const accent: RGB = best
+  const cornerPoints: [number, number][] = [
+    [1, 1],
+    [size - 2, 1],
+    [1, size - 2],
+    [size - 2, size - 2],
+  ];
+  const corners = cornerPoints
+    .filter(([x, y]) => data[(y * size + x) * 4 + 3] >= 128)
+    .map(([x, y]) => at(x, y));
+  const bg: RGB = corners.length
     ? {
-        r: Math.round(best.r / best.n),
-        g: Math.round(best.g / best.n),
-        b: Math.round(best.b / best.n),
+        r: Math.round(corners.reduce((sum, color) => sum + color.r, 0) / corners.length),
+        g: Math.round(corners.reduce((sum, color) => sum + color.g, 0) / corners.length),
+        b: Math.round(corners.reduce((sum, color) => sum + color.b, 0) / corners.length),
       }
-    : FALLBACK_ACCENT;
+    : WHITE;
 
-  return { bg, accent };
+  return { bg, accent: BRAND_BLUE };
 }
 
 function readCache(): Palette | null {

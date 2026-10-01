@@ -1,8 +1,10 @@
+// src/hooks/useSocialConnections.ts
 import { useCallback, useEffect, useState } from 'react';
 import { Browser } from '@capacitor/browser';
 import { App } from '@capacitor/app';
 
 import { apiGet, apiPost } from '../api';
+import { startWhatsAppPolling, checkPendingWhatsApp } from '../services/whatsappResume';
 
 /* =========================================================
    ENV
@@ -21,6 +23,8 @@ const WHATSAPP_CONNECT_WEB_URL =
 const WHATSAPP_APP_CALLBACK_SCHEME =
   (import.meta.env.VITE_WHATSAPP_APP_CALLBACK_SCHEME as string | undefined)?.trim() ||
   'aarnamarket://whatsapp-callback';
+
+const PENDING_KEY = 'pending_whatsapp_connect';
 
 /* =========================================================
    TYPES / CONSTANTS
@@ -51,7 +55,7 @@ export const isConnectable = (id: string): id is PlatformKey =>
   (CONNECTABLE_PLATFORMS as string[]).includes(id);
 
 // Generic multi-target shape — LinkedIn (personal/organization),
-// Facebook (page) aur Instagram (account) teeno isी shape ko follow karte hain.
+// Facebook (page) aur Instagram (account) teeno isi shape ko follow karte hain.
 export type ConnectionTarget = {
   type: 'personal' | 'organization' | 'page' | 'account';
   urn: string;
@@ -116,11 +120,22 @@ function parseTargetsResponse(response: unknown): { targets: ConnectionTarget[];
   const root = response && typeof response === 'object' ? (response as Record<string, any>) : {};
 
   const targets: ConnectionTarget[] = Array.isArray(root.targets)
-    ? root.targets.map((t: any): ConnectionTarget => ({
-        type: t?.type === 'organization' ? 'organization' : t?.type === 'page' ? 'page' : t?.type === 'account' ? 'account' : 'personal',
-        urn: String(t?.urn ?? ''),
-        name: String(t?.name ?? ''),
-      })).filter((t: ConnectionTarget) => t.urn.length > 0)
+    ? root.targets
+        .map(
+          (t: any): ConnectionTarget => ({
+            type:
+              t?.type === 'organization'
+                ? 'organization'
+                : t?.type === 'page'
+                ? 'page'
+                : t?.type === 'account'
+                ? 'account'
+                : 'personal',
+            urn: String(t?.urn ?? ''),
+            name: String(t?.name ?? ''),
+          })
+        )
+        .filter((t: ConnectionTarget) => t.urn.length > 0)
     : [];
 
   const selected: string[] = Array.isArray(root.selectedTargets)
@@ -162,6 +177,8 @@ export function useSocialConnections() {
       const isConnected = isConnectedResponse(response);
 
       const name =
+        response?.profile?.businessName ??
+        response?.profile?.phoneNumber ??
         response?.connection?.pageName ??
         response?.connection?.username ??
         response?.connection?.businessName ??
@@ -231,7 +248,7 @@ export function useSocialConnections() {
       throw new Error('WhatsApp session was not created by the server.');
     }
 
-    localStorage.setItem('pending_whatsapp_connect', JSON.stringify({ sessionId }));
+    localStorage.setItem(PENDING_KEY, JSON.stringify({ sessionId, startedAt: Date.now() }));
 
     const params = new URLSearchParams({
       session: sessionId,
@@ -240,6 +257,9 @@ export function useSocialConnections() {
     });
 
     await Browser.open({ url: `${WHATSAPP_CONNECT_WEB_URL}?${params.toString()}` });
+
+    // Ye zaroori hai — bina iske /whatsapp/claim kabhi call nahi hota
+    startWhatsAppPolling();
   }, []);
 
   /* ---------- connect ---------- */
@@ -305,7 +325,7 @@ export function useSocialConnections() {
       }
 
       if (platform === 'whatsapp') {
-        localStorage.removeItem('pending_whatsapp_connect');
+        localStorage.removeItem(PENDING_KEY);
       }
 
       setSuccess(`${LABELS[platform]} disconnected.`);
@@ -418,7 +438,7 @@ export function useSocialConnections() {
     [selectedLinkedinTargets]
   );
 
-  /* ---------- OAuth return ---------- */
+  /* ---------- OAuth return (facebook/instagram/google/linkedin...) ---------- */
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -451,53 +471,39 @@ export function useSocialConnections() {
     }
   }, [checkOne]);
 
-  /* ---------- WhatsApp deep-link ---------- */
+  /* ---------- WhatsApp claim result (whatsappResume service se) ---------- */
+
+  useEffect(() => {
+    const onLinked = () => {
+      void Browser.close().catch(() => {});
+      void checkOne('whatsapp');
+      setSuccess('WhatsApp connected successfully.');
+    };
+
+    const onFailed = (e: Event) => {
+      const message = (e as CustomEvent<{ message?: string }>).detail?.message;
+      setError(message || 'WhatsApp connection failed.');
+    };
+
+    window.addEventListener('whatsapp-linked', onLinked);
+    window.addEventListener('whatsapp-link-failed', onFailed);
+
+    return () => {
+      window.removeEventListener('whatsapp-linked', onLinked);
+      window.removeEventListener('whatsapp-link-failed', onFailed);
+    };
+  }, [checkOne]);
+
+  /* ---------- WhatsApp deep-link (callback scheme se app khule to turant claim check) ---------- */
 
   useEffect(() => {
     let active = true;
     let handle: { remove: () => Promise<void> | void } | null = null;
 
-    void App.addListener('appUrlOpen', async ({ url }) => {
-      try {
-        if (!url || !url.startsWith(WHATSAPP_APP_CALLBACK_SCHEME)) return;
-
-        const pendingRaw = localStorage.getItem('pending_whatsapp_connect');
-        if (!pendingRaw) return;
-
-        const pending = JSON.parse(pendingRaw);
-        if (pending.bannerId) return;
-
-        try {
-          await Browser.close();
-        } catch {}
-
-        const parsed = new URL(url);
-        const status = parsed.searchParams.get('status');
-        const sessionId = parsed.searchParams.get('session') ?? parsed.searchParams.get('sessionId');
-        const message = parsed.searchParams.get('message');
-
-        if (!sessionId || sessionId !== pending.sessionId) {
-          setError('WhatsApp callback session could not be verified.');
-          return;
-        }
-
-        if (status !== 'success') {
-          localStorage.removeItem('pending_whatsapp_connect');
-          setError(message || 'WhatsApp connection was cancelled or failed.');
-          return;
-        }
-
-        const sessionStatus = await apiGet(`/whatsapp/session/status?sessionId=${encodeURIComponent(sessionId)}`);
-
-        if (sessionStatus?.connected !== true) {
-          throw new Error(sessionStatus?.message || 'WhatsApp verification failed.');
-        }
-
-        localStorage.removeItem('pending_whatsapp_connect');
-        await checkOne('whatsapp');
-        setSuccess('WhatsApp connected successfully.');
-      } catch (err) {
-        setError(getErrorMessage(err));
+    void App.addListener('appUrlOpen', ({ url }) => {
+      if (url && url.startsWith(WHATSAPP_APP_CALLBACK_SCHEME)) {
+        void Browser.close().catch(() => {});
+        void checkPendingWhatsApp();
       }
     }).then((h) => {
       if (active) handle = h;
@@ -508,7 +514,7 @@ export function useSocialConnections() {
       active = false;
       if (handle) void handle.remove();
     };
-  }, [checkOne]);
+  }, []);
 
   /* ---------- derived ---------- */
 
