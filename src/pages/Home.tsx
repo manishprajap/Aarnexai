@@ -52,14 +52,9 @@ type PromptPlanItem = {
   prompt: string;
 };
 
-// How long a generated 30-day plan stays locked before the user can regenerate it.
-// This is computed from the server's real plan.startDate, not from anything
-// stored on the device, so it survives reinstalls and works across devices.
 const REGENERATE_LOCK_DAYS = 30;
 const REGENERATE_LOCK_MS = REGENERATE_LOCK_DAYS * 24 * 60 * 60 * 1000;
 
-// How long we wait for the "generate" request before giving up and showing
-// an error, so the UI can never get stuck on a blank/pending state forever.
 const GENERATE_WATCHDOG_MS = 95_000;
 
 const Home: React.FC = () => {
@@ -87,20 +82,21 @@ const Home: React.FC = () => {
   const listRef = useRef<HTMLDivElement>(null);
   const [promptMessageColor, setPromptMessageColor] = useState<'primary' | 'danger'>('primary');
 
-  // ms timestamp of when the current plan was generated, straight from the
-  // server (plan.startDate). null = no plan yet, so no lock.
   const [planStartAt, setPlanStartAt] = useState<number | null>(null);
 
-  // Safety timer so a hung/killed request can never leave the button stuck
-  // on "Generating…" or the screen looking frozen.
   const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const firstName = user?.name?.split(' ')[0] ?? 'there';
   const initial = (user?.name || user?.email || '?').charAt(0).toUpperCase();
 
-  // Business details saved in Business Setup (come from /auth/me)
-  const businessCategory = user?.category?.trim() || '';
-  const businessCity = user?.city?.trim() || '';
+  // Business category and industry come from /api/auth/me (mapped from the catalog tables).
+  // Fallbacks keep older cached user objects working.
+  const businessCategory = String(
+    user?.businessCategory ?? user?.category ?? user?.business_category ?? ''
+  ).trim();
+  const businessCategoryId: number | null = user?.businessCategoryId ?? user?.categoryId ?? null;
+  const industryName = String(user?.industry ?? '').trim();
+  const businessCity = String(user?.city ?? '').trim();
 
   const badgeText = businessCategory && businessCity
     ? `${businessCategory} · ${businessCity}`
@@ -175,7 +171,7 @@ const Home: React.FC = () => {
 
     try {
       const res = await generatePromptPlan({
-        categoryId: user?.categoryId ?? undefined,
+        categoryId: businessCategoryId ?? undefined,
         categoryName: businessCategory || undefined,
         businessName: user?.name || undefined,
       });
@@ -209,13 +205,13 @@ const Home: React.FC = () => {
 
   // Keep the localStorage cache (used by the Upload page) in sync with the server value.
   useEffect(() => {
-    if (user?.id && user.categoryId) {
+    if (user?.id && businessCategoryId) {
       saveBusinessCategory(user.id, {
-        categoryId: user.categoryId,
-        categoryName: user.category ?? null,
+        categoryId: businessCategoryId,
+        categoryName: businessCategory || null,
       });
     }
-  }, [user?.id, user?.categoryId, user?.category]);
+  }, [user?.id, businessCategoryId, businessCategory]);
 
   // Re-check live status every time Home becomes visible
   useIonViewWillEnter(() => {
@@ -342,7 +338,10 @@ const Home: React.FC = () => {
             <div className="dashboard-metrics">
               <div><strong>{connectedCount}</strong><span>Connected channels</span></div>
               <div><strong>{promptPlan.length || '—'}</strong><span>Daily AI prompts</span></div>
-              <div><strong>{businessCategory || 'Set up'}</strong><span>Business category</span></div>
+              <div>
+                <strong>{businessCategory || 'Set up'}</strong>
+                <span>{industryName || 'Business category'}</span>
+              </div>
             </div>
           </section>
 
