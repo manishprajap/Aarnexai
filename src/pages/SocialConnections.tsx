@@ -32,12 +32,6 @@ import {
 } from '../hooks/useSocialConnections';
 import './Home.css';
 
-// ---------------------------------------------------------------------------
-// Ionicons has no official "Google Analytics" or "YouTube Analytics" mark —
-// only a generic statsChartOutline icon exists in that package. Using inline
-// SVGs here instead gives each row a real, recognizable, brand-colored icon.
-// Swap the paths below for your own licensed brand assets if you have them.
-// ---------------------------------------------------------------------------
 
 const GoogleAnalyticsIcon: React.FC = () => (
   <svg viewBox="0 0 24 24" width="20" height="20" fill="none" aria-hidden="true">
@@ -58,8 +52,12 @@ type Social = {
   id: string;
   name: string;
   note: string;
+
+
+
+  
   icon?: string; // ionicon name, used when no custom SVG is provided
-  Custom?: React.FC; // inline SVG component, takes priority over `icon`
+  Custom?: React.FC; 
 };
 
 const SOCIALS: Social[] = [
