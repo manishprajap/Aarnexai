@@ -41,8 +41,8 @@ import aarnaLogo from './assets/aarna-logo.png';
 import './splash.css';
 import Home from './pages/Home';
 import Posters from './pages/Posters';
-import Onboarding from './pages/Onboarding ';
 import WhatsAppWorkspace from './pages/WhatsAppWorkspace';
+import { startWhatsAppResumeWatcher } from './services/whatsappResume';
 
 setupIonicReact();
 
@@ -82,22 +82,6 @@ const App: React.FC = () => {
               }
             />
 
-          {/* Business details form - shown when hasBusiness is false */}
-          <Route
-            path="/business-setup"
-            element={
-              <RequireAuth>
-                <BusinessSetup />
-              </RequireAuth>
-            }
-          />      <Route
-            path="/onboarding"
-            element={
-              
-                <Onboarding />
-            
-            }
-          />
             {/* Business details form - shown when hasBusiness is false */}
             <Route
               path="/business-setup"
@@ -268,7 +252,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-
-function startWhatsAppResumeWatcher() {
-  throw new Error('Function not implemented.');
-}
