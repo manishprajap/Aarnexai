@@ -54,6 +54,25 @@ interface BannerItem {
   createdAt: string;
 }
 
+// Response shapes. apiGet/apiPost return `{}` by default, so every call
+// site that reads fields off the result asserts one of these.
+interface BannersResponse {
+  banners?: BannerItem[];
+}
+
+interface ConnectStartResponse {
+  success?: boolean;
+  message?: string;
+  redirectUrl?: string;
+  authUrl?: string;
+  url?: string;
+}
+
+interface SimpleResponse {
+  success?: boolean;
+  message?: string;
+}
+
 const brand = {
   navy: '#0F2A4A',
   blue: '#1E7FE0',
@@ -82,10 +101,6 @@ type PlatformKey =
   | 'youtube'
   | 'linkedin';
 
-// Generic multi-target shape, shared by LinkedIn (personal profile /
-// company page), Facebook (Page) and Instagram (business account).
-// `type` just decides which icon/label to show — the urn/name fields
-// are what actually get sent to the backend.
 interface LinkedInTarget {
   type: 'personal' | 'organization' | 'page' | 'account';
   urn: string; // e.g. 'personal', an org urn, a Facebook pageId, or an IG userId
@@ -252,10 +267,6 @@ function getConnectionName(
   return typeof name === 'string' && name.trim() ? name.trim() : null;
 }
 
-// Generic parser for the `targets` / `selectedTargets` shape that
-// /linkedin/status, /facebook/status and /instagram/status all return.
-// (`targets`: every postable target for that platform, `selectedTargets`:
-// what's currently chosen — see the status routes / useSocialConnections.ts).
 function getConnectionTargets(response: unknown): {
   targets: LinkedInTarget[];
   selected: string[];
@@ -298,14 +309,8 @@ function getConnectionTargets(response: unknown): {
   return { targets, selected };
 }
 
-// Backward-compat alias — same function, old name kept in case anything
-// else in the codebase still imports/refers to getLinkedInTargets.
 const getLinkedInTargets = getConnectionTargets;
 
-// Pull a public Facebook Page post URL out of the /banners/publish
-// response, whatever shape the backend happened to return it in. Tries a
-// few plausible locations before falling back to building the URL from a
-// pageId + postId pair (Graph API's post id comes back as "{pageId}_{postId}").
 function extractFacebookPostUrl(response: unknown): string | null {
   const root =
     response && typeof response === 'object'
@@ -334,10 +339,6 @@ function extractFacebookPostUrl(response: unknown): string | null {
   return null;
 }
 
-// Opens Facebook's native share dialog for a Page post, letting the user
-// manually share that post to their own personal profile. This never
-// auto-posts anything — it just opens the popup; the user still has to
-// click "Share to Profile" themselves inside it.
 function shareFacebookPagePost(postUrl: string) {
   const shareUrl =
     `https://www.facebook.com/dialog/share?` +
@@ -361,28 +362,18 @@ async function publishBanner(
     response = await apiPost('/banners/publish', {
       bannerId,
       platforms,
-      // Matches PublishBody.linkedinOwnerUrns in
-      // src/app/api/banners/publish/route.ts — must be real
-      // urn:li:person:*/urn:li:organization:* strings, not the literal
-      // 'personal'. Only relevant when 'linkedin' is selected; if omitted,
-      // the backend falls back to the connected member's personal profile.
       ...(platforms.includes('linkedin') && linkedinOwnerUrns?.length
         ? { linkedinOwnerUrns }
         : {}),
-      // Real Facebook Page IDs. Only relevant when 'facebook' is selected;
-      // if omitted, backend should fall back to every active connected Page.
       ...(platforms.includes('facebook') && facebookPageIds?.length
         ? { facebookPageIds }
         : {}),
-      // Real Instagram business-account IDs (instagramUserId). Only
-      // relevant when 'instagram' is selected; if omitted, backend should
-      // fall back to every active connected IG account.
       ...(platforms.includes('instagram') && instagramAccountIds?.length
         ? { instagramAccountIds }
         : {}),
     });
   } catch (error: any) {
-    const results = error?.results;
+    const results = error?.data?.results ?? error?.results;
     const platformDetails = platforms
       .map((platform) => results?.[platform]?.message)
       .filter(Boolean);
@@ -430,13 +421,8 @@ const Posters: React.FC = () => {
   const [selectedPlatforms, setSelectedPlatforms] = useState<PlatformKey[]>([]);
   const [posting, setPosting] = useState(false);
 
-  // Set right after a Facebook Page post succeeds, so we can offer the
-  // optional "Share to Personal Profile" popup. Cleared once the user
-  // dismisses it or opens the share dialog.
   const [facebookShareUrl, setFacebookShareUrl] = useState<string | null>(null);
 
-  // Connection status + username, keyed by platform. Built dynamically from
-  // PLATFORMS so adding/removing a platform never leaves a stale key.
   const [connectionStatus, setConnectionStatus] = useState<
     Record<PlatformKey, boolean>
   >(buildInitialStatus);
@@ -488,7 +474,7 @@ const Posters: React.FC = () => {
         setLoading(true);
 
         const [bannerRes] = await Promise.all([
-          apiGet('/banners'),
+          apiGet('/banners') as Promise<BannersResponse>,
           checkAllConnections(),
         ]);
 
@@ -567,10 +553,10 @@ const Posters: React.FC = () => {
     bannerId: number | undefined,
     platforms: PlatformKey[]
   ): Promise<string> => {
-    const res = await apiPost(PLATFORM_BY_KEY[platform].connectEndpoint, {
+    const res = (await apiPost(PLATFORM_BY_KEY[platform].connectEndpoint, {
       ...(bannerId ? { bannerId } : {}),
       platforms,
-    });
+    })) as ConnectStartResponse;
 
     if (res?.success === false) {
       throw new Error(
@@ -682,11 +668,11 @@ const Posters: React.FC = () => {
   // Connect WhatsApp and immediately publish a specific banner to it.
   const connectWhatsAppAndPost = (bannerId: number): Promise<void> =>
     runWhatsAppEmbeddedSignup(async (code, waba) => {
-      const connectRes = await apiPost('/whatsapp/connect', {
+      const connectRes = (await apiPost('/whatsapp/connect', {
         code,
         wabaId: waba.wabaId,
         phoneNumberId: waba.phoneNumberId,
-      });
+      })) as SimpleResponse;
 
       if (!connectRes?.success) {
         throw new Error(connectRes?.message || 'WhatsApp connect failed');
@@ -758,24 +744,6 @@ const Posters: React.FC = () => {
     );
   };
 
-  /* =========================================================
-     OAUTH CALLBACK HANDLING
-     (Facebook / Instagram / Google Business / YouTube / LinkedIn)
-
-     WhatsApp never redirects the browser, so it never hits
-     this handler — its whole flow (popup -> connect -> publish)
-     resolves in memory inside connectWhatsApp* above.
-
-     Backend should redirect back with a query param named
-     after the platform, e.g.:
-       ?instagram=connected
-       ?facebook=connected
-       ?google_business=connected
-       ?youtube=connected
-       ?linkedin=connected
-     with possible values: connected, cancelled, no_account,
-     error, invalid_state, expired.
-  ========================================================= */
   useEffect(() => {
     const handleOAuthCallback = async () => {
       const params = new URLSearchParams(window.location.search);
@@ -808,11 +776,6 @@ const Posters: React.FC = () => {
           try {
             const data = JSON.parse(pending);
             const pendingPlatforms: PlatformKey[] = data.platforms;
-
-            // Saved alongside platforms when the connect chain started —
-            // see handleConnectAndPost below. Real urn:li:person:*/
-            // urn:li:organization:* strings. Falls back to whatever the
-            // account's LinkedIn status just reported as selected.
             const pendingLinkedinOwnerUrns: string[] | undefined =
               data.linkedinOwnerUrns;
 
@@ -831,9 +794,6 @@ const Posters: React.FC = () => {
             }
 
             if (stillNeeded.length > 0) {
-              // Continue the connect chain with the next platform.
-              // (WhatsApp can't appear here — it's handled separately
-              // and never added to a pending redirect chain.)
               localStorage.setItem(
                 'pending_banner_publish',
                 JSON.stringify({
