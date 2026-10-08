@@ -44,6 +44,7 @@ import Posters from './pages/Posters';
 import WhatsAppWorkspace from './pages/WhatsAppWorkspace';
 import { startWhatsAppResumeWatcher } from './services/whatsappResume';
 import Onboarding from './pages/Onboarding ';
+import Uploadnew from './pages/Uploadnew';
 
 setupIonicReact();
 
@@ -145,6 +146,14 @@ const App: React.FC = () => {
               element={
                 <RequireAuth>
                   <Upload />
+                </RequireAuth>
+              }
+            />
+               <Route
+              path="/uploadnew"
+              element={
+                <RequireAuth>
+                  <Uploadnew />
                 </RequireAuth>
               }
             />

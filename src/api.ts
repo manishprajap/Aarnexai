@@ -1,6 +1,11 @@
 // src/api.ts
 
-const BASE_URL = 'https://aarnexai.com/aarnexai-backend/api';
+const BASE_URL = (
+  import.meta.env.VITE_API_BASE_URL || 'https://aarnexai.com/aarnexai-backend/api'
+).replace(/\/+$/, '');
+const SERVER_API_BASE_URL = (
+  import.meta.env.VITE_SERVER_API_BASE_URL || BASE_URL
+).replace(/\/+$/, '');
 
 /* -------------------------------------------------------------------------- */
 /* Token                                                                      */
@@ -93,14 +98,15 @@ type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 async function request<T>(
   method: HttpMethod,
   endpoint: string,
-  data?: unknown
+  data?: unknown,
+  baseUrl = BASE_URL,
 ): Promise<T> {
   const token = getToken();
 
   const hasBody = data !== undefined;
   const isFormData = typeof FormData !== 'undefined' && data instanceof FormData;
 
-  const response = await fetch(`${BASE_URL}${endpoint}`, {
+  const response = await fetch(`${baseUrl}${endpoint}`, {
     method,
 
     headers: {
@@ -146,3 +152,9 @@ export const apiPut = <T = any>(endpoint: string, data?: unknown): Promise<T> =>
 
 export const apiDelete = <T = any>(endpoint: string): Promise<T> =>
   request<T>('DELETE', endpoint);
+
+export const serverApiGet = <T = any>(endpoint: string): Promise<T> =>
+  request<T>('GET', endpoint, undefined, SERVER_API_BASE_URL);
+
+export const serverApiPost = <T = any>(endpoint: string, data?: unknown): Promise<T> =>
+  request<T>('POST', endpoint, data, SERVER_API_BASE_URL);
