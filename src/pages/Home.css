@@ -807,6 +807,27 @@ ion-modal.connect-sheet ion-content.cs-content {
   padding: 15px 14px;
 }
 
+.youtube-channel-choice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.youtube-channel-choice select {
+  min-width: min(220px, 100%);
+  max-width: 100%;
+  min-height: 38px;
+  padding: 0 10px;
+  border: 1px solid #d6e0eb;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #18324c;
+  font: inherit;
+  font-size: 13px;
+}
+
 .social-refresh {
   --border-color: var(--edge-strong);
   --color: var(--on-bg);
@@ -1213,6 +1234,34 @@ ion-modal.connect-sheet ion-content.cs-content {
 
 .overview-card .overview-link {
   color: #0876d7;
+}
+
+.subscription-expiry-alert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 14px 0;
+  padding: 14px 16px;
+  border: 1px solid #f3d08b;
+  border-radius: 14px;
+  background: #fff9e9;
+  color: #704c07;
+}
+
+.subscription-expiry-alert strong {
+  font-size: 14px;
+}
+
+.subscription-expiry-alert p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.subscription-expiry-alert ion-button {
+  flex: none;
+  --border-radius: 10px;
 }
 
 .empty-card {

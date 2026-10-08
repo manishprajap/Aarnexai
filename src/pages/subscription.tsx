@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   IonPage,
@@ -14,8 +14,8 @@ import {
   IonButtons,
   IonBackButton,
 } from '@ionic/react';
-import { checkmarkCircle, starOutline } from 'ionicons/icons';
-import { apiPost } from '../api';
+import { checkmarkCircle } from 'ionicons/icons';
+import { apiGet, apiPost } from '../api';
 import { useAuth } from '../context/AuthContext';
 
 // Razorpay Checkout is loaded from their CDN script (see loadRazorpayScript
@@ -54,65 +54,14 @@ const brand = {
   pageBgTo: '#F3FBF4',
 };
 
-// ==================================================
-// PLAN DEFINITIONS
-// Assumed names/poster counts — adjust to match your real `plans` table rows.
-// planKey should match whatever identifier your /subscription/create-order
-// endpoint expects — here it's the numeric `plans.id`, so keep this in sync
-// with the actual row ids in your database.
-// ==================================================
-
 interface Plan {
-  planId: number;
+  id: number;
   name: string;
   price: number;
   posters: number;
+  durationDays: number;
   features: string[];
-  highlighted?: boolean;
 }
-
-const PLANS: Plan[] = [
-  {
-    planId: 1,
-    name: 'Starter',
-    price: 599,
-    posters: 15,
-    features: [
-      '15 AI ad banners / month',
-      '1 business profile',
-      'Standard image quality',
-      'Email support',
-    ],
-  },
-  {
-    planId: 2,
-    name: 'Growth',
-    price: 1199,
-    posters: 40,
-    features: [
-      '40 AI ad banners / month',
-      '1 business profile',
-      'HD image quality',
-      'Priority email support',
-      'Caption & hashtag suggestions',
-    ],
-    highlighted: true,
-  },
-  {
-    planId: 3,
-    name: 'Pro',
-    price: 1999,
-    posters: 100,
-    features: [
-      '100 AI ad banners / month',
-      'Up to 3 business profiles',
-      'HD image quality',
-      'Priority chat support',
-      'Caption & hashtag suggestions',
-      'Early access to new features',
-    ],
-  },
-];
 
 const Subscription: React.FC = () => {
   const navigate = useNavigate();
@@ -120,9 +69,47 @@ const Subscription: React.FC = () => {
 
   const [loadingPlan, setLoadingPlan] = useState<number | null>(null);
   const [error, setError] = useState('');
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [loadingPlans, setLoadingPlans] = useState(true);
+  const [couponCode, setCouponCode] = useState('');
+  const [couponMessage, setCouponMessage] = useState('');
+  const [appliedCoupons, setAppliedCoupons] = useState<Record<number, { discountAmount: number; payableAmount: number }>>({});
+
+  useEffect(() => {
+    let active = true;
+    void apiGet<{ success: boolean; plans: Plan[] }>('/subscription/plans')
+      .then((response) => {
+        if (active) setPlans(response.plans || []);
+      })
+      .catch((loadError) => {
+        if (active) setError(loadError instanceof Error ? loadError.message : 'Could not load plans.');
+      })
+      .finally(() => {
+        if (active) setLoadingPlans(false);
+      });
+    return () => { active = false; };
+  }, []);
+
+  const applyCoupon = async (plan: Plan) => {
+    setCouponMessage('');
+    setAppliedCoupons({});
+    try {
+      const result = await apiPost<{
+        success: boolean;
+        message?: string;
+        discountAmount: number;
+        payableAmount: number;
+      }>('/subscription/coupons/validate', { planId: plan.id, code: couponCode });
+      if (!result.success) throw new Error(result.message || 'Coupon could not be applied.');
+      setAppliedCoupons({ [plan.id]: result });
+      setCouponMessage(`Coupon applied to ${plan.name}. Save ₹${(result.discountAmount / 100).toFixed(2)}.`);
+    } catch (couponError) {
+      setCouponMessage(couponError instanceof Error ? couponError.message : 'Coupon could not be applied.');
+    }
+  };
 
   const handleChoosePlan = async (plan: Plan) => {
-    setLoadingPlan(plan.planId);
+    setLoadingPlan(plan.id);
     setError('');
 
     try {
@@ -135,7 +122,8 @@ const Subscription: React.FC = () => {
 
       // Step 1: create the order server-side.
       const order = await apiPost('/subscription/create-order', {
-        planId: plan.planId,
+        planId: plan.id,
+        ...(appliedCoupons[plan.id] ? { couponCode: couponCode.trim() } : {}),
       });
 
       // Step 2: open Razorpay Checkout with that order.
@@ -261,45 +249,24 @@ const Subscription: React.FC = () => {
               gap: 18,
             }}
           >
-            {PLANS.map((plan) => (
+            {loadingPlans && <p style={{ textAlign: 'center', color: brand.ink }}>Loading plans…</p>}
+            {!loadingPlans && plans.length === 0 && (
+              <p style={{ textAlign: 'center', color: brand.ink }}>No subscription plans are currently available.</p>
+            )}
+            {plans.map((plan) => {
+              const appliedCoupon = appliedCoupons[plan.id];
+              return (
               <div
-                key={plan.planId}
+                key={plan.id}
                 style={{
                   position: 'relative',
                   background: brand.cardBg,
                   borderRadius: 20,
                   padding: '24px 20px',
-                  border: plan.highlighted
-                    ? `2px solid ${brand.blue}`
-                    : `1px solid ${brand.border}`,
-                  boxShadow: plan.highlighted
-                    ? '0 18px 40px rgba(30,127,224,0.18)'
-                    : '0 10px 28px rgba(15,42,74,0.08)',
+                  border: `1px solid ${brand.border}`,
+                  boxShadow: '0 10px 28px rgba(15,42,74,0.08)',
                 }}
               >
-                {plan.highlighted && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: -12,
-                      left: 20,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      background: `linear-gradient(90deg, ${brand.blue}, ${brand.teal})`,
-                      color: '#FFFFFF',
-                      fontSize: 11,
-                      fontWeight: 700,
-                      padding: '5px 12px',
-                      borderRadius: 999,
-                      letterSpacing: 0.4,
-                    }}
-                  >
-                    <IonIcon icon={starOutline} style={{ fontSize: 12 }} />
-                    MOST POPULAR
-                  </div>
-                )}
-
                 <div
                   style={{
                     display: 'flex',
@@ -334,9 +301,37 @@ const Subscription: React.FC = () => {
 
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 16 }}>
                   <span style={{ fontSize: 30, fontWeight: 800, color: brand.navy }}>
-                    ₹{plan.price}
+                    {appliedCoupon
+                      ? `₹${(appliedCoupon.payableAmount / 100).toFixed(2)}`
+                      : `₹${plan.price}`}
                   </span>
-                  <span style={{ fontSize: 13, color: brand.ink }}>/ month</span>
+                  <span style={{ fontSize: 13, color: brand.ink }}>/{plan.durationDays} days</span>
+                </div>
+
+                {appliedCoupon && (
+                  <p style={{ marginTop: -10, color: brand.teal, fontSize: 12 }}>
+                    Coupon discount: ₹{(appliedCoupon.discountAmount / 100).toFixed(2)}
+                  </p>
+                )}
+                <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                  <input
+                    value={couponCode}
+                    onChange={(event) => {
+                      setCouponCode(event.target.value.toUpperCase());
+                      setAppliedCoupons({});
+                      setCouponMessage('');
+                    }}
+                    placeholder="Discount coupon"
+                    aria-label="Discount coupon code"
+                    style={{ minWidth: 0, flex: 1, border: `1px solid ${brand.border}`, borderRadius: 9, padding: '9px 10px' }}
+                  />
+                  <IonButton
+                    fill="outline"
+                    onClick={() => void applyCoupon(plan)}
+                    disabled={!couponCode.trim() || loadingPlan !== null}
+                  >
+                    Apply
+                  </IonButton>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
@@ -362,9 +357,7 @@ const Subscription: React.FC = () => {
                   onClick={() => handleChoosePlan(plan)}
                   style={
                     {
-                      '--background': plan.highlighted
-                        ? `linear-gradient(90deg, ${brand.blue}, ${brand.teal})`
-                        : brand.navy,
+                      '--background': brand.navy,
                       '--border-radius': '12px',
                       '--box-shadow': 'none',
                       fontWeight: 700,
@@ -375,8 +368,13 @@ const Subscription: React.FC = () => {
                   Choose {plan.name}
                 </IonButton>
               </div>
-            ))}
+            );})}
           </div>
+          {couponMessage && (
+            <p role="status" style={{ textAlign: 'center', color: brand.teal, fontSize: 12 }}>
+              {couponMessage}
+            </p>
+          )}
 
           <p
             style={{
@@ -386,7 +384,7 @@ const Subscription: React.FC = () => {
               marginTop: 22,
             }}
           >
-            All plans are billed monthly. You can cancel anytime from Settings.
+            Plan access lasts for the duration shown above. Choose a plan to upgrade or renew.
           </p>
         </div>
 

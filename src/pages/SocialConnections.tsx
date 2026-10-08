@@ -93,6 +93,11 @@ const SocialConnections: React.FC = () => {
     refresh,
     connect,
     disconnect,
+    youtubeChannels,
+    youtubeNeedsSelection,
+    selectedYoutubeChannelId,
+    setSelectedYoutubeChannelId,
+    saveYoutubeChannelSelection,
   } =
     useSocialConnections();
   const [disconnectingPlatform, setDisconnectingPlatform] = useState<PlatformKey | null>(null);
@@ -153,6 +158,7 @@ const SocialConnections: React.FC = () => {
               const isConnected = platform ? connected[platform] : false;
               const isBusy = platform ? busy === platform : false;
               const accountName = platform ? usernames[platform] : null;
+              const needsYoutubeChoice = social.id === 'youtube' && youtubeNeedsSelection;
 
               return (
                 <li key={social.id} className="cs-row">
@@ -162,15 +168,42 @@ const SocialConnections: React.FC = () => {
                   <div className="cs-info">
                     <h4>{social.name}</h4>
                     <p className={isConnected ? 'is-ok' : ''}>
-                      {isConnected ? accountName ? `Connected as ${accountName}` : 'Connected' : social.note}
+                      {needsYoutubeChoice
+                        ? 'Choose a channel to finish connecting'
+                        : isConnected
+                          ? accountName ? `Connected as ${accountName}` : 'Connected'
+                          : social.note}
                     </p>
+                    {needsYoutubeChoice && (
+                      <div className="youtube-channel-choice">
+                        <select
+                          value={selectedYoutubeChannelId}
+                          onChange={(event) => setSelectedYoutubeChannelId(event.target.value)}
+                          aria-label="Choose a YouTube channel"
+                        >
+                          <option value="">Select a channel</option>
+                          {youtubeChannels.map((channel) => (
+                            <option key={channel.id} value={channel.id}>
+                              {channel.title}{channel.customUrl ? ` (${channel.customUrl})` : ''}
+                            </option>
+                          ))}
+                        </select>
+                        <IonButton
+                          size="small"
+                          onClick={() => void saveYoutubeChannelSelection()}
+                          disabled={!selectedYoutubeChannelId || busy !== null}
+                        >
+                          {isBusy ? <IonSpinner name="crescent" /> : 'Use channel'}
+                        </IonButton>
+                      </div>
+                    )}
                   </div>
                   {platform ? (
                     <div className="cs-actions">
                       <button
                         type="button"
                         className={`cs-btn cs-action-icon ${isConnected ? 'is-connected' : ''}`}
-                        disabled={isConnected || busy !== null}
+                        disabled={isConnected || needsYoutubeChoice || busy !== null}
                         onClick={() => void connect(platform)}
                         aria-label={isConnected ? `${social.name} connected` : `Connect ${social.name}`}
                         title={isConnected ? `${social.name} connected` : `Connect ${social.name}`}

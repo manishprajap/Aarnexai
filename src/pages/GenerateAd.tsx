@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 import {
   IonContent,
@@ -48,6 +48,7 @@ const PLATFORMS = [
 
 const GenerateAd: React.FC = () => {
  const { productId } = useParams<{ productId: string }>();
+ const navigate = useNavigate();
 
   const [suggestions, setSuggestions] = useState<Suggestion[] | null>(null);
   const [loadingSuggestions, setLoadingSuggestions] = useState(true);
@@ -67,6 +68,7 @@ const GenerateAd: React.FC = () => {
 
   const [toastMessage, setToastMessage] = useState('');
   const [showToast, setShowToast] = useState(false);
+  const [limitReached, setLimitReached] = useState(false);
 
   const showMessage = (msg: string) => {
     setToastMessage(msg);
@@ -131,6 +133,7 @@ const handleGenerate = async () => {
   try {
     setGenerating(true);
     setResult(null);
+    setLimitReached(false);
 
     const form = new FormData();
 
@@ -166,9 +169,15 @@ const handleGenerate = async () => {
       form.append('logo', logoFile);
     }
 
+    const token =
+      localStorage.getItem('token') ||
+      localStorage.getItem('auth_token') ||
+      localStorage.getItem('delivery_token') ||
+      localStorage.getItem('access_token');
     const res = await axios.post(
       `${API_URL}/api/products/generate-ad`,
-      form
+      form,
+      { headers: token ? { Authorization: `Bearer ${token}` } : {} }
     );
 
     if (!res.data?.success) {
@@ -180,6 +189,11 @@ const handleGenerate = async () => {
     setResult(res.data.creative);
     showMessage('Ad generated!');
   } catch (err: any) {
+    const errorCode = err?.response?.data?.code;
+    setLimitReached(
+      errorCode === 'BANNER_LIMIT_REACHED' ||
+      errorCode === 'SUBSCRIPTION_REQUIRED'
+    );
     showMessage(
       err?.response?.data?.message ||
         err?.message ||
@@ -283,6 +297,16 @@ const handleGenerate = async () => {
                 {generating ? <IonSpinner slot="start" name="crescent" /> : null}
                 {generating ? 'Generating...' : 'Generate Ad'}
               </IonButton>
+              {limitReached && (
+                <IonButton
+                  expand="block"
+                  fill="outline"
+                  className="mt-3"
+                  onClick={() => navigate('/subscription')}
+                >
+                  View plans and upgrade
+                </IonButton>
+              )}
 
               {result && (
                 <div className="mt-6 rounded-2xl bg-white p-4 shadow-sm">

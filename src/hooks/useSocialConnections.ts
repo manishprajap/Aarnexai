@@ -62,6 +62,13 @@ export type ConnectionTarget = {
   name: string;
 };
 
+export type YouTubeChannel = {
+  id: string;
+  title: string;
+  customUrl: string | null;
+  thumbnailUrl: string | null;
+};
+
 // Purana naam alias ke taur par rakha, kahin aur import ho raha ho to na tute.
 export type LinkedInTarget = ConnectionTarget;
 
@@ -169,6 +176,11 @@ export function useSocialConnections() {
   const [instagramTargets, setInstagramTargets] = useState<ConnectionTarget[]>([]);
   const [selectedInstagramTargets, setSelectedInstagramTargets] = useState<string[]>([]);
 
+  /* ---------- YOUTUBE ---------- */
+  const [youtubeChannels, setYoutubeChannels] = useState<YouTubeChannel[]>([]);
+  const [youtubeNeedsSelection, setYoutubeNeedsSelection] = useState(false);
+  const [selectedYoutubeChannelId, setSelectedYoutubeChannelId] = useState('');
+
   /* ---------- status ---------- */
 
   const checkOne = useCallback(async (platform: PlatformKey): Promise<boolean> => {
@@ -180,6 +192,7 @@ export function useSocialConnections() {
         response?.profile?.businessName ??
         response?.profile?.phoneNumber ??
         response?.connection?.pageName ??
+        response?.connection?.accountName ??
         response?.connection?.username ??
         response?.connection?.businessName ??
         response?.connection?.phoneNumber ??
@@ -213,6 +226,16 @@ export function useSocialConnections() {
         const { targets, selected } = parseTargetsResponse(response);
         setInstagramTargets(targets);
         setSelectedInstagramTargets(selected);
+      }
+
+      if (platform === 'youtube') {
+        setYoutubeChannels(Array.isArray(response?.channels) ? response.channels : []);
+        setYoutubeNeedsSelection(response?.needsChannelSelection === true);
+        setSelectedYoutubeChannelId(
+          typeof response?.connection?.channelId === 'string'
+            ? response.connection.channelId
+            : ''
+        );
       }
 
       return isConnected;
@@ -328,6 +351,11 @@ export function useSocialConnections() {
         setInstagramTargets([]);
         setSelectedInstagramTargets([]);
       }
+      if (platform === 'youtube') {
+        setYoutubeChannels([]);
+        setYoutubeNeedsSelection(false);
+        setSelectedYoutubeChannelId('');
+      }
 
       if (platform === 'whatsapp') {
         localStorage.removeItem(PENDING_KEY);
@@ -341,6 +369,32 @@ export function useSocialConnections() {
       setBusy(null);
     }
   }, []);
+
+  const saveYoutubeChannelSelection = useCallback(async () => {
+    if (!selectedYoutubeChannelId) {
+      setError('Select a YouTube channel first.');
+      return;
+    }
+
+    setError(null);
+    setBusy('youtube');
+    try {
+      const response = await apiPost('/youtube/select-channel', {
+        channelId: selectedYoutubeChannelId,
+      });
+      if (!response?.success) {
+        throw new Error(response?.message || 'Could not save the YouTube channel selection.');
+      }
+
+      await checkOne('youtube');
+      setSuccess('YouTube channel connected successfully.');
+    } catch (err) {
+      console.error('Failed to save YouTube channel selection:', err);
+      setError(getErrorMessage(err));
+    } finally {
+      setBusy(null);
+    }
+  }, [checkOne, selectedYoutubeChannelId]);
 
   /* ---------- generic target-selection saver (linkedin/facebook/instagram) ---------- */
 
@@ -461,16 +515,27 @@ export function useSocialConnections() {
     if (status === 'connected') {
       setSuccess(`${label} connected successfully.`);
       void checkOne(platform);
+    } else if (platform === 'youtube' && status === 'select') {
+      setSuccess('Choose the YouTube channel you want to connect.');
+      void checkOne('youtube');
     } else if (status === 'cancelled') {
       setError(`${label} connection was cancelled.`);
     } else if (status === 'no_account') {
-      setError(`No eligible ${label} account/page was found.`);
+      setError(
+        platform === 'youtube'
+          ? 'No YouTube channel was found for the selected Google account.'
+          : `No eligible ${label} account/page was found.`
+      );
     } else if (status === 'invalid_state') {
       setError('OAuth security state is invalid. Please try connecting again.');
     } else if (status === 'expired') {
       setError('The OAuth session expired. Please try connecting again.');
     } else if (status === 'error') {
-      setError(`${label} connection failed.`);
+      setError(
+        platform === 'youtube' && params.get('message') === 'channel_lookup_failed'
+          ? 'Could not load your YouTube channels. Check that YouTube Data API v3 is enabled, then reconnect.'
+          : `${label} connection failed.`
+      );
     } else {
       setError(`${label} returned an unexpected callback status.`);
     }
@@ -555,6 +620,11 @@ export function useSocialConnections() {
     refresh,
     connect,
     disconnect,
+    youtubeChannels,
+    youtubeNeedsSelection,
+    selectedYoutubeChannelId,
+    setSelectedYoutubeChannelId,
+    saveYoutubeChannelSelection,
 
     /* LINKEDIN */
     linkedinTargets,

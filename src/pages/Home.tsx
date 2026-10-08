@@ -43,6 +43,7 @@ import { useSocialConnections } from '../hooks/useSocialConnections';
 import { useLogoTheme } from '../hooks/useLogoTheme';
 import BottomTabBar from '../components/BottomTabBar';
 import { clearBusinessCategory, saveBusinessCategory } from '../utils/businessCategory';
+import { apiGet } from '../api';
 
 import {
   fetchPromptPlan,
@@ -56,6 +57,12 @@ type PromptPlanItem = {
   theme?: string | null;
   prompt: string;
 };
+
+type SubscriptionReminder = {
+  planName: string;
+  daysRemaining: number;
+  endDate: string;
+} | null;
 
 const GENERATE_WATCHDOG_MS = 95_000;
 
@@ -85,6 +92,7 @@ const Home: React.FC = () => {
   const [promptMessageColor, setPromptMessageColor] = useState<'primary' | 'danger'>('primary');
 
   const [planStartDate, setPlanStartDate] = useState<string | null>(null);
+  const [subscriptionReminder, setSubscriptionReminder] = useState<SubscriptionReminder>(null);
   const [currentTime, setCurrentTime] = useState(Date.now());
 
   const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -143,6 +151,20 @@ const Home: React.FC = () => {
       setPromptMessage(err?.message || err?.error || 'Could not load your saved plan from the server.');
     } finally {
       setLoadingPlan(false);
+    }
+  };
+
+  const loadSubscriptionReminder = async () => {
+    try {
+      const response = await apiGet<{ subscription?: SubscriptionReminder }>('/auth/me');
+      const subscription = response.subscription;
+      setSubscriptionReminder(
+        subscription && subscription.daysRemaining <= 7
+          ? subscription
+          : null
+      );
+    } catch (error) {
+      console.error('Could not load subscription expiry reminder:', error);
     }
   };
 
@@ -225,6 +247,7 @@ const Home: React.FC = () => {
   useIonViewWillEnter(() => {
     void refresh();
     void loadPlan();
+    void loadSubscriptionReminder();
   });
 
   const handleLogout = () => {
@@ -354,6 +377,25 @@ const Home: React.FC = () => {
               </div>
             </div>
           </section>
+
+          {subscriptionReminder && (
+            <section className="subscription-expiry-alert" role="status">
+              <div>
+                <strong>
+                  {subscriptionReminder.daysRemaining <= 4
+                    ? 'Your plan is about to expire'
+                    : 'Your plan expires soon'}
+                </strong>
+                <p>
+                  {subscriptionReminder.planName} expires in {subscriptionReminder.daysRemaining} day
+                  {subscriptionReminder.daysRemaining === 1 ? '' : 's'}. Upgrade now to keep generating banners and publishing posts.
+                </p>
+              </div>
+              <IonButton size="small" onClick={() => ionRouter.push('/subscription', 'forward')}>
+                Upgrade plan
+              </IonButton>
+            </section>
+          )}
 
           {/* Quick actions grid */}
           <div className="dashboard-section-heading">
