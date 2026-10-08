@@ -13,6 +13,8 @@ import {
   IonModal,
   IonPage,
   IonSpinner,
+  IonSelect,
+  IonSelectOption,
   IonToast,
   IonToolbar,
 } from '@ionic/react';
@@ -180,6 +182,76 @@ const extractBannerId = (res: any): string | number | null => {
   }
 
   return null;
+};
+
+const extractMarketingPrompts = (response: unknown): string[] => {
+  if (
+    response &&
+    typeof response === 'object' &&
+    'success' in response &&
+    (response as { success?: boolean }).success === false
+  ) {
+    const message = (response as { message?: unknown; error?: unknown }).message ??
+      (response as { error?: unknown }).error;
+    throw new Error(typeof message === 'string' ? message : 'Unable to load saved prompts.');
+  }
+
+  const promptKeys = [
+    'prompt',
+    'customPrompt',
+    'custom_prompt',
+    'caption',
+    'description',
+    'content',
+    'topicTitle',
+    'topic_title',
+    'topic',
+  ];
+  const arrayKeys = [
+    'customerMarketingDays',
+    'customer_marketing_days',
+    'customerMarketingPlans',
+    'customer_marketing_plans',
+    'items',
+    'prompts',
+    'days',
+    'plans',
+    'data',
+    'result',
+    'rows',
+  ];
+  const visited = new Set<object>();
+  const prompts: string[] = [];
+
+  const visit = (value: unknown, depth: number) => {
+    if (!value || typeof value !== 'object' || depth > 8 || visited.has(value)) {
+      return;
+    }
+    visited.add(value);
+
+    if (Array.isArray(value)) {
+      value.forEach((item) => visit(item, depth + 1));
+      return;
+    }
+
+    const record = value as Record<string, unknown>;
+    for (const key of promptKeys) {
+      const prompt = record[key];
+      if (typeof prompt === 'string' && prompt.trim()) {
+        prompts.push(prompt.trim());
+        break;
+      }
+    }
+
+    for (const key of arrayKeys) {
+      if (record[key] && typeof record[key] === 'object') {
+        visit(record[key], depth + 1);
+      }
+    }
+  };
+
+  visit(response, 0);
+  return [...new Set(prompts)];
 };
 
 // ==================================================
@@ -402,6 +474,9 @@ const Uploadnew: React.FC = () => {
   const [selectedMedia, setSelectedMedia] = useState<LocalMedia | null>(null);
   const [selectedPlatforms, setSelectedPlatforms] = useState<PublishPlatform[]>([]);
   const [postDescription, setPostDescription] = useState('');
+  const [marketingPrompts, setMarketingPrompts] = useState<string[]>([]);
+  const [loadingMarketingPrompts, setLoadingMarketingPrompts] = useState(false);
+  const [marketingPromptsError, setMarketingPromptsError] = useState('');
   const [savingPosts, setSavingPosts] = useState(false);
 
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1');
@@ -724,7 +799,47 @@ const Uploadnew: React.FC = () => {
     setSelectedMedia(media);
     setSelectedPlatforms([]);
     setPostDescription('');
+    setMarketingPrompts([]);
+    setMarketingPromptsError('');
   };
+
+  const selectedMediaId = selectedMedia?.id;
+  const selectedMediaMimeType = selectedMedia?.mimeType;
+
+  useEffect(() => {
+    if (!selectedMediaId || !selectedMediaMimeType?.startsWith('image/')) {
+      setLoadingMarketingPrompts(false);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingMarketingPrompts(true);
+    setMarketingPromptsError('');
+
+    apiGet('/prompt-plan')
+      .then((response) => {
+        if (!cancelled) {
+          setMarketingPrompts(extractMarketingPrompts(response));
+        }
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          console.error('LOAD MARKETING PROMPTS ERROR:', error);
+          setMarketingPromptsError(
+            error instanceof Error ? error.message : 'Unable to load saved prompts.',
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setLoadingMarketingPrompts(false);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedMediaId, selectedMediaMimeType]);
 
   const togglePublishPlatform = (platform: PublishPlatform) => {
     setSelectedPlatforms((current) =>
@@ -1706,6 +1821,44 @@ const Uploadnew: React.FC = () => {
 
             <div style={{ marginBottom: 20 }}>
               <FieldLabel text="Description (optional)" />
+              {loadingMarketingPrompts ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: ui.muted }}>
+                  <IonSpinner name="crescent" />
+                  <span style={{ fontSize: 13 }}>Loading saved prompts...</span>
+                </div>
+              ) : marketingPromptsError ? (
+                <p role="alert" style={{ margin: '0 0 10px', color: '#D33', fontSize: 13 }}>
+                  {marketingPromptsError}
+                </p>
+              ) : marketingPrompts.length > 0 ? (
+                <IonSelect
+                  aria-label="Select a saved prompt for the description"
+                  interface="alert"
+                  placeholder="Choose a saved prompt"
+                  onIonChange={(event) => {
+                    const prompt = marketingPrompts[event.detail.value];
+                    if (prompt) {
+                      setPostDescription(prompt.slice(0, MAX_DESCRIPTION));
+                    }
+                  }}
+                  style={{
+                    marginBottom: 10,
+                    border: `1px solid ${ui.border}`,
+                    borderRadius: 12,
+                    paddingInline: 12,
+                  }}
+                >
+                  {marketingPrompts.map((prompt, index) => (
+                    <IonSelectOption key={`${index}-${prompt.slice(0, 40)}`} value={index}>
+                      {prompt}
+                    </IonSelectOption>
+                  ))}
+                </IonSelect>
+              ) : (
+                <p style={{ margin: '0 0 10px', color: ui.muted, fontSize: 13 }}>
+                  No saved prompts available.
+                </p>
+              )}
               <textarea
                 value={postDescription}
                 onChange={(e) => setPostDescription(e.target.value.slice(0, MAX_DESCRIPTION))}

@@ -15,6 +15,8 @@ import {
   IonToast,
   IonCard,
   IonCardContent,
+  IonSelect,
+  IonSelectOption,
   useIonViewWillEnter,
 } from '@ionic/react';
 
@@ -44,20 +46,216 @@ import { useLogoTheme } from '../hooks/useLogoTheme';
 import BottomTabBar from '../components/BottomTabBar';
 import { clearBusinessCategory, saveBusinessCategory } from '../utils/businessCategory';
 
-import {
-  fetchPromptPlan,
-  fillPromptTemplate,
-  generatePromptPlan,
-  getPromptPlanRegenerationState,
-} from '../utils/promptPlan';
+import { apiGet } from '../api';
+import { generatePromptPlan } from '../utils/promptPlan';
 
-type PromptPlanItem = {
-  day: number;
-  theme?: string | null;
-  prompt: string;
+type CustomerMarketingPlan = {
+  id: number | string;
+  marketingPlanId: number | string | null;
+  dayNumber: number | null;
+  monthNumber: number | null;
+  planName: string | null;
+  customPrompt: string | null;
+  scheduledDate: string | null;
+  contentType: string | null;
+  platform: string | null;
 };
 
 const GENERATE_WATCHDOG_MS = 95_000;
+
+const isScheduleExpired = (scheduledDate: string | null): boolean => {
+  if (!scheduledDate) {
+    return false;
+  }
+
+  const scheduleDate = scheduledDate.match(/^\d{4}-\d{2}-\d{2}/)?.[0];
+  const parsedScheduleDate = scheduleDate ?? (
+    Number.isNaN(Date.parse(scheduledDate))
+      ? null
+      : new Date(scheduledDate).toISOString().slice(0, 10)
+  );
+
+  if (!parsedScheduleDate) {
+    return false;
+  }
+
+  const now = new Date();
+  const today = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, '0'),
+    String(now.getDate()).padStart(2, '0'),
+  ].join('-');
+
+  return parsedScheduleDate < today;
+};
+
+const getMarketingPlans = (response: unknown): CustomerMarketingPlan[] => {
+  if (
+    response &&
+    typeof response === 'object' &&
+    'success' in response &&
+    (response as { success?: boolean }).success === false
+  ) {
+    const message = (response as { message?: unknown }).message;
+    throw new Error(typeof message === 'string' ? message : 'Could not load saved marketing plans.');
+  }
+
+  if (Array.isArray(response)) {
+    return normalizeMarketingPlanRows(response);
+  }
+
+  const findRows = (
+    value: unknown,
+    keys: string[],
+    includeEmpty = false,
+    depth = 0,
+  ): unknown[] | null => {
+    if (!value || typeof value !== 'object' || depth > 8) {
+      return null;
+    }
+
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        const nestedRows = findRows(item, keys, includeEmpty, depth + 1);
+        if (nestedRows) {
+          return nestedRows;
+        }
+      }
+      return null;
+    }
+
+    const record = value as Record<string, unknown>;
+    for (const key of keys) {
+      if (Array.isArray(record[key]) && (includeEmpty || record[key].length > 0)) {
+        return record[key] as unknown[];
+      }
+    }
+
+    for (const nestedValue of Object.values(record)) {
+      const nestedRows = findRows(nestedValue, keys, includeEmpty, depth + 1);
+      if (nestedRows) {
+        return nestedRows;
+      }
+    }
+
+    return null;
+  };
+
+  const scheduleRows = findRows(response, [
+    'customerMarketingDays',
+    'customer_marketing_days',
+    'days',
+    'schedule',
+  ]);
+  const planKeys = [
+    'customerMarketingPlans',
+    'customer_marketing_plans',
+    'marketingPlans',
+    'marketing_plans',
+    'plans',
+    'items',
+    'data',
+  ];
+  const planRows = findRows(response, planKeys) ?? findRows(response, planKeys, true);
+  const rows = scheduleRows ?? planRows;
+
+  if (!Array.isArray(rows)) {
+    throw new Error('The marketing plan endpoint returned an unexpected response.');
+  }
+
+  return normalizeMarketingPlanRows(rows);
+};
+
+const normalizeMarketingPlanRows = (rows: unknown[]): CustomerMarketingPlan[] =>
+  rows.flatMap((value) => {
+    if (!value || typeof value !== 'object') {
+      return [];
+    }
+
+    const row = value as Record<string, unknown>;
+    const nestedDays = [
+      row.customerMarketingDays,
+      row.customer_marketing_days,
+      row.days,
+      row.schedule,
+    ].find(Array.isArray);
+    const parentPrompt = row.customPrompt ?? row.custom_prompt;
+    const parentName = row.planName ?? row.plan_name;
+    const parentEndDate = row.endDate ?? row.end_date;
+
+    const records: Record<string, unknown>[] = Array.isArray(nestedDays)
+      ? nestedDays
+          .filter((day): day is Record<string, unknown> => Boolean(day) && typeof day === 'object')
+          .map((day) => ({
+            ...day,
+            marketingPlanId: day.marketingPlanId ?? day.marketing_plan_id ?? row.id,
+            customPrompt: day.customPrompt ?? day.custom_prompt ?? day.prompt ?? parentPrompt,
+            planName: day.planName ?? day.plan_name ?? day.theme ?? parentName,
+            endDate:
+              day.scheduledDate ??
+              day.scheduled_date ??
+              day.endDate ??
+              day.end_date ??
+              parentEndDate,
+          }))
+      : [row];
+
+    return records.map((record, index) => {
+      const marketingPlanId =
+        record.marketingPlanId ?? record.marketing_plan_id ?? record.planId ?? record.plan_id;
+      const dayNumber = Number(record.dayNumber ?? record.day_number ?? record.day);
+      const rawId = record.id ?? record.dayId ?? record.day_id;
+      const id = rawId ?? (
+        marketingPlanId !== undefined && Number.isFinite(dayNumber)
+          ? `${marketingPlanId}-${dayNumber}`
+          : `${marketingPlanId ?? 'plan'}-${index}`
+      );
+      const promptValue =
+        record.customPrompt ??
+        record.custom_prompt ??
+        record.prompt ??
+        record.promptText ??
+        record.prompt_text ??
+        record.content ??
+        record.contentText ??
+        record.content_text ??
+        record.description ??
+        record.caption;
+      const nameValue =
+        record.planName ??
+        record.plan_name ??
+        record.theme ??
+        record.title ??
+        record.topicName ??
+        record.topic_name;
+      const dateValue =
+        record.scheduledDate ??
+        record.scheduled_date ??
+        record.scheduleDate ??
+        record.schedule_date ??
+        record.endDate ??
+        record.end_date;
+      const contentTypeValue = record.contentType ?? record.content_type;
+      const platformValue = record.platform;
+
+      return {
+        id: String(id),
+        marketingPlanId:
+          marketingPlanId === undefined || marketingPlanId === null
+            ? null
+            : String(marketingPlanId),
+        dayNumber: Number.isFinite(dayNumber) ? dayNumber : null,
+        monthNumber: Number.isFinite(Number(record.monthNumber ?? record.month_number))
+          ? Number(record.monthNumber ?? record.month_number)
+          : null,
+        planName: typeof nameValue === 'string' ? nameValue : null,
+        customPrompt: typeof promptValue === 'string' ? promptValue : null,
+        scheduledDate: typeof dateValue === 'string' ? dateValue : null,
+        contentType: typeof contentTypeValue === 'string' ? contentTypeValue : null,
+        platform: typeof platformValue === 'string' ? platformValue : null,
+      };
+    });
+  });
 
 const Home: React.FC = () => {
   const ionRouter = useIonRouter();
@@ -75,17 +273,14 @@ const Home: React.FC = () => {
     refresh,
   } = useSocialConnections();
 
-  const [promptPlan, setPromptPlan] = useState<PromptPlanItem[]>([]);
-  const [todayPrompt, setTodayPrompt] = useState<PromptPlanItem | null>(null);
-  const [loadingPlan, setLoadingPlan] = useState(true);
+  const [marketingPlans, setMarketingPlans] = useState<CustomerMarketingPlan[]>([]);
+  const [selectedMarketingPlanId, setSelectedMarketingPlanId] = useState('');
+  const [marketingPlansError, setMarketingPlansError] = useState('');
+  const [loadingPlan, setLoadingPlan] = useState(false);
   const [generatingPlan, setGeneratingPlan] = useState(false);
   const [promptMessage, setPromptMessage] = useState('');
   const [planToastOpen, setPlanToastOpen] = useState(false);
-  const listRef = useRef<HTMLDivElement>(null);
   const [promptMessageColor, setPromptMessageColor] = useState<'primary' | 'danger'>('primary');
-
-  const [planStartDate, setPlanStartDate] = useState<string | null>(null);
-  const [currentTime, setCurrentTime] = useState(Date.now());
 
   const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -104,19 +299,12 @@ const Home: React.FC = () => {
   const badgeText = businessCategory && businessCity
     ? `${businessCategory} · ${businessCity}`
     : businessCategory || businessCity || 'Your workspace is ready';
-
-  const regenerationState = getPromptPlanRegenerationState(
-    planStartDate,
-    promptPlan.length,
-    currentTime,
+  const hasActiveMarketingSchedule = marketingPlans.some(
+    (plan) => !isScheduleExpired(plan.scheduledDate),
   );
-  const isRegenerateLocked = regenerationState.locked;
-  const daysUntilUnlock = regenerationState.daysUntilUnlock;
 
   useEffect(() => {
-    const timer = window.setInterval(() => setCurrentTime(Date.now()), 60_000);
     return () => {
-      window.clearInterval(timer);
       if (watchdogRef.current) clearTimeout(watchdogRef.current);
     };
   }, []);
@@ -124,30 +312,33 @@ const Home: React.FC = () => {
   // -----------------------------------------------------------------------
   // Load the user's existing saved plan from the DB
   // -----------------------------------------------------------------------
-  const loadPlan = async () => {
-    if (!user?.id) {
-      setLoadingPlan(false);
-      return;
-    }
+  const loadMarketingPlans = async () => {
+    if (!user?.id) return;
 
     setLoadingPlan(true);
+    setMarketingPlansError('');
 
     try {
-      const data = await fetchPromptPlan();
-      setPromptPlan(Array.isArray(data?.items) ? data.items : []);
-      setTodayPrompt(data?.today ?? null);
-      setPlanStartDate(data?.startDate ?? null);
+      const response = await apiGet('/prompt-plan/generate');
+      const plans = getMarketingPlans(response);
+      setMarketingPlans(plans);
+      setSelectedMarketingPlanId((selectedId) =>
+        plans.some((plan) => String(plan.id) === selectedId)
+          ? selectedId
+          : String(plans[0]?.id ?? ''),
+      );
     } catch (err: any) {
-      console.error('Could not load prompt plan:', err);
-      setPromptMessageColor('danger');
-      setPromptMessage(err?.message || err?.error || 'Could not load your saved plan from the server.');
+      console.error('Could not load customer marketing plans:', err);
+      setMarketingPlansError(
+        err?.message || err?.error || 'Could not load your saved marketing plans.',
+      );
     } finally {
       setLoadingPlan(false);
     }
   };
 
   useEffect(() => {
-    void loadPlan();
+    void loadMarketingPlans();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
@@ -158,7 +349,7 @@ const Home: React.FC = () => {
       return;
     }
 
-    if (isRegenerateLocked || generatingPlan || loadingPlan) {
+    if (hasActiveMarketingSchedule || generatingPlan || loadingPlan) {
       // Safety guard in case a disabled button somehow still fires a click.
       return;
     }
@@ -183,22 +374,17 @@ const Home: React.FC = () => {
         businessName: user?.name || undefined,
       });
 
-      const items: PromptPlanItem[] = Array.isArray(res?.items) ? res.items : [];
+      const items = Array.isArray(res?.items) ? res.items : [];
 
-      if (items.length !== 30) {
-        throw new Error('The server did not return all 30 daily prompts. Please try again.');
+      if (items.length === 0) {
+        throw new Error('The server returned an empty plan. Please try again.');
       }
 
-      setPromptPlan(items);
-      setTodayPrompt(res?.today ?? items[0] ?? null);
-      setPlanStartDate(res?.startDate ?? new Date().toISOString().slice(0, 10));
-      setCurrentTime(Date.now());
       setPromptMessageColor('primary');
       setPromptMessage('Success! Your 30-day prompt plan is ready.');
       setPlanToastOpen(true);
 
-      // bring the freshly generated list into view
-      setTimeout(() => listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 200);
+      await loadMarketingPlans();
     } catch (err: any) {
       setPromptMessageColor('danger');
       setPromptMessage(err?.message || err?.error || 'Could not generate your 30-day plan. Please try again.');
@@ -224,7 +410,7 @@ const Home: React.FC = () => {
   // Re-check live status every time Home becomes visible
   useIonViewWillEnter(() => {
     void refresh();
-    void loadPlan();
+    void loadMarketingPlans();
   });
 
   const handleLogout = () => {
@@ -269,16 +455,15 @@ const Home: React.FC = () => {
     if (loadingPlan) {
       return 'Loading your plan…';
     }
-    if (isRegenerateLocked) {
-      return daysUntilUnlock > 0
-        ? `Plan active · ${daysUntilUnlock} day${daysUntilUnlock === 1 ? '' : 's'} left`
-        : 'Current plan active';
-    }
-    if (promptPlan.length > 0) {
-      return 'Regenerate 30-day prompts';
+    if (hasActiveMarketingSchedule) {
+      return 'Schedule active';
     }
     return 'Generate 30-day prompts';
   };
+
+  const selectedMarketingPlan = marketingPlans.find(
+    (plan) => String(plan.id) === selectedMarketingPlanId,
+  );
 
   return (
     <IonPage className="home-page" style={themeStyle}>
@@ -347,7 +532,7 @@ const Home: React.FC = () => {
             </div>
             <div className="dashboard-metrics">
               <div><strong>{connectedCount}</strong><span>Connected channels</span></div>
-              <div><strong>{promptPlan.length || '—'}</strong><span>Daily AI prompts</span></div>
+              <div><strong>{marketingPlans.length || '—'}</strong><span>Marketing plans</span></div>
               <div>
                 <strong>{businessCategory || 'Set up'}</strong>
                 <span>{industryName || 'Business category'}</span>
@@ -371,6 +556,17 @@ const Home: React.FC = () => {
               </span>
             </button>
 
+                <button type="button" className="quick-card" onClick={() => ionRouter.push('/uploadnew', 'forward')}>
+              <span className="quick-icon quick-icon-green">
+                <IonIcon icon={cloudUploadOutline} />
+              </span>
+              <h4>Upload ProductNew</h4>
+              <p>Turn a photo into ready-made ads</p>
+              <span className="quick-arrow quick-arrow-green">
+                <IonIcon icon={arrowForwardOutline} />
+              </span>
+            </button>
+
             <button type="button" className="quick-card" onClick={() => ionRouter.push('/posters', 'forward')}>
               <span className="quick-icon quick-icon-blue">
                 <IonIcon icon={imagesOutline} />
@@ -387,7 +583,7 @@ const Home: React.FC = () => {
                 <IonIcon icon={timeOutline} />
               </span>
               <h4>30-Day Prompts</h4>
-              <p>{promptPlan.length > 0 ? 'View your saved plan' : 'Generate daily content ideas'}</p>
+              <p>{marketingPlans.length > 0 ? 'View your saved plan' : 'Generate daily content ideas'}</p>
               <span className="quick-arrow quick-arrow-purple">
                 <IonIcon icon={arrowForwardOutline} />
               </span>
@@ -451,11 +647,63 @@ const Home: React.FC = () => {
                   expand="block"
                   color={generatingPlan ? 'medium' : 'primary'}
                   onClick={handleGeneratePromptPlan}
-                  disabled={generatingPlan || loadingPlan || isRegenerateLocked}
+                  disabled={
+                    generatingPlan ||
+                    loadingPlan ||
+                    hasActiveMarketingSchedule
+                  }
                   style={{ marginTop: 16 }}
                 >
                   {renderGenerateButtonLabel()}
                 </IonButton>
+
+                {marketingPlansError && (
+                  <p role="alert" style={{ margin: '12px 0 0', color: '#D33', fontSize: 13 }}>
+                    {marketingPlansError}
+                  </p>
+                )}
+
+                {marketingPlans.length > 0 && (
+                  <div style={{ marginTop: 16 }}>
+                    <IonSelect
+                      aria-label="Saved marketing prompts"
+                      interface="alert"
+                      placeholder="Select a saved prompt"
+                      value={selectedMarketingPlanId}
+                      onIonChange={(event) => setSelectedMarketingPlanId(String(event.detail.value))}
+                    >
+                      {marketingPlans.map((plan) => (
+                        <IonSelectOption key={plan.id} value={String(plan.id)}>
+                          {plan.customPrompt ||
+                            [
+                              plan.dayNumber !== null ? `Day ${plan.dayNumber}` : null,
+                              plan.scheduledDate,
+                              plan.contentType,
+                              plan.platform,
+                            ].filter(Boolean).join(' · ') ||
+                            plan.planName ||
+                            `Month ${plan.monthNumber ?? ''}`}
+                        </IonSelectOption>
+                      ))}
+                    </IonSelect>
+                    {selectedMarketingPlan && (
+                      <p style={{ margin: '8px 0 0', color: '#526176', fontSize: 13, lineHeight: 1.45 }}>
+                        {selectedMarketingPlan.customPrompt ||
+                          [
+                            selectedMarketingPlan.dayNumber !== null
+                              ? `Day ${selectedMarketingPlan.dayNumber}`
+                              : null,
+                            selectedMarketingPlan.scheduledDate
+                              ? `Scheduled ${selectedMarketingPlan.scheduledDate}`
+                              : null,
+                            selectedMarketingPlan.contentType,
+                            selectedMarketingPlan.platform,
+                          ].filter(Boolean).join(' · ') ||
+                          selectedMarketingPlan.planName}
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {generatingPlan && (
                   <div
@@ -476,18 +724,6 @@ const Home: React.FC = () => {
                   </div>
                 )}
 
-                {!generatingPlan && isRegenerateLocked && promptPlan.length > 0 && (
-                  <p
-                    style={{
-                      margin: '12px 0 0',
-                      fontSize: 12,
-                      color: '#6B7A90',
-                    }}
-                  >
-                    Your 30 daily prompts are saved below. A new plan becomes available after the 30-day plan period ends.
-                  </p>
-                )}
-
                 {!generatingPlan && promptMessage && (
                   <p
                     style={{
@@ -505,34 +741,6 @@ const Home: React.FC = () => {
                   </p>
                 )}
 
-                {todayPrompt && (
-                  <div style={{ marginTop: 14, padding: 12, borderRadius: 12, background: '#F8FAFD' }}>
-                    <strong style={{ color: '#0F1B2D', fontSize: 13 }}>
-                      Today · Day {todayPrompt.day}
-                      {todayPrompt.theme ? ` · ${todayPrompt.theme}` : ''}
-                    </strong>
-                    <p style={{ margin: '6px 0 0', color: '#526176', fontSize: 13, lineHeight: 1.45 }}>{fillPromptTemplate(todayPrompt.prompt, { category: businessCategory })}</p>
-                  </div>
-                )}
-
-                {promptPlan.length > 0 && (
-                  <div ref={listRef} className="prompt-day-list" aria-label="Saved prompts by day">
-                    {promptPlan.map((item) => {
-                      const isToday = item.day === todayPrompt?.day;
-
-                      return (
-                        <article key={item.day} className={`prompt-day-item${isToday ? ' is-today' : ''}`}>
-                          <div className="prompt-day-heading">
-                            <strong>Day {item.day}</strong>
-                            {isToday && <span>Today</span>}
-                          </div>
-                          {item.theme && <h4>{item.theme}</h4>}
-                          <p>{fillPromptTemplate(item.prompt, { category: businessCategory })}</p>
-                        </article>
-                      );
-                    })}
-                  </div>
-                )}
               </IonCardContent>
             </IonCard>
           </div>
