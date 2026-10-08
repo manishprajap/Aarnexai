@@ -158,7 +158,7 @@ const Home: React.FC = () => {
       return;
     }
 
-    if (isRegenerateLocked || hasPlanWithoutStartDate || generatingPlan || loadingPlan) {
+    if (isRegenerateLocked || generatingPlan || loadingPlan) {
       // Safety guard in case a disabled button somehow still fires a click.
       return;
     }
@@ -274,9 +274,6 @@ const Home: React.FC = () => {
         ? `Plan active · ${daysUntilUnlock} day${daysUntilUnlock === 1 ? '' : 's'} left`
         : 'Current plan active';
     }
-    if (hasPlanWithoutStartDate) {
-      return '30-day prompts generated';
-    }
     if (promptPlan.length > 0) {
       return 'Regenerate 30-day prompts';
     }
@@ -374,17 +371,6 @@ const Home: React.FC = () => {
               </span>
             </button>
 
-                <button type="button" className="quick-card" onClick={() => ionRouter.push('/uploadnew', 'forward')}>
-              <span className="quick-icon quick-icon-green">
-                <IonIcon icon={cloudUploadOutline} />
-              </span>
-              <h4>Upload ProductNew</h4>
-              <p>Turn a photo into ready-made ads</p>
-              <span className="quick-arrow quick-arrow-green">
-                <IonIcon icon={arrowForwardOutline} />
-              </span>
-            </button>
-
             <button type="button" className="quick-card" onClick={() => ionRouter.push('/posters', 'forward')}>
               <span className="quick-icon quick-icon-blue">
                 <IonIcon icon={imagesOutline} />
@@ -465,32 +451,11 @@ const Home: React.FC = () => {
                   expand="block"
                   color={generatingPlan ? 'medium' : 'primary'}
                   onClick={handleGeneratePromptPlan}
-                  disabled={
-                    generatingPlan || loadingPlan || isRegenerateLocked || hasPlanWithoutStartDate
-                  }
+                  disabled={generatingPlan || loadingPlan || isRegenerateLocked}
                   style={{ marginTop: 16 }}
                 >
                   {renderGenerateButtonLabel()}
                 </IonButton>
-
-                {promptPlan.length > 0 && (
-                  <div ref={listRef} className="prompt-day-list" aria-label="Saved prompts by day">
-                    {promptPlan.map((item) => {
-                      const isToday = item.day === todayPrompt?.day;
-
-                      return (
-                        <article key={item.day} className={`prompt-day-item${isToday ? ' is-today' : ''}`}>
-                          <div className="prompt-day-heading">
-                            <strong>Day {item.day}</strong>
-                            {isToday && <span>Today</span>}
-                          </div>
-                          {item.theme && <h4>{item.theme}</h4>}
-                          <p>{fillPromptTemplate(item.prompt, { category: businessCategory })}</p>
-                        </article>
-                      );
-                    })}
-                  </div>
-                )}
 
                 {generatingPlan && (
                   <div
@@ -550,6 +515,24 @@ const Home: React.FC = () => {
                   </div>
                 )}
 
+                {promptPlan.length > 0 && (
+                  <div ref={listRef} className="prompt-day-list" aria-label="Saved prompts by day">
+                    {promptPlan.map((item) => {
+                      const isToday = item.day === todayPrompt?.day;
+
+                      return (
+                        <article key={item.day} className={`prompt-day-item${isToday ? ' is-today' : ''}`}>
+                          <div className="prompt-day-heading">
+                            <strong>Day {item.day}</strong>
+                            {isToday && <span>Today</span>}
+                          </div>
+                          {item.theme && <h4>{item.theme}</h4>}
+                          <p>{fillPromptTemplate(item.prompt, { category: businessCategory })}</p>
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
               </IonCardContent>
             </IonCard>
           </div>
