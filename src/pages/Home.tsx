@@ -15,6 +15,8 @@ import {
   IonToast,
   IonCard,
   IonCardContent,
+  IonSelect,
+  IonSelectOption,
   useIonViewWillEnter,
 } from '@ionic/react';
 
@@ -33,6 +35,7 @@ import {
   statsChartOutline,
   cubeOutline,
   chatbubblesOutline,
+  sparklesOutline,
 } from 'ionicons/icons';
 
 import { useAuth } from '../context/AuthContext';
@@ -84,6 +87,7 @@ const Home: React.FC = () => {
 
   const [promptPlan, setPromptPlan] = useState<PromptPlanItem[]>([]);
   const [todayPrompt, setTodayPrompt] = useState<PromptPlanItem | null>(null);
+  const [selectedPromptDay, setSelectedPromptDay] = useState<number | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(true);
   const [generatingPlan, setGeneratingPlan] = useState(false);
   const [promptMessage, setPromptMessage] = useState('');
@@ -120,6 +124,10 @@ const Home: React.FC = () => {
   );
   const isRegenerateLocked = regenerationState.locked;
   const daysUntilUnlock = regenerationState.daysUntilUnlock;
+  const selectedPrompt = promptPlan.find((item) => item.day === selectedPromptDay)
+    ?? todayPrompt
+    ?? promptPlan[0]
+    ?? null;
 
   useEffect(() => {
     const timer = window.setInterval(() => setCurrentTime(Date.now()), 60_000);
@@ -142,9 +150,16 @@ const Home: React.FC = () => {
 
     try {
       const data = await fetchPromptPlan();
-      setPromptPlan(Array.isArray(data?.items) ? data.items : []);
+      const items = Array.isArray(data?.items) ? data.items : [];
+      setPromptPlan(items);
       setTodayPrompt(data?.today ?? null);
       setPlanStartDate(data?.startDate ?? null);
+      setSelectedPromptDay((currentDay) => {
+        const preferredDay = data?.today?.day ?? currentDay;
+        return items.some((item) => item.day === preferredDay)
+          ? preferredDay
+          : items[0]?.day ?? null;
+      });
     } catch (err: any) {
       console.error('Could not load prompt plan:', err);
       setPromptMessageColor('danger');
@@ -213,6 +228,7 @@ const Home: React.FC = () => {
 
       setPromptPlan(items);
       setTodayPrompt(res?.today ?? items[0] ?? null);
+      setSelectedPromptDay(res?.today?.day ?? items[0]?.day ?? null);
       setPlanStartDate(res?.startDate ?? new Date().toISOString().slice(0, 10));
       setCurrentTime(Date.now());
       setPromptMessageColor('primary');
@@ -413,6 +429,17 @@ const Home: React.FC = () => {
               </span>
             </button>
 
+            <button type="button" className="quick-card" onClick={() => ionRouter.push('/uploadnew', 'forward')}>
+              <span className="quick-icon quick-icon-purple">
+                <IonIcon icon={sparklesOutline} />
+              </span>
+              <h4>Guided Upload</h4>
+              <p>Create and publish from one flow</p>
+              <span className="quick-arrow quick-arrow-purple">
+                <IonIcon icon={arrowForwardOutline} />
+              </span>
+            </button>
+
             <button type="button" className="quick-card" onClick={() => ionRouter.push('/posters', 'forward')}>
               <span className="quick-icon quick-icon-blue">
                 <IonIcon icon={imagesOutline} />
@@ -547,13 +574,31 @@ const Home: React.FC = () => {
                   </p>
                 )}
 
-                {todayPrompt && (
+                {promptPlan.length > 0 && (
+                  <IonSelect
+                    aria-label="Choose a saved daily prompt"
+                    interface="alert"
+                    placeholder="Select a saved prompt"
+                    value={selectedPrompt?.day ?? ''}
+                    onIonChange={(event) => setSelectedPromptDay(Number(event.detail.value))}
+                    style={{ marginTop: 12 }}
+                  >
+                    {promptPlan.map((item) => (
+                      <IonSelectOption key={item.day} value={item.day}>
+                        {`Day ${item.day}${item.theme ? ` · ${item.theme}` : ''}`}
+                      </IonSelectOption>
+                    ))}
+                  </IonSelect>
+                )}
+
+                {selectedPrompt && (
                   <div style={{ marginTop: 14, padding: 12, borderRadius: 12, background: '#F8FAFD' }}>
                     <strong style={{ color: '#0F1B2D', fontSize: 13 }}>
-                      Today · Day {todayPrompt.day}
-                      {todayPrompt.theme ? ` · ${todayPrompt.theme}` : ''}
+                      {selectedPrompt.day === todayPrompt?.day ? 'Today · ' : ''}
+                      Day {selectedPrompt.day}
+                      {selectedPrompt.theme ? ` · ${selectedPrompt.theme}` : ''}
                     </strong>
-                    <p style={{ margin: '6px 0 0', color: '#526176', fontSize: 13, lineHeight: 1.45 }}>{fillPromptTemplate(todayPrompt.prompt, { category: businessCategory })}</p>
+                    <p style={{ margin: '6px 0 0', color: '#526176', fontSize: 13, lineHeight: 1.45 }}>{fillPromptTemplate(selectedPrompt.prompt, { category: businessCategory })}</p>
                   </div>
                 )}
 
