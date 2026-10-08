@@ -84,7 +84,7 @@ const createApiError = (response: Response, json: unknown): ApiError => {
 
   // Prefer the backend's own message.
   const message =
-    data?.message || `Request failed with status ${response.status}`;
+    data?.message || data?.error || `Request failed with status ${response.status}`;
 
   return new ApiError(message, response.status, data);
 };

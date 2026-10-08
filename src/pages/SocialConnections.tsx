@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useIonRouter } from '@ionic/react';
 import {
   IonButton,
@@ -5,6 +6,7 @@ import {
   IonHeader,
   IonIcon,
   IonPage,
+  IonAlert,
   IonSpinner,
   IonToast,
   IonToolbar,
@@ -13,6 +15,8 @@ import {
 import {
   arrowBackOutline,
   checkmarkCircleOutline,
+  closeCircleOutline,
+  linkOutline,
   logoFacebook,
   logoGoogle,
   logoInstagram,
@@ -76,8 +80,22 @@ const CONNECTABLE_COUNT = CONNECTABLE_PLATFORMS.length;
 const SocialConnections: React.FC = () => {
   const ionRouter = useIonRouter();
   const themeStyle = useLogoTheme();
-  const { connected, usernames, connectedCount, checking, busy, error, success, clearError, clearSuccess, refresh, connect } =
+  const {
+    connected,
+    usernames,
+    connectedCount,
+    checking,
+    busy,
+    error,
+    success,
+    clearError,
+    clearSuccess,
+    refresh,
+    connect,
+    disconnect,
+  } =
     useSocialConnections();
+  const [disconnectingPlatform, setDisconnectingPlatform] = useState<PlatformKey | null>(null);
 
   useIonViewWillEnter(() => {
     void refresh();
@@ -148,14 +166,38 @@ const SocialConnections: React.FC = () => {
                     </p>
                   </div>
                   {platform ? (
-                    <button
-                      type="button"
-                      className={`cs-btn ${isConnected ? 'is-connected' : ''}`}
-                      disabled={isConnected || busy !== null}
-                      onClick={() => void connect(platform)}
-                    >
-                      {isBusy ? <IonSpinner name="crescent" className="cs-spinner" /> : isConnected ? <><IonIcon icon={checkmarkCircleOutline} /> Connected</> : 'Connect'}
-                    </button>
+                    <div className="cs-actions">
+                      <button
+                        type="button"
+                        className={`cs-btn cs-action-icon ${isConnected ? 'is-connected' : ''}`}
+                        disabled={isConnected || busy !== null}
+                        onClick={() => void connect(platform)}
+                        aria-label={isConnected ? `${social.name} connected` : `Connect ${social.name}`}
+                        title={isConnected ? `${social.name} connected` : `Connect ${social.name}`}
+                      >
+                        {isBusy ? (
+                          <IonSpinner name="crescent" className="cs-spinner" />
+                        ) : (
+                          <IonIcon icon={isConnected ? checkmarkCircleOutline : linkOutline} />
+                        )}
+                      </button>
+                      {isConnected && (
+                        <button
+                          type="button"
+                          className="cs-btn-disconnect cs-action-icon"
+                          disabled={busy !== null}
+                          aria-label={`Disconnect ${social.name}`}
+                          title={`Disconnect ${social.name}`}
+                          onClick={() => setDisconnectingPlatform(platform)}
+                        >
+                          {isBusy ? (
+                            <IonSpinner name="crescent" className="cs-spinner" />
+                          ) : (
+                            <IonIcon icon={closeCircleOutline} />
+                          )}
+                        </button>
+                      )}
+                    </div>
                   ) : <span className="cs-soon">Soon</span>}
                 </li>
               );
@@ -170,6 +212,23 @@ const SocialConnections: React.FC = () => {
       </IonContent>
 
       <BottomTabBar />
+      <IonAlert
+        isOpen={disconnectingPlatform !== null}
+        header="Disconnect account?"
+        message={`Disconnect ${disconnectingPlatform ? SOCIALS.find((social) => social.id === disconnectingPlatform)?.name : 'this account'} from AarnexAi? You can reconnect it later.`}
+        buttons={[
+          { text: 'Cancel', role: 'cancel', handler: () => setDisconnectingPlatform(null) },
+          {
+            text: 'Disconnect',
+            role: 'destructive',
+            handler: () => {
+              if (disconnectingPlatform) void disconnect(disconnectingPlatform);
+              setDisconnectingPlatform(null);
+            },
+          },
+        ]}
+        onDidDismiss={() => setDisconnectingPlatform(null)}
+      />
       <IonToast isOpen={Boolean(success)} message={success ?? ''} duration={3500} position="top" color="success" onDidDismiss={clearSuccess} />
       <IonToast isOpen={Boolean(error)} message={error ?? ''} duration={5000} position="top" color="danger" onDidDismiss={clearError} />
     </IonPage>

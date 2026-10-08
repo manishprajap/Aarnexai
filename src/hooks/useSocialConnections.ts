@@ -243,9 +243,13 @@ export function useSocialConnections() {
 
     const sessionResponse = await apiPost('/whatsapp/session', { callbackUrl: WHATSAPP_APP_CALLBACK_SCHEME });
     const sessionId = sessionResponse?.sessionId ?? sessionResponse?.session;
+    const callbackHttpsUrl = sessionResponse?.callbackHttpsUrl;
 
     if (typeof sessionId !== 'string' || !sessionId.trim()) {
       throw new Error('WhatsApp session was not created by the server.');
+    }
+    if (typeof callbackHttpsUrl !== 'string' || !callbackHttpsUrl.trim()) {
+      throw new Error('WhatsApp callback URL was not created by the server.');
     }
 
     localStorage.setItem(PENDING_KEY, JSON.stringify({ sessionId, startedAt: Date.now() }));
@@ -254,6 +258,7 @@ export function useSocialConnections() {
       session: sessionId,
       config_id: WHATSAPP_CONFIG_ID,
       app_id: META_APP_ID,
+      callback_url: callbackHttpsUrl,
     });
 
     await Browser.open({ url: `${WHATSAPP_CONNECT_WEB_URL}?${params.toString()}` });
@@ -501,9 +506,26 @@ export function useSocialConnections() {
     let handle: { remove: () => Promise<void> | void } | null = null;
 
     void App.addListener('appUrlOpen', ({ url }) => {
-      if (url && url.startsWith(WHATSAPP_APP_CALLBACK_SCHEME)) {
+      if (!url) return;
+
+      try {
+        const callback = new URL(url);
+        if (
+          callback.protocol !== 'aarnamarket:' ||
+          callback.hostname !== 'whatsapp-callback' ||
+          callback.searchParams.get('status') !== 'pending'
+        ) return;
+
+        const pendingRaw = localStorage.getItem(PENDING_KEY);
+        if (!pendingRaw) return;
+
+        const pending = JSON.parse(pendingRaw) as { sessionId?: string };
+        if (!pending.sessionId || pending.sessionId !== callback.searchParams.get('session')) return;
+
         void Browser.close().catch(() => {});
         void checkPendingWhatsApp();
+      } catch (callbackError) {
+        console.error('Invalid WhatsApp app callback URL:', callbackError);
       }
     }).then((h) => {
       if (active) handle = h;

@@ -44,16 +44,18 @@ import { useLogoTheme } from '../hooks/useLogoTheme';
 import BottomTabBar from '../components/BottomTabBar';
 import { clearBusinessCategory, saveBusinessCategory } from '../utils/businessCategory';
 
-import { fetchPromptPlan, fillPromptTemplate, generatePromptPlan } from '../utils/promptPlan';
+import {
+  fetchPromptPlan,
+  fillPromptTemplate,
+  generatePromptPlan,
+  getPromptPlanRegenerationState,
+} from '../utils/promptPlan';
 
 type PromptPlanItem = {
   day: number;
   theme?: string | null;
   prompt: string;
 };
-
-const REGENERATE_LOCK_DAYS = 30;
-const REGENERATE_LOCK_MS = REGENERATE_LOCK_DAYS * 24 * 60 * 60 * 1000;
 
 const GENERATE_WATCHDOG_MS = 95_000;
 
@@ -75,14 +77,15 @@ const Home: React.FC = () => {
 
   const [promptPlan, setPromptPlan] = useState<PromptPlanItem[]>([]);
   const [todayPrompt, setTodayPrompt] = useState<PromptPlanItem | null>(null);
-  const [loadingPlan, setLoadingPlan] = useState(false);
+  const [loadingPlan, setLoadingPlan] = useState(true);
   const [generatingPlan, setGeneratingPlan] = useState(false);
   const [promptMessage, setPromptMessage] = useState('');
   const [planToastOpen, setPlanToastOpen] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const [promptMessageColor, setPromptMessageColor] = useState<'primary' | 'danger'>('primary');
 
-  const [planStartAt, setPlanStartAt] = useState<number | null>(null);
+  const [planStartDate, setPlanStartDate] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState(Date.now());
 
   const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -102,18 +105,18 @@ const Home: React.FC = () => {
     ? `${businessCategory} · ${businessCity}`
     : businessCategory || businessCity || 'Your workspace is ready';
 
-  const nextAvailableAt = planStartAt ? planStartAt + REGENERATE_LOCK_MS : null;
-  const isRegenerateLocked = Boolean(nextAvailableAt && nextAvailableAt > Date.now());
-  const hasPlanWithoutStartDate = promptPlan.length > 0 && !planStartAt;
-
-  const daysUntilUnlock = (() => {
-    if (!nextAvailableAt) return 0;
-    const msLeft = nextAvailableAt - Date.now();
-    return Math.max(1, Math.ceil(msLeft / (24 * 60 * 60 * 1000)));
-  })();
+  const regenerationState = getPromptPlanRegenerationState(
+    planStartDate,
+    promptPlan.length,
+    currentTime,
+  );
+  const isRegenerateLocked = regenerationState.locked;
+  const daysUntilUnlock = regenerationState.daysUntilUnlock;
 
   useEffect(() => {
+    const timer = window.setInterval(() => setCurrentTime(Date.now()), 60_000);
     return () => {
+      window.clearInterval(timer);
       if (watchdogRef.current) clearTimeout(watchdogRef.current);
     };
   }, []);
@@ -122,7 +125,10 @@ const Home: React.FC = () => {
   // Load the user's existing saved plan from the DB
   // -----------------------------------------------------------------------
   const loadPlan = async () => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      setLoadingPlan(false);
+      return;
+    }
 
     setLoadingPlan(true);
 
@@ -130,7 +136,7 @@ const Home: React.FC = () => {
       const data = await fetchPromptPlan();
       setPromptPlan(Array.isArray(data?.items) ? data.items : []);
       setTodayPrompt(data?.today ?? null);
-      setPlanStartAt(data?.startDate ? new Date(data.startDate).getTime() : null);
+      setPlanStartDate(data?.startDate ?? null);
     } catch (err: any) {
       console.error('Could not load prompt plan:', err);
       setPromptMessageColor('danger');
@@ -179,13 +185,14 @@ const Home: React.FC = () => {
 
       const items: PromptPlanItem[] = Array.isArray(res?.items) ? res.items : [];
 
-      if (items.length === 0) {
-        throw new Error('The server returned an empty plan. Please try again.');
+      if (items.length !== 30) {
+        throw new Error('The server did not return all 30 daily prompts. Please try again.');
       }
 
       setPromptPlan(items);
       setTodayPrompt(res?.today ?? items[0] ?? null);
-      setPlanStartAt(res?.startDate ? new Date(res.startDate).getTime() : Date.now());
+      setPlanStartDate(res?.startDate ?? new Date().toISOString().slice(0, 10));
+      setCurrentTime(Date.now());
       setPromptMessageColor('primary');
       setPromptMessage('Success! Your 30-day prompt plan is ready.');
       setPlanToastOpen(true);
@@ -263,7 +270,9 @@ const Home: React.FC = () => {
       return 'Loading your plan…';
     }
     if (isRegenerateLocked) {
-      return `Available again in ${daysUntilUnlock} day${daysUntilUnlock === 1 ? '' : 's'}`;
+      return daysUntilUnlock > 0
+        ? `Plan active · ${daysUntilUnlock} day${daysUntilUnlock === 1 ? '' : 's'} left`
+        : 'Current plan active';
     }
     if (hasPlanWithoutStartDate) {
       return '30-day prompts generated';
@@ -502,7 +511,7 @@ const Home: React.FC = () => {
                   </div>
                 )}
 
-                {!generatingPlan && isRegenerateLocked && (
+                {!generatingPlan && isRegenerateLocked && promptPlan.length > 0 && (
                   <p
                     style={{
                       margin: '12px 0 0',
@@ -510,7 +519,7 @@ const Home: React.FC = () => {
                       color: '#6B7A90',
                     }}
                   >
-                    Your current 30-day plan is active. You can generate a new one once it unlocks.
+                    Your 30 daily prompts are saved below. A new plan becomes available after the 30-day plan period ends.
                   </p>
                 )}
 
