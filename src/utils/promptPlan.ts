@@ -24,6 +24,40 @@ export interface PromptPlanResponse {
   startDate: string | null;
 }
 
+export interface PromptPlanRegenerationState {
+  locked: boolean;
+  nextAvailableAt: number | null;
+  daysUntilUnlock: number;
+}
+
+const PROMPT_PLAN_LOCK_MS = 30 * 24 * 60 * 60 * 1000;
+
+export const getPromptPlanRegenerationState = (
+  startDate: string | null,
+  itemCount: number,
+  now = Date.now(),
+): PromptPlanRegenerationState => {
+  if (itemCount <= 0) {
+    return { locked: false, nextAvailableAt: null, daysUntilUnlock: 0 };
+  }
+
+  const startAt = startDate
+    ? /^\d{4}-\d{2}-\d{2}$/.test(startDate)
+      ? Date.parse(`${startDate}T00:00:00.000Z`)
+      : Date.parse(startDate)
+    : Number.NaN;
+  const nextAvailableAt = Number.isFinite(startAt) ? startAt + PROMPT_PLAN_LOCK_MS : null;
+  const locked = nextAvailableAt === null || nextAvailableAt > now;
+
+  return {
+    locked,
+    nextAvailableAt,
+    daysUntilUnlock: locked && nextAvailableAt !== null
+      ? Math.max(1, Math.ceil((nextAvailableAt - now) / PROMPT_PLAN_LOCK_MS * 30))
+      : 0,
+  };
+};
+
 export const DEFAULT_LOCATION = 'Lucknow, India';
 
 export interface GeneratePlanInput {

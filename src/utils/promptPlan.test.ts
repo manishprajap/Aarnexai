@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { normalizePromptPlanResponse } from './promptPlan';
+import {
+  getPromptPlanRegenerationState,
+  normalizePromptPlanResponse,
+} from './promptPlan';
 
 describe('normalizePromptPlanResponse', () => {
   it('reads nested database responses and sorts prompts by day', () => {
@@ -22,6 +25,27 @@ describe('normalizePromptPlanResponse', () => {
       ],
       today: { day: 1, prompt: 'Today prompt' },
       startDate: '2026-09-30T00:00:00.000Z',
+    });
+  });
+
+  describe('getPromptPlanRegenerationState', () => {
+    const now = Date.parse('2026-10-07T00:00:00.000Z');
+
+    it('locks regeneration while the saved 30-day plan is active', () => {
+      expect(getPromptPlanRegenerationState('2026-09-08', 30, now)).toEqual({
+        locked: true,
+        nextAvailableAt: Date.parse('2026-10-08T00:00:00.000Z'),
+        daysUntilUnlock: 1,
+      });
+    });
+
+    it('unlocks regeneration after 30 days and allows first-time generation', () => {
+      expect(getPromptPlanRegenerationState('2026-09-07', 30, now).locked).toBe(false);
+      expect(getPromptPlanRegenerationState(null, 0, now)).toEqual({
+        locked: false,
+        nextAvailableAt: null,
+        daysUntilUnlock: 0,
+      });
     });
   });
 });

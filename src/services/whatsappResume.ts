@@ -291,7 +291,15 @@ function isPermanentClaimError(
 
 async function claimOnce(): Promise<ClaimResult> {
   try {
-    const response = await apiPost('/whatsapp/claim', {});
+    const pending = readPending();
+    if (!pending?.sessionId) {
+      return {
+        state: 'error',
+        message: 'WhatsApp connection session is missing. Please try connecting again.',
+      };
+    }
+
+    const response = await apiPost('/whatsapp/claim', { sessionId: pending.sessionId });
 
     const res = findClaimResponse(response);
 

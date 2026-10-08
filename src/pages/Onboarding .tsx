@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  useIonRouter, IonPage, IonHeader, IonToolbar, IonButtons, IonButton, IonIcon, IonContent, IonInput,
+  IonPage, IonHeader, IonToolbar, IonButtons, IonButton, IonIcon, IonContent, IonInput,
   IonSelect, IonSelectOption, IonTextarea, IonSegment, IonSegmentButton, IonLabel, IonSpinner,
 } from '@ionic/react';
 import {
@@ -39,10 +39,7 @@ const errorText = (e: any, fallback: string) => e?.error || e?.message || fallba
 const EMPTY_CATALOG: Catalog = { industries: [], categories: [], services: [], targets: [], strategies: [] };
 
 const Onboarding: React.FC = () => {
-  const ionRouter = useIonRouter();
-  // ASSUMPTION: AuthContext exposes a function that re-fetches the profile so `hasBusiness` turns true.
-  // Rename `refreshAuth` if yours is called something else.
-  const { refreshAuth } = useAuth() as any;
+  const { refreshStatus } = useAuth();
 
   const [step, setStep] = useState(1);
   const [logo, setLogo] = useState<string | null>(null);
@@ -131,7 +128,7 @@ const Onboarding: React.FC = () => {
     setSubmitting(true);
     setError('');
     try {
-      await apiPost('/business', {
+      const response = await apiPost<{ success?: boolean }>('/business', {
         ...form,
         name: form.name.trim(),
         email: form.email.trim(),
@@ -139,8 +136,14 @@ const Onboarding: React.FC = () => {
         // AUTO mode never sends a strategy
         strategy_id: form.automation_mode === 'MANUAL' ? form.strategy_id : null,
       });
-      await refreshAuth?.();
-      ionRouter.push('/subscription', 'root', 'replace');
+      if (response?.success === false) {
+        throw new Error('Business setup could not be saved. Please review your details and try again.');
+      }
+
+      // Refresh the auth flags before navigating. RequireAuth observes the
+      // updated hasBusiness state and redirects this onboarding route to
+      // the subscription page for accounts without an active plan.
+      await refreshStatus();
     } catch (e: any) {
       setError(errorText(e, 'Could not save your business. Please try again.'));
       setSubmitting(false);
