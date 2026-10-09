@@ -69,9 +69,37 @@ type SubscriptionReminder = {
 
 const GENERATE_WATCHDOG_MS = 95_000;
 
+const adSlides = [
+  {
+    type: 'image',
+    label: 'IMAGE AD',
+    title: 'Make every product stand out',
+    description: 'Turn product photos into scroll-stopping ads.',
+    media: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=1200&q=85',
+    alt: 'Red sneaker featured in a product advertisement',
+  },
+  {
+    type: 'video',
+    label: 'VIDEO AD',
+    title: 'Bring your story to life',
+    description: 'Create short videos that make people stop and watch.',
+    media: 'https://videos.pexels.com/video-files/3195394/3195394-hd_1920_1080_25fps.mp4',
+    poster: 'https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?auto=format&fit=crop&w=1200&q=85',
+  },
+  {
+    type: 'image',
+    label: 'IMAGE AD',
+    title: 'Share your next big offer',
+    description: 'Design polished campaign creatives in minutes.',
+    media: 'https://images.unsplash.com/photo-1607082349566-187342175e2f?auto=format&fit=crop&w=1200&q=85',
+    alt: 'Shopping bags and products arranged for a retail promotion',
+  },
+] as const;
+
 const Home: React.FC = () => {
   const ionRouter = useIonRouter();
   const { user, logout } = useAuth() as any;
+  const [activeAdSlide, setActiveAdSlide] = useState(0);
 
   const popoverRef = useRef<HTMLIonPopoverElement>(null);
   const themeStyle = useLogoTheme();
@@ -128,6 +156,13 @@ const Home: React.FC = () => {
     ?? todayPrompt
     ?? promptPlan[0]
     ?? null;
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setActiveAdSlide((current) => (current + 1) % adSlides.length);
+    }, adSlides[activeAdSlide].type === 'video' ? 12000 : 6000);
+    return () => window.clearTimeout(timer);
+  }, [activeAdSlide]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setCurrentTime(Date.now()), 60_000);
@@ -366,6 +401,73 @@ const Home: React.FC = () => {
 
       <IonContent fullscreen className="home-content">
         <div className="home-container">
+          <div className="ad-news-ticker" aria-label="Latest news">
+            <span className="ad-news-label">LATEST</span>
+            <div className="ad-news-window">
+              <div className="ad-news-track">
+                <span>New: create image and video ads for your next campaign</span>
+                <span aria-hidden="true">New: create image and video ads for your next campaign</span>
+              </div>
+            </div>
+          </div>
+          <section className="ad-carousel" aria-label="Ad examples" aria-roledescription="carousel">
+            <div className={`ad-carousel-media${adSlides[activeAdSlide].type === 'video' ? ' ad-carousel-video' : ''}`}>
+              {adSlides[activeAdSlide].type === 'video' ? (
+                <video
+                  key={adSlides[activeAdSlide].media}
+                  className="ad-carousel-creative"
+                  src={adSlides[activeAdSlide].media}
+                  poster={adSlides[activeAdSlide].poster}
+                  autoPlay
+                  controls
+                  muted
+                  loop
+                  playsInline
+                  preload="metadata"
+                  aria-label="Example video advertisement"
+                />
+              ) : (
+                <img
+                  className="ad-carousel-creative"
+                  src={adSlides[activeAdSlide].media}
+                  alt={adSlides[activeAdSlide].alt}
+                />
+              )}
+              <span className="ad-carousel-type">{adSlides[activeAdSlide].label}</span>
+              <div className="ad-carousel-copy">
+                <h2>{adSlides[activeAdSlide].title}</h2>
+                <p>{adSlides[activeAdSlide].description}</p>
+                <button type="button" onClick={() => ionRouter.push('/uploadnew', 'forward')}>
+                  Create an ad <IonIcon icon={arrowForwardOutline} />
+                </button>
+              </div>
+              <button
+                type="button"
+                className="ad-carousel-arrow ad-carousel-next"
+                aria-label="Next ad"
+                onClick={() => setActiveAdSlide((current) => (current + 1) % adSlides.length)}
+              >
+                <IonIcon icon={chevronForwardOutline} />
+              </button>
+            </div>
+            <div className="ad-carousel-footer">
+              <span>Creative inspiration</span>
+              <div className="ad-carousel-dots" aria-label="Choose an ad">
+                {adSlides.map((slide, index) => (
+                  <button
+                    key={slide.title}
+                    type="button"
+                    className={index === activeAdSlide ? 'active' : ''}
+                    aria-label={`Show ${slide.label.toLowerCase()} ${index + 1} of ${adSlides.length}`}
+                    aria-current={index === activeAdSlide ? 'true' : undefined}
+                    onClick={() => setActiveAdSlide(index)}
+                  />
+                ))}
+              </div>
+              <span>{String(activeAdSlide + 1).padStart(2, '0')} / {String(adSlides.length).padStart(2, '0')}</span>
+            </div>
+          </section>
+
           {/* Greeting */}
           <section className="greeting">
             <p className="greeting-eyebrow">Welcome back,</p>

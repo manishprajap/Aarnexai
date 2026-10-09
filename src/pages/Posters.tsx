@@ -727,6 +727,7 @@ const Posters: React.FC = () => {
   };
 
   const togglePlatform = (platform: PlatformKey) => {
+    if (platform === 'youtube') return;
     setSelectedPlatforms((prev) =>
       prev.includes(platform)
         ? prev.filter((p) => p !== platform)
@@ -807,7 +808,19 @@ const Posters: React.FC = () => {
         if (pending) {
           try {
             const data = JSON.parse(pending);
-            const pendingPlatforms: PlatformKey[] = data.platforms;
+            const pendingPlatforms: PlatformKey[] = (
+              Array.isArray(data.platforms) ? data.platforms : []
+            ).filter(
+              (platform: unknown): platform is PlatformKey =>
+                typeof platform === 'string' &&
+                platform in PLATFORM_BY_KEY &&
+                platform !== 'youtube'
+            );
+            if (pendingPlatforms.length === 0) {
+              localStorage.removeItem('pending_banner_publish');
+              setError('YouTube is connected for analytics only. Static images cannot be published to YouTube.');
+              return;
+            }
 
             // Saved alongside platforms when the connect chain started —
             // see handleConnectAndPost below. Real urn:li:person:*/
@@ -922,7 +935,16 @@ const Posters: React.FC = () => {
   }, []);
 
   const handleConnectAndPost = async () => {
-    if (!activeBanner || selectedPlatforms.length === 0) {
+    const publishablePlatforms = selectedPlatforms.filter((platform) => platform !== 'youtube');
+    if (selectedPlatforms.includes('youtube')) {
+      setSelectedPlatforms(publishablePlatforms);
+      if (publishablePlatforms.length === 0) {
+        setError('YouTube is connected for analytics only. Choose another channel to publish this image.');
+        return;
+      }
+    }
+
+    if (!activeBanner || publishablePlatforms.length === 0) {
       return;
     }
 
@@ -930,7 +952,7 @@ const Posters: React.FC = () => {
     // already connected, require at least one target (personal/company)
     // so we never silently post nowhere or to the wrong place.
     if (
-      selectedPlatforms.includes('linkedin') &&
+      publishablePlatforms.includes('linkedin') &&
       connectionStatus.linkedin &&
       selectedLinkedinTargets.length === 0
     ) {
@@ -939,7 +961,7 @@ const Posters: React.FC = () => {
     }
 
     if (
-      selectedPlatforms.includes('facebook') &&
+      publishablePlatforms.includes('facebook') &&
       connectionStatus.facebook &&
       selectedFacebookTargets.length === 0
     ) {
@@ -948,7 +970,7 @@ const Posters: React.FC = () => {
     }
 
     if (
-      selectedPlatforms.includes('instagram') &&
+      publishablePlatforms.includes('instagram') &&
       connectionStatus.instagram &&
       selectedInstagramTargets.length === 0
     ) {
@@ -966,7 +988,7 @@ const Posters: React.FC = () => {
        * handle it separately, before touching the redirect flow
        * used by every other platform below.
        */
-      if (selectedPlatforms.includes('whatsapp')) {
+      if (publishablePlatforms.includes('whatsapp')) {
         const alreadyConnected =
           connectionStatus.whatsapp || (await checkPlatformConnection('whatsapp'));
 
@@ -978,7 +1000,7 @@ const Posters: React.FC = () => {
 
         // Any remaining non-WhatsApp platforms still go through the
         // normal redirect flow.
-        const otherPlatforms = selectedPlatforms.filter((p) => p !== 'whatsapp');
+        const otherPlatforms = publishablePlatforms.filter((p) => p !== 'whatsapp');
 
         for (const platform of otherPlatforms) {
           let connected = connectionStatus[platform];
@@ -1029,7 +1051,7 @@ const Posters: React.FC = () => {
         const postedDay = activeBanner.day;
 
         setSuccessMsg(
-          `Posted to ${selectedPlatforms
+          `Posted to ${publishablePlatforms
             .map((platform) => PLATFORM_BY_KEY[platform].label)
             .join(' & ')}`
         );
@@ -1044,7 +1066,7 @@ const Posters: React.FC = () => {
        * Every other platform — Facebook, Instagram, Google Business,
        * YouTube, LinkedIn — shares the same redirect-based connect flow.
        */
-      for (const platform of selectedPlatforms) {
+      for (const platform of publishablePlatforms) {
         let connected = connectionStatus[platform];
 
         try {
@@ -1058,14 +1080,14 @@ const Posters: React.FC = () => {
             'pending_banner_publish',
             JSON.stringify({
               bannerId,
-              platforms: selectedPlatforms,
-              linkedinOwnerUrns: selectedPlatforms.includes('linkedin')
+              platforms: publishablePlatforms,
+              linkedinOwnerUrns: publishablePlatforms.includes('linkedin')
                 ? selectedLinkedinTargets
                 : undefined,
-              facebookPageIds: selectedPlatforms.includes('facebook')
+              facebookPageIds: publishablePlatforms.includes('facebook')
                 ? selectedFacebookTargets
                 : undefined,
-              instagramAccountIds: selectedPlatforms.includes('instagram')
+              instagramAccountIds: publishablePlatforms.includes('instagram')
                 ? selectedInstagramTargets
                 : undefined,
             })
@@ -1074,7 +1096,7 @@ const Posters: React.FC = () => {
           const authUrl = await startPlatformConnect(
             platform,
             bannerId,
-            selectedPlatforms
+            publishablePlatforms
           );
           window.location.href = authUrl;
           return;
@@ -1086,13 +1108,13 @@ const Posters: React.FC = () => {
        */
       const publishRes = await publishBanner(
         bannerId,
-        selectedPlatforms,
-        selectedPlatforms.includes('linkedin') ? selectedLinkedinTargets : undefined,
-        selectedPlatforms.includes('facebook') ? selectedFacebookTargets : undefined,
-        selectedPlatforms.includes('instagram') ? selectedInstagramTargets : undefined
+        publishablePlatforms,
+        publishablePlatforms.includes('linkedin') ? selectedLinkedinTargets : undefined,
+        publishablePlatforms.includes('facebook') ? selectedFacebookTargets : undefined,
+        publishablePlatforms.includes('instagram') ? selectedInstagramTargets : undefined
       );
 
-      if (selectedPlatforms.includes('facebook')) {
+      if (publishablePlatforms.includes('facebook')) {
         const postUrl = extractFacebookPostUrl(publishRes);
         if (postUrl) setFacebookShareUrl(postUrl);
       }
@@ -1100,7 +1122,7 @@ const Posters: React.FC = () => {
       const postedDay = activeBanner.day;
 
       setSuccessMsg(
-        `Posted to ${selectedPlatforms
+        `Posted to ${publishablePlatforms
           .map((platform) => PLATFORM_BY_KEY[platform].label)
           .join(' & ')}`
       );
@@ -1556,8 +1578,8 @@ const Posters: React.FC = () => {
                     iconColor={platform.iconColor}
                     label={platform.label}
                     disabled={platform.key === 'youtube'}
-                    disabledReason={platform.key === 'youtube' ? 'Video required' : undefined}
-                    checked={selectedPlatforms.includes(platform.key)}
+                    disabledReason={platform.key === 'youtube' ? 'Analytics only · videos required to publish' : undefined}
+                    checked={platform.key !== 'youtube' && selectedPlatforms.includes(platform.key)}
                     onToggle={() => togglePlatform(platform.key)}
                   />
 
@@ -1620,7 +1642,7 @@ const Posters: React.FC = () => {
               <IonButton
                 expand="block"
                 disabled={
-                  selectedPlatforms.length === 0 ||
+                  selectedPlatforms.filter((platform) => platform !== 'youtube').length === 0 ||
                   posting ||
                   checkingConnections ||
                   (selectedPlatforms.includes('linkedin') &&

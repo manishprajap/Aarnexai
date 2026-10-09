@@ -1371,3 +1371,263 @@ ion-modal.connect-sheet ion-content.cs-content {
     font-size: 12px;
   }
 }
+
+.ad-carousel {
+  overflow: hidden;
+  margin: 0 0 20px;
+  border: 1px solid var(--edge);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 0 8px 24px rgba(18, 40, 62, 0.1);
+}
+
+.ad-carousel-media {
+  position: relative;
+  min-height: 150px;
+  aspect-ratio: 16 / 7;
+  overflow: hidden;
+  background: #102321;
+  color: #ffffff;
+}
+
+.ad-carousel-media::after {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(5, 24, 22, 0.78), rgba(5, 24, 22, 0.12) 85%),
+    linear-gradient(0deg, rgba(5, 24, 22, 0.22), transparent 55%);
+  content: '';
+  pointer-events: none;
+}
+
+.ad-carousel-creative {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 150px;
+  object-fit: cover;
+}
+
+.ad-news-ticker {
+  display: flex;
+  height: 32px;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 10px;
+  padding: 0 12px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: rgba(7, 39, 34, 0.84);
+  color: #ffffff;
+}
+
+.ad-news-label {
+  flex: none;
+  color: #9de4c3;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.ad-news-window {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ad-news-track {
+  display: flex;
+  width: max-content;
+  animation: ad-news-scroll 20s linear infinite;
+}
+
+.ad-news-track span {
+  padding-right: 36px;
+}
+
+@keyframes ad-news-scroll {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.ad-carousel-type {
+  position: absolute;
+  z-index: 2;
+  top: 16px;
+  left: 16px;
+  padding: 6px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 999px;
+  background: rgba(9, 31, 28, 0.42);
+  color: #ffffff;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.ad-carousel-copy {
+  position: absolute;
+  z-index: 2;
+  right: 56px;
+  bottom: 14px;
+  left: 16px;
+  max-width: 340px;
+  pointer-events: none;
+}
+
+.ad-carousel-copy h2 {
+  margin: 0;
+  color: #ffffff;
+  font-size: clamp(19px, 5vw, 26px);
+  font-weight: 800;
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+}
+
+.ad-carousel-copy p {
+  margin: 7px 0 12px;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.ad-carousel-copy button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9px;
+  background: #ffffff;
+  color: #123c35;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  pointer-events: auto;
+}
+
+.ad-carousel-copy button ion-icon {
+  font-size: 14px;
+}
+
+.ad-carousel-arrow {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  transform: translateY(-50%);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 50%;
+  background: rgba(9, 31, 28, 0.48);
+  color: #ffffff;
+  font-size: 18px;
+  cursor: pointer;
+}
+
+.ad-carousel-next {
+  right: 10px;
+}
+
+.ad-carousel-video::after {
+  background: linear-gradient(90deg, rgba(5, 24, 22, 0.72), rgba(5, 24, 22, 0.14) 90%);
+}
+
+.ad-carousel-video .ad-carousel-copy {
+  top: 18px;
+  right: 54px;
+  bottom: auto;
+  pointer-events: none;
+}
+
+.ad-carousel-video .ad-carousel-arrow {
+  top: auto;
+  bottom: 12px;
+  transform: none;
+}
+
+.ad-carousel-footer {
+  display: flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 13px;
+  color: var(--on-bg-muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.ad-carousel-dots {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ad-carousel-dots button {
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #c5d2cf;
+  cursor: pointer;
+}
+
+.ad-carousel-dots button.active {
+  width: 18px;
+  border-radius: 999px;
+  background: var(--brand);
+}
+
+.ad-carousel-arrow:focus-visible,
+.ad-carousel-copy button:focus-visible,
+.ad-carousel-dots button:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+@media (min-width: 760px) {
+  .ad-carousel {
+    margin-bottom: 24px;
+  }
+
+  .ad-carousel-media,
+  .ad-carousel-creative {
+    min-height: 190px;
+    max-height: 220px;
+  }
+
+  .ad-carousel-copy {
+    bottom: 26px;
+    left: 24px;
+  }
+
+  .ad-carousel-type {
+    top: 22px;
+    left: 24px;
+  }
+
+  .ad-carousel-video .ad-carousel-copy {
+    top: 72px;
+    left: 24px;
+  }
+
+  .ad-carousel-footer {
+    min-height: 42px;
+    padding: 0 18px;
+    font-size: 11px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ad-news-track {
+    animation: none;
+  }
+}
