@@ -102,7 +102,7 @@ const App: React.FC = () => {
               }
             />
 
-            {/* Plan purchase - shown when hasBusiness is true but hasSubscription is false */}
+            {/* Subscription checkout is available from the dashboard and when publishing is blocked. */}
             <Route
               path="/subscription"
               element={

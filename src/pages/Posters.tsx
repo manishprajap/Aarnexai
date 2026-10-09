@@ -13,6 +13,7 @@ import {
   IonModal,
   IonCheckbox,
   IonButton,
+  useIonRouter,
 } from '@ionic/react';
 import {
   imagesOutline,
@@ -32,7 +33,8 @@ import {
   personOutline,
   shareSocialOutline,
 } from 'ionicons/icons';
-import { apiGet, apiPost } from '../api';
+import { ApiError, apiGet, apiPost } from '../api';
+import { useAuth } from '../context/AuthContext';
 import { loadFacebookSdk } from '../lib/facebookSdk';
 import BottomTabBar from '../components/BottomTabBar';
 
@@ -382,6 +384,9 @@ async function publishBanner(
         : {}),
     });
   } catch (error: any) {
+    if (error instanceof ApiError && error.data?.code === 'SUBSCRIPTION_REQUIRED') {
+      throw error;
+    }
     const results = error?.results;
     const platformDetails = platforms
       .map((platform) => results?.[platform]?.message)
@@ -417,6 +422,8 @@ async function publishBanner(
 }
 
 const Posters: React.FC = () => {
+  const ionRouter = useIonRouter();
+  const { hasSubscription } = useAuth();
   const [banners, setBanners] = useState<BannerItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -900,10 +907,15 @@ const Posters: React.FC = () => {
               prev.filter((banner) => banner.id !== data.bannerId)
             );
           } catch (error: any) {
-            setError(
-              error?.message ||
-                `${platformLabel} connected, but posting failed`
-            );
+            if (error instanceof ApiError && error.data?.code === 'SUBSCRIPTION_REQUIRED') {
+              localStorage.removeItem('pending_banner_publish');
+              ionRouter.push('/subscription', 'forward');
+            } else {
+              setError(
+                error?.message ||
+                  `${platformLabel} connected, but posting failed`
+              );
+            }
           }
         }
       }
@@ -945,6 +957,11 @@ const Posters: React.FC = () => {
     }
 
     if (!activeBanner || publishablePlatforms.length === 0) {
+      return;
+    }
+
+    if (!hasSubscription) {
+      ionRouter.push('/subscription', 'forward');
       return;
     }
 
@@ -1137,6 +1154,11 @@ const Posters: React.FC = () => {
     } catch (error: any) {
       console.error('Connect & Post error:', error);
 
+      if (error instanceof ApiError && error.data?.code === 'SUBSCRIPTION_REQUIRED') {
+        localStorage.removeItem('pending_banner_publish');
+        ionRouter.push('/subscription', 'forward');
+        return;
+      }
       setError(error?.message || 'Failed to connect or publish banner');
     } finally {
       setPosting(false);

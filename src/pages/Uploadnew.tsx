@@ -519,7 +519,7 @@ const SelectField: React.FC<SelectFieldProps> = ({
 
 const Uploadnew: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, hasSubscription } = useAuth();
   const {
     connected,
     checking: checkingConnections,
@@ -1076,6 +1076,11 @@ const Uploadnew: React.FC = () => {
       return;
     }
 
+    if (!hasSubscription) {
+      navigate('/subscription');
+      return;
+    }
+
     const missingDestination = missingDestinationPlatform();
     if (missingDestination) {
       showMessage(`Select at least one ${platformLabel(missingDestination)} destination.`);
@@ -1167,6 +1172,11 @@ const Uploadnew: React.FC = () => {
       setPostDescription('');
     } catch (error: any) {
       console.error('SAVE SOCIAL POSTS ERROR:', error);
+
+      if (error instanceof ApiError && error.data?.code === 'SUBSCRIPTION_REQUIRED') {
+        navigate('/subscription');
+        return;
+      }
 
       const results = error instanceof ApiError ? error.data?.results : null;
       if (results && typeof results === 'object' && !Array.isArray(results)) {

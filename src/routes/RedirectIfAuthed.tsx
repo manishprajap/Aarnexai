@@ -16,7 +16,6 @@ const RedirectIfAuthed: React.FC<{
     isAuthenticated,
     isInitializing,
     hasBusiness,
-    hasSubscription,
   } = useAuth();
 
   const location = useLocation();
@@ -38,11 +37,6 @@ const RedirectIfAuthed: React.FC<{
       return;
     }
 
-    if (!hasSubscription) {
-      ionRouter.push('/subscription', 'root', 'replace');
-      return;
-    }
-
     const state = location.state as LocationState | null;
     const from = state?.from?.pathname ?? '/dashboard';
 
@@ -52,7 +46,6 @@ const RedirectIfAuthed: React.FC<{
     isInitializing,
     isAuthenticated,
     hasBusiness,
-    hasSubscription,
     location.state,
     ionRouter,
   ]);

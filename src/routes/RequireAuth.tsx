@@ -42,16 +42,12 @@ const RequireAuth: React.FC<{
       return;
     }
 
-    if (hasBusiness && !hasSubscription && path !== '/subscription') {
-      ionRouter.push('/subscription', 'root', 'replace');
+    if (hasBusiness && path === '/onboarding') {
+      ionRouter.push('/dashboard', 'root', 'replace');
       return;
     }
 
-    if (
-      hasBusiness &&
-      hasSubscription &&
-      (path === '/onboarding' || path === '/subscription')
-    ) {
+    if (hasBusiness && hasSubscription && path === '/subscription') {
       ionRouter.push('/dashboard', 'root', 'replace');
       return;
     }
@@ -91,12 +87,8 @@ const RequireAuth: React.FC<{
   const shouldBlock =
     !isAuthenticated ||
     (!hasBusiness && path !== '/onboarding') ||
-    (hasBusiness && !hasSubscription && path !== '/subscription') ||
-    (
-      hasBusiness &&
-      hasSubscription &&
-      (path === '/onboarding' || path === '/subscription')
-    );
+    (hasBusiness && path === '/onboarding') ||
+    (hasBusiness && hasSubscription && path === '/subscription');
 
   /**
    * A redirect is in flight (handled by the effect above) —
