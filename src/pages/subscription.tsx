@@ -61,6 +61,7 @@ interface Plan {
   posters: number;
   durationDays: number;
   features: string[];
+  hasAvailableCoupons: boolean;
 }
 
 const Subscription: React.FC = () => {
@@ -313,26 +314,35 @@ const Subscription: React.FC = () => {
                     Coupon discount: ₹{(appliedCoupon.discountAmount / 100).toFixed(2)}
                   </p>
                 )}
-                <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-                  <input
-                    value={couponCode}
-                    onChange={(event) => {
-                      setCouponCode(event.target.value.toUpperCase());
-                      setAppliedCoupons({});
-                      setCouponMessage('');
-                    }}
-                    placeholder="Discount coupon"
-                    aria-label="Discount coupon code"
-                    style={{ minWidth: 0, flex: 1, border: `1px solid ${brand.border}`, borderRadius: 9, padding: '9px 10px' }}
-                  />
-                  <IonButton
-                    fill="outline"
-                    onClick={() => void applyCoupon(plan)}
-                    disabled={!couponCode.trim() || loadingPlan !== null}
-                  >
-                    Apply
-                  </IonButton>
-                </div>
+                {plan.hasAvailableCoupons && (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input
+                        value={couponCode}
+                        onChange={(event) => {
+                          setCouponCode(event.target.value.toUpperCase());
+                          setAppliedCoupons({});
+                          setCouponMessage('');
+                        }}
+                        placeholder="Enter coupon code"
+                        aria-label={`Discount coupon for ${plan.name}`}
+                        style={{ minWidth: 0, flex: 1, border: `1px solid ${brand.border}`, borderRadius: 9, padding: '9px 10px' }}
+                      />
+                      <IonButton
+                        fill="outline"
+                        onClick={() => void applyCoupon(plan)}
+                        disabled={!couponCode.trim() || loadingPlan !== null}
+                      >
+                        Apply
+                      </IonButton>
+                    </div>
+                    {couponMessage && (
+                      <p role="status" style={{ margin: '7px 2px 0', color: couponMessage.startsWith('Coupon applied') ? brand.teal : '#b42318', fontSize: 12 }}>
+                        {couponMessage}
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
                   {plan.features.map((feature) => (
@@ -370,12 +380,6 @@ const Subscription: React.FC = () => {
               </div>
             );})}
           </div>
-          {couponMessage && (
-            <p role="status" style={{ textAlign: 'center', color: brand.teal, fontSize: 12 }}>
-              {couponMessage}
-            </p>
-          )}
-
           <p
             style={{
               textAlign: 'center',
