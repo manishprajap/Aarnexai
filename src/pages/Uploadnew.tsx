@@ -7,7 +7,6 @@ import {
   IonButton,
   IonCheckbox,
   IonContent,
-  IonFooter,
   IonHeader,
   IonIcon,
   IonModal,
@@ -38,6 +37,7 @@ import {
 
 import { apiGet, apiPost, serverApiGet, serverApiPost } from '../api';
 import { useAuth } from '../context/AuthContext';
+import { useSocialConnections } from '../hooks/useSocialConnections';
 import aarnaLogo from '../assets/aarna-logo.png';
 import {
   BusinessCategory,
@@ -64,9 +64,13 @@ const ui = {
 const LOGO_SRC = aarnaLogo;
 
 const MAX_DESCRIPTION = 500;
-const MAX_LOCAL_MEDIA_SIZE = 1024 * 1024; // must match MAX_BYTES on the server
+const MAX_IMAGE_SIZE = 1024 * 1024;
+const MIN_VIDEO_SIZE = 100 * 1024;
+const MAX_VIDEO_SIZE = 10 * 1024 * 1024;
 const MAX_IMAGE_EDGE = 1600;
 const MEDIA_STORAGE_PREFIX = 'upload_media_v1';
+const VIDEO_DB_NAME = 'aarnexai-upload-media';
+const VIDEO_STORE_NAME = 'videos';
 
 type PublishPlatform =
   | 'instagram'
@@ -99,6 +103,57 @@ const PUBLISH_PLATFORMS: { id: PublishPlatform; name: string; icon: string }[] =
 const platformLabel = (id: string) => PUBLISH_PLATFORMS.find((p) => p.id === id)?.name ?? id;
 
 const mediaStorageKey = (userId: number | string) => `${MEDIA_STORAGE_PREFIX}_${userId}`;
+
+const openVideoDatabase = (): Promise<IDBDatabase> =>
+  new Promise((resolve, reject) => {
+    if (!('indexedDB' in window)) {
+      reject(new Error('This browser does not support large local video storage.'));
+      return;
+    }
+
+    const request = indexedDB.open(VIDEO_DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(VIDEO_STORE_NAME)) {
+        request.result.createObjectStore(VIDEO_STORE_NAME);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error ?? new Error('Could not open local video storage.'));
+  });
+
+const saveVideoLocally = async (key: string, file: File): Promise<void> => {
+  const database = await openVideoDatabase();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(VIDEO_STORE_NAME, 'readwrite');
+    transaction.objectStore(VIDEO_STORE_NAME).put(file, key);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error ?? new Error('Could not save video.'));
+    transaction.onabort = () => reject(transaction.error ?? new Error('Video storage was interrupted.'));
+  }).finally(() => database.close());
+};
+
+const loadVideoLocally = async (key: string): Promise<Blob | null> => {
+  const database = await openVideoDatabase();
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(VIDEO_STORE_NAME, 'readonly');
+    const request = transaction.objectStore(VIDEO_STORE_NAME).get(key);
+    request.onsuccess = () => resolve(request.result instanceof Blob ? request.result : null);
+    request.onerror = () => reject(request.error ?? new Error('Could not read saved video.'));
+    transaction.oncomplete = () => database.close();
+    transaction.onerror = () => database.close();
+  });
+};
+
+const removeVideoLocally = async (key: string): Promise<void> => {
+  const database = await openVideoDatabase();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction(VIDEO_STORE_NAME, 'readwrite');
+    transaction.objectStore(VIDEO_STORE_NAME).delete(key);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error ?? new Error('Could not remove saved video.'));
+    transaction.onabort = () => reject(transaction.error ?? new Error('Video removal was interrupted.'));
+  }).finally(() => database.close());
+};
 
 const readFileAsDataUrl = (file: File): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -139,7 +194,7 @@ const compressImage = async (file: File): Promise<File> => {
         canvas.toBlob(resolve, 'image/jpeg', quality),
       );
 
-      if (blob && blob.size <= MAX_LOCAL_MEDIA_SIZE) {
+      if (blob && blob.size <= MAX_IMAGE_SIZE) {
         return new File([blob], `${file.name.replace(/\.\w+$/, '')}.jpg`, {
           type: 'image/jpeg',
         });
@@ -464,6 +519,17 @@ const SelectField: React.FC<SelectFieldProps> = ({
 const Uploadnew: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const {
+    connected,
+    checking: checkingConnections,
+    refresh: refreshConnections,
+    selectedLinkedinTargets,
+    selectedFacebookTargets,
+    selectedInstagramTargets,
+    facebookTargets,
+    instagramTargets,
+    linkedinTargets,
+  } = useSocialConnections();
 
   // step 'upload' = screen 1, step 'generate' = screen 2
   const [step, setStep] = useState<'upload' | 'generate'>('upload');
@@ -506,44 +572,87 @@ const Uploadnew: React.FC = () => {
 
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null); // browser fallback for the camera
+  const videoObjectUrlsRef = useRef(new Set<string>());
 
   const showMessage = (message: string) => {
     setToastMessage(message);
     setShowToast(true);
   };
 
+  const currentUserId = user?.id;
+  const videoStorageKey = (mediaId: string) => `${currentUserId}:${mediaId}`;
+
+  const createVideoPreviewUrl = (blob: Blob) => {
+    const url = URL.createObjectURL(blob);
+    videoObjectUrlsRef.current.add(url);
+    return url;
+  };
+
+  const revokeVideoPreviewUrl = (url: string) => {
+    if (videoObjectUrlsRef.current.delete(url)) {
+      URL.revokeObjectURL(url);
+    }
+  };
+
   // ---------- load saved media for this user ----------
   useEffect(() => {
-    if (!user?.id) {
+    const userId = currentUserId;
+    if (!userId) {
       setMediaItems([]);
       return;
     }
 
-    try {
-      const saved = localStorage.getItem(mediaStorageKey(user.id));
-      const parsed: unknown = saved ? JSON.parse(saved) : [];
-      if (!Array.isArray(parsed)) {
-        throw new Error('Saved media data has an invalid format.');
-      }
+    let cancelled = false;
+    const loadSavedMedia = async () => {
+      try {
+        const saved = localStorage.getItem(mediaStorageKey(userId));
+        const parsed: unknown = saved ? JSON.parse(saved) : [];
+        if (!Array.isArray(parsed)) {
+          throw new Error('Saved media data has an invalid format.');
+        }
 
-      setMediaItems(
-        parsed.filter(
+        const records = parsed.filter(
           (item): item is LocalMedia =>
             item &&
             typeof item.id === 'string' &&
             typeof item.name === 'string' &&
             typeof item.mimeType === 'string' &&
             typeof item.size === 'number' &&
-            typeof item.dataUrl === 'string' &&
+            (typeof item.dataUrl === 'string' || item.mimeType.startsWith('video/')) &&
             typeof item.createdAt === 'string',
-        ),
-      );
-    } catch (error) {
-      console.error('LOAD LOCAL MEDIA ERROR:', error);
-      showMessage('Unable to load saved media from this device');
-      setMediaItems([]);
-    }
-  }, [user?.id]);
+        );
+        const hydrated = await Promise.all(records.map(async (item) => {
+          if (!item.mimeType.startsWith('video/')) return item;
+          const blob = await loadVideoLocally(`${userId}:${item.id}`);
+          return blob ? { ...item, dataUrl: createVideoPreviewUrl(blob) } : null;
+        }));
+
+        if (!cancelled) {
+          setMediaItems(hydrated.filter((item): item is LocalMedia => item !== null));
+        } else {
+          hydrated.forEach((item) => {
+            if (item?.mimeType.startsWith('video/')) revokeVideoPreviewUrl(item.dataUrl);
+          });
+        }
+      } catch (error) {
+        console.error('LOAD LOCAL MEDIA ERROR:', error);
+        if (!cancelled) {
+          showMessage('Unable to load saved media from this device');
+          setMediaItems([]);
+        }
+      }
+    };
+
+    void loadSavedMedia();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUserId]);
+
+  useEffect(() => () => {
+    videoObjectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url));
+    videoObjectUrlsRef.current.clear();
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -694,7 +803,15 @@ const Uploadnew: React.FC = () => {
     try {
       const stored = localStorage.getItem(mediaStorageKey(user.id));
       const parsed = stored ? JSON.parse(stored) : [];
-      return Array.isArray(parsed) ? parsed : [];
+      return Array.isArray(parsed)
+        ? parsed.map((item) => {
+            if (!item?.mimeType?.startsWith('video/')) return item;
+            return {
+              ...item,
+              dataUrl: mediaItems.find((media) => media.id === item.id)?.dataUrl ?? '',
+            };
+          })
+        : [];
     } catch {
       return [];
     }
@@ -706,7 +823,10 @@ const Uploadnew: React.FC = () => {
     }
 
     try {
-      localStorage.setItem(mediaStorageKey(user.id), JSON.stringify(items));
+      const persistedItems = items.map((item) => (
+        item.mimeType.startsWith('video/') ? { ...item, dataUrl: '' } : item
+      ));
+      localStorage.setItem(mediaStorageKey(user.id), JSON.stringify(persistedItems));
       return true;
     } catch (error) {
       console.error('SAVE LOCAL MEDIA ERROR:', error);
@@ -742,32 +862,54 @@ const Uploadnew: React.FC = () => {
 
     try {
       let file = original;
+      const isVideo = file.type.startsWith('video/');
 
-      if (file.size > MAX_LOCAL_MEDIA_SIZE && file.type.startsWith('image/')) {
-        file = await compressImage(file);
-      }
-
-      if (file.size > MAX_LOCAL_MEDIA_SIZE) {
-        showMessage('Each image or video must be 1 MB or smaller.');
+      if (isVideo && file.size < MIN_VIDEO_SIZE) {
+        showMessage('Videos must be at least 100 KB and no larger than 10 MB.');
         return;
       }
 
+      if (isVideo && file.size > MAX_VIDEO_SIZE) {
+        showMessage('Videos must be no larger than 10 MB.');
+        return;
+      }
+
+      if (file.size > MAX_IMAGE_SIZE && file.type.startsWith('image/')) {
+        file = await compressImage(file);
+      }
+
+      if (file.type.startsWith('image/') && file.size > MAX_IMAGE_SIZE) {
+        showMessage('Images must be 1 MB or smaller after compression.');
+        return;
+      }
+
+      const id =
+        typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      const previewUrl = isVideo ? createVideoPreviewUrl(file) : await readFileAsDataUrl(file);
+
       const item: LocalMedia = {
-        id:
-          typeof crypto !== 'undefined' && 'randomUUID' in crypto
-            ? crypto.randomUUID()
-            : `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        id,
         name: file.name,
         mimeType: file.type,
         size: file.size,
-        dataUrl: await readFileAsDataUrl(file),
+        dataUrl: previewUrl,
         createdAt: new Date().toISOString(),
       };
+
+      if (isVideo) {
+        await saveVideoLocally(videoStorageKey(id), file);
+      }
 
       // Read the latest stored list so two quick uploads never overwrite each other
       const nextItems = [item, ...readStoredMedia()];
 
       if (!persistMedia(nextItems)) {
+        if (isVideo) {
+          await removeVideoLocally(videoStorageKey(id));
+          revokeVideoPreviewUrl(previewUrl);
+        }
         showMessage('Device storage is full. Remove some media before uploading more.');
         return;
       }
@@ -786,6 +928,15 @@ const Uploadnew: React.FC = () => {
     persistMedia(next);
     setMediaItems(next);
 
+    const removed = mediaItems.find((item) => item.id === mediaId);
+    if (removed?.mimeType.startsWith('video/')) {
+      revokeVideoPreviewUrl(removed.dataUrl);
+      void removeVideoLocally(videoStorageKey(mediaId)).catch((error) => {
+        console.error('REMOVE LOCAL VIDEO ERROR:', error);
+        showMessage('Video removed from the list, but could not be deleted from device storage.');
+      });
+    }
+
     if (selectedMedia?.id === mediaId) {
       setSelectedMedia(null);
     }
@@ -801,13 +952,13 @@ const Uploadnew: React.FC = () => {
     setPostDescription('');
     setMarketingPrompts([]);
     setMarketingPromptsError('');
+    void refreshConnections();
   };
 
   const selectedMediaId = selectedMedia?.id;
-  const selectedMediaMimeType = selectedMedia?.mimeType;
 
   useEffect(() => {
-    if (!selectedMediaId || !selectedMediaMimeType?.startsWith('image/')) {
+    if (!selectedMediaId) {
       setLoadingMarketingPrompts(false);
       return;
     }
@@ -839,9 +990,17 @@ const Uploadnew: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [selectedMediaId, selectedMediaMimeType]);
+  }, [selectedMediaId]);
 
   const togglePublishPlatform = (platform: PublishPlatform) => {
+    if (!connected[platform] || checkingConnections) return;
+    if (
+      selectedMedia?.mimeType.startsWith('video/') &&
+      (platform === 'whatsapp' || platform === 'google_business' || selectedMedia.mimeType !== 'video/mp4')
+    ) {
+      return;
+    }
+
     setSelectedPlatforms((current) =>
       current.includes(platform)
         ? current.filter((item) => item !== platform)
@@ -901,11 +1060,6 @@ const Uploadnew: React.FC = () => {
       return;
     }
 
-    if (!selectedMedia.mimeType.startsWith('image/')) {
-      showMessage('Only images can be posted to social channels right now');
-      return;
-    }
-
     if (selectedPlatforms.length === 0) {
       showMessage('Select at least one social media channel');
       return;
@@ -913,6 +1067,58 @@ const Uploadnew: React.FC = () => {
 
     try {
       setSavingPosts(true);
+
+      if (selectedMedia.mimeType.startsWith('video/')) {
+        if (selectedMedia.mimeType !== 'video/mp4') {
+          throw new Error('Social video publishing currently requires an MP4 file.');
+        }
+
+        const videoResponse = await fetch(selectedMedia.dataUrl);
+        if (!videoResponse.ok) throw new Error('Could not read the selected video from this device.');
+        const videoBlob = await videoResponse.blob();
+        const videoFile = new File([videoBlob], selectedMedia.name, { type: 'video/mp4' });
+        const formData = new FormData();
+        formData.append('video', videoFile);
+        formData.append('platforms', JSON.stringify(selectedPlatforms));
+        formData.append('caption', postDescription.trim());
+        if (selectedPlatforms.includes('facebook') && selectedFacebookTargets.length) {
+          formData.append('facebookPageIds', JSON.stringify(selectedFacebookTargets));
+        }
+        if (selectedPlatforms.includes('instagram') && selectedInstagramTargets.length) {
+          formData.append('instagramAccountIds', JSON.stringify(selectedInstagramTargets));
+        }
+        if (selectedPlatforms.includes('linkedin') && selectedLinkedinTargets.length) {
+          formData.append('linkedinOwnerUrns', JSON.stringify(selectedLinkedinTargets));
+        }
+
+        const response = await serverApiPost('/videos/publish', formData);
+        const results = response?.results ?? {};
+        const succeeded = Object.entries(results)
+          .filter(([, result]: [string, any]) => result?.success)
+          .map(([platform]) => platform);
+        const failed = Object.entries(results)
+          .filter(([, result]: [string, any]) => !result?.success)
+          .map(([platform, result]: [string, any]) =>
+            `${platformLabel(platform)}: ${result?.message || 'Publishing failed'}`);
+
+        if (!succeeded.length) {
+          throw new Error(failed.join(' | ') || response?.message || 'Unable to publish video.');
+        }
+
+        showMessage(
+          failed.length
+            ? `Posted to ${succeeded.map(platformLabel).join(', ')}. Failed: ${failed.join(' | ')}`
+            : `Posted to ${succeeded.map(platformLabel).join(', ')}`,
+        );
+        setSelectedMedia(null);
+        setSelectedPlatforms([]);
+        setPostDescription('');
+        return;
+      }
+
+      if (!selectedMedia.mimeType.startsWith('image/')) {
+        throw new Error('This media format cannot be published.');
+      }
 
       const bannerId = await ensureBannerId(selectedMedia);
 
@@ -1404,8 +1610,8 @@ const Uploadnew: React.FC = () => {
                 lineHeight: 1.4,
               }}
             >
-              JPG, PNG, WEBP, MP4 or WEBM · Maximum 1 MB per file (images are resized
-              automatically)
+              JPG, PNG, WEBP · Images are resized to 1 MB or less. MP4 or WEBM videos must be
+              between 100 KB and 10 MB.
             </p>
 
             {mediaItems.length > 0 && (
@@ -1744,17 +1950,20 @@ const Uploadnew: React.FC = () => {
         <IonModal
           isOpen={Boolean(selectedMedia)}
           onDidDismiss={() => setSelectedMedia(null)}
-          breakpoints={[0, 0.75, 1]}
-          initialBreakpoint={0.75}
+          breakpoints={[0, 0.65, 0.95]}
+          initialBreakpoint={0.95}
+          handleBehavior="cycle"
         >
-          <IonContent
+          <div
             style={
               {
-                '--padding-start': '20px',
-                '--padding-end': '20px',
-                '--padding-top': '20px',
-                '--padding-bottom': '16px',
-              } as React.CSSProperties
+                display: 'flex',
+                flexDirection: 'column',
+                height: '100%',
+                minHeight: 0,
+                maxHeight: '80vh',
+                background: ui.white,
+              }
             }
           >
             <div
@@ -1762,10 +1971,19 @@ const Uploadnew: React.FC = () => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                marginBottom: 14,
+                padding: '18px 20px 12px',
+                borderBottom: `1px solid ${ui.border}`,
+                flexShrink: 0,
               }}
             >
-              <h2 style={{ margin: 0, color: ui.text, fontSize: 20 }}>Choose social channels</h2>
+              <div>
+                <h2 style={{ margin: 0, color: ui.text, fontSize: 19 }}>Choose social channels</h2>
+                <p style={{ margin: '4px 0 0', color: ui.muted, fontSize: 12 }}>
+                  {checkingConnections
+                    ? 'Checking connected accounts...'
+                    : `${selectedPlatforms.length} channel${selectedPlatforms.length === 1 ? '' : 's'} selected`}
+                </p>
+              </div>
               <button
                 type="button"
                 aria-label="Close channel selection"
@@ -1776,7 +1994,17 @@ const Uploadnew: React.FC = () => {
               </button>
             </div>
 
-            {selectedMedia && (
+            <div
+              style={{
+                flex: '1 1 auto',
+                minHeight: 0,
+                overflowY: 'auto',
+                overscrollBehavior: 'contain',
+                WebkitOverflowScrolling: 'touch',
+                padding: '14px 20px 18px',
+              }}
+            >
+              {selectedMedia && (
               <>
                 {selectedMedia.mimeType.startsWith('video/') ? (
                   <video
@@ -1786,7 +2014,7 @@ const Uploadnew: React.FC = () => {
                     style={{
                       display: 'block',
                       width: '100%',
-                      maxHeight: 220,
+                      height: 180,
                       borderRadius: 12,
                       background: '#000',
                       objectFit: 'contain',
@@ -1799,7 +2027,7 @@ const Uploadnew: React.FC = () => {
                     style={{
                       display: 'block',
                       width: '100%',
-                      maxHeight: 220,
+                      height: 180,
                       borderRadius: 12,
                       objectFit: 'contain',
                       background: ui.surface,
@@ -1814,12 +2042,27 @@ const Uploadnew: React.FC = () => {
                     overflowWrap: 'anywhere',
                   }}
                 >
-                  {selectedMedia.name}
+                  {selectedMedia.name} · {(selectedMedia.size / (1024 * 1024)).toFixed(2)} MB
                 </p>
               </>
-            )}
+              )}
 
-            <div style={{ marginBottom: 20 }}>
+              {selectedMedia?.mimeType.startsWith('video/') && (
+                <div style={{
+                  margin: '0 0 16px',
+                  padding: '10px 12px',
+                  borderRadius: 10,
+                  background: '#EFF6FF',
+                  color: '#1D4E89',
+                  fontSize: 12,
+                  lineHeight: 1.45,
+                }}>
+                  MP4 videos can be published to Facebook, Instagram, YouTube and LinkedIn.
+                  WhatsApp and Google Business video publishing are not available in this flow.
+                </div>
+              )}
+
+              <div style={{ marginBottom: 18 }}>
               <FieldLabel text="Description (optional)" />
               {loadingMarketingPrompts ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: ui.muted }}>
@@ -1883,25 +2126,52 @@ const Uploadnew: React.FC = () => {
               <p style={{ margin: '6px 2px 0', textAlign: 'right', fontSize: 12, color: ui.muted }}>
                 {postDescription.length}/{MAX_DESCRIPTION}
               </p>
-            </div>
+              </div>
 
-            <FieldLabel text="Select one or more channels" />
-            <div style={{ border: `1px solid ${ui.border}`, borderRadius: 12 }}>
-              {PUBLISH_PLATFORMS.map((platform, index) => {
+              <FieldLabel text="Select connected channels" />
+              <div style={{ border: `1px solid ${ui.border}`, borderRadius: 14, overflow: 'hidden' }}>
+              {PUBLISH_PLATFORMS.map((platform) => {
                 const checked = selectedPlatforms.includes(platform.id);
+                const isVideo = Boolean(selectedMedia?.mimeType.startsWith('video/'));
+                const supportedForVideo =
+                  platform.id === 'facebook' ||
+                  platform.id === 'instagram' ||
+                  platform.id === 'youtube' ||
+                  platform.id === 'linkedin';
+                const videoNeedsMp4 = isVideo && selectedMedia?.mimeType !== 'video/mp4';
+                const unsupportedVideoPlatform = isVideo && !supportedForVideo;
+                const isConnected = connected[platform.id];
+                const disabled = checkingConnections || !isConnected || videoNeedsMp4 || unsupportedVideoPlatform;
+                const selectedTargetCount = platform.id === 'facebook'
+                  ? selectedFacebookTargets.length || facebookTargets.length
+                  : platform.id === 'instagram'
+                    ? selectedInstagramTargets.length || instagramTargets.length
+                    : platform.id === 'linkedin'
+                      ? selectedLinkedinTargets.length || linkedinTargets.length
+                      : 0;
+                const statusLabel = checkingConnections
+                  ? 'Checking connection'
+                  : !isConnected
+                    ? 'Not connected'
+                    : unsupportedVideoPlatform
+                      ? 'Video not supported'
+                      : videoNeedsMp4
+                        ? 'MP4 required'
+                        : selectedTargetCount > 0
+                          ? `Connected · ${selectedTargetCount} target${selectedTargetCount === 1 ? '' : 's'}`
+                          : 'Connected';
 
                 return (
-                  // The whole row toggles; the checkbox is display-only so a tap
-                  // never toggles twice.
                   <div
                     key={platform.id}
                     role="checkbox"
                     aria-checked={checked}
                     aria-label={`Select ${platform.name}`}
-                    tabIndex={0}
-                    onClick={() => togglePublishPlatform(platform.id)}
+                    aria-disabled={disabled}
+                    tabIndex={disabled ? -1 : 0}
+                    onClick={() => !disabled && togglePublishPlatform(platform.id)}
                     onKeyDown={(e) => {
-                      if (e.key === ' ' || e.key === 'Enter') {
+                      if (!disabled && (e.key === ' ' || e.key === 'Enter')) {
                         e.preventDefault();
                         togglePublishPlatform(platform.id);
                       }
@@ -1911,43 +2181,89 @@ const Uploadnew: React.FC = () => {
                       alignItems: 'center',
                       gap: 12,
                       padding: '12px 14px',
-                      cursor: 'pointer',
-                      borderBottom:
-                        index === PUBLISH_PLATFORMS.length - 1 ? 0 : `1px solid ${ui.border}`,
+                      cursor: disabled ? 'not-allowed' : 'pointer',
+                      borderBottom: `1px solid ${ui.border}`,
+                      background: checked ? '#EFF6FF' : disabled ? '#F8FAFC' : ui.white,
+                      opacity: disabled && isConnected ? 0.62 : 1,
                     }}
                   >
                     <IonIcon icon={platform.icon} style={{ fontSize: 20, color: ui.primary }} />
-                    <span style={{ flex: 1, color: ui.text, fontSize: 14 }}>{platform.name}</span>
+                    <span style={{ flex: 1, color: ui.text, fontSize: 14, fontWeight: 600 }}>
+                      {platform.name}
+                      <small style={{ display: 'block', marginTop: 3, color: ui.muted, fontSize: 11, fontWeight: 400 }}>
+                        {statusLabel}
+                      </small>
+                    </span>
                     <IonCheckbox
                       checked={checked}
+                      disabled={disabled}
                       style={{ pointerEvents: 'none' }}
                       tabIndex={-1}
                     />
                   </div>
                 );
               })}
+              </div>
             </div>
 
-            {selectedMedia && !selectedIsImage && (
-              <p style={{ marginTop: 16, color: ui.muted, fontSize: 13 }}>
-                Video posting isn&apos;t supported yet. Only images can be published.
-              </p>
-            )}
-
-          </IonContent>
-
-          <IonFooter
-            className="ion-no-border"
-            style={{ background: ui.white, boxShadow: '0 -4px 14px rgba(15, 27, 45, 0.06)' }}
-          >
-            <div style={{ padding: '10px 20px calc(10px + env(safe-area-inset-bottom))' }}>
+            <div
+              style={{
+                flexShrink: 0,
+                padding: '10px 20px calc(12px + env(safe-area-inset-bottom))',
+                borderTop: `1px solid ${ui.border}`,
+                background: ui.white,
+                boxShadow: '0 -4px 14px rgba(15, 27, 45, 0.06)',
+              }}
+            >
+              {selectedMedia && !selectedIsImage && selectedMedia.mimeType !== 'video/mp4' && (
+                <p style={{ margin: '0 0 8px', color: '#A85B00', fontSize: 12 }}>
+                  Choose an MP4 video to publish. WEBM can be stored and previewed on this device.
+                </p>
+              )}
+              {!checkingConnections && PUBLISH_PLATFORMS.every((platform) => !connected[platform.id]) && (
+                <IonButton
+                  expand="block"
+                  fill="clear"
+                  onClick={() => {
+                    setSelectedMedia(null);
+                    navigate('/social-connections');
+                  }}
+                  style={{ margin: '0 0 4px', minHeight: 36 }}
+                >
+                  Connect social accounts
+                </IonButton>
+              )}
+              {!PUBLISH_PLATFORMS.every((platform) => !connected[platform.id]) && (
+                <IonButton
+                  expand="block"
+                  fill="clear"
+                  onClick={() => {
+                    setSelectedMedia(null);
+                    navigate('/social-connections');
+                  }}
+                  style={{ margin: '0 0 4px', minHeight: 32, fontSize: 12 }}
+                >
+                  Manage connected accounts
+                </IonButton>
+              )}
               <IonButton
                 expand="block"
                 onClick={() => void savePostsToPlatforms()}
-                disabled={savingPosts || selectedPlatforms.length === 0 || !selectedIsImage}
-                style={{ margin: 0, minHeight: 48 }}
+                disabled={
+                  savingPosts ||
+                  checkingConnections ||
+                  selectedPlatforms.length === 0 ||
+                  (!selectedIsImage && selectedMedia?.mimeType !== 'video/mp4')
+                }
+                style={{
+                  margin: 0,
+                  minHeight: 48,
+                  '--border-radius': '12px',
+                } as React.CSSProperties}
               >
-                {savingPosts ? <IonSpinner name="crescent" /> : 'Post to selected channels'}
+                {savingPosts
+                  ? <IonSpinner name="crescent" />
+                  : `Post to selected channels${selectedPlatforms.length ? ` (${selectedPlatforms.length})` : ''}`}
               </IonButton>
               {selectedIsImage && (
                 <IonButton
@@ -1961,7 +2277,7 @@ const Uploadnew: React.FC = () => {
                 </IonButton>
               )}
             </div>
-          </IonFooter>
+          </div>
         </IonModal>
 
         <IonToast
