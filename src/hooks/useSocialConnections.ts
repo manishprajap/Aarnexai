@@ -145,9 +145,14 @@ function parseTargetsResponse(response: unknown): { targets: ConnectionTarget[];
         .filter((t: ConnectionTarget) => t.urn.length > 0)
     : [];
 
-  const selected: string[] = Array.isArray(root.selectedTargets)
+  const rawSelected: string[] = Array.isArray(root.selectedTargets)
     ? root.selectedTargets.filter((t: unknown) => typeof t === 'string')
-    : targets.map((t) => t.urn); // fallback: sab selected
+    : targets.map((t) => t.urn); // fallback for status responses without a selection
+
+  const personalTarget = targets.find((target) => target.type === 'personal');
+  const selected = rawSelected
+    .map((target) => target === 'personal' ? personalTarget?.urn : target)
+    .filter((target): target is string => typeof target === 'string');
 
   return { targets, selected };
 }
@@ -403,7 +408,10 @@ export function useSocialConnections() {
       async (targetKeys: string[]) => {
         setter(targetKeys);
         try {
-          await apiPost(`/${platform}/select-targets`, { targets: targetKeys });
+          const targets = platform === 'linkedin'
+            ? targetKeys.map((target) => target.startsWith('urn:li:person:') ? 'personal' : target)
+            : targetKeys;
+          await apiPost(`/${platform}/select-targets`, { targets });
         } catch (err) {
           console.error(`Failed to save ${platform} target selection:`, err);
           setError(`Could not save your ${LABELS[platform]} posting selection.`);

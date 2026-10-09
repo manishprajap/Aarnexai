@@ -1,191 +1,253 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  IonPage,
-  IonContent,
-  IonInput,
   IonButton,
+  IonContent,
   IonIcon,
-  IonText,
+  IonInput,
+  IonPage,
   IonSpinner,
+  IonText,
 } from '@ionic/react';
-import {
-  personOutline,
-  mailOutline,
-  callOutline,
-  lockClosedOutline,
-  eyeOutline,
-  eyeOffOutline,
-} from 'ionicons/icons';
+import { arrowForwardOutline, callOutline, mailOutline, personOutline, shieldCheckmarkOutline } from 'ionicons/icons';
 import { useAuth } from '../context/AuthContext';
-import logo from '../assets/aarna-logo.png';
 import { apiPost } from '../api';
-import './Login.css';
+import logo from '../assets/aarna-logo.png';
+import './login.css';
+
+const RESEND_SECONDS = 30;
 
 const Register: React.FC = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
-
   const [name, setName] = useState('');
   const [mobile, setMobile] = useState('');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
+  const [otp, setOtp] = useState('');
+  const [devOtp, setDevOtp] = useState('');
+  const [stage, setStage] = useState<'details' | 'otp'>('details');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [resendTimer, setResendTimer] = useState(0);
+  const submittingRef = useRef(false);
 
- const handleRegister = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setError('');
+  const validMobile = /^[6-9]\d{9}$/.test(mobile);
+  const validEmail = /^\S+@\S+\.\S+$/.test(email.trim());
 
-  if (!name || !mobile || !password) {
-    setError('Name, mobile number and password are required.');
-    return;
-  }
-  if (!/^[6-9]\d{9}$/.test(mobile)) {
-    setError('Enter a valid 10-digit mobile number.');
-    return;
-  }
-  if (password.length < 6) {
-    setError('Password must be at least 6 characters.');
-    return;
-  }
+  useEffect(() => {
+    if (resendTimer <= 0) return;
+    const timer = window.setTimeout(() => setResendTimer((current) => current - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [resendTimer]);
 
-  setLoading(true);
-  try {
-    const res = await apiPost('/auth/register', {
-      name,
-      mobile,
-      email: email || undefined,
-      password,
-    });
+  const getErrorMessage = (reason: unknown, fallback: string) =>
+    reason instanceof Error ? reason.message : fallback;
 
-    // A brand-new account never has business details or an active
-    // subscription yet, so these are always false right after registration.
-    login(res.user, res.token, false, false);
-    navigate('/onboarding', { replace: true });
-  } catch (err: any) {
-    setError(err?.error || 'Could not create your account. Please try again.');
-  } finally {
-    setLoading(false);
-  }
-};
+  const sendOtp = async () => {
+    if (submittingRef.current) return;
+    if (!name.trim() || !validMobile || !validEmail) {
+      setError('Enter your name, a valid 10-digit mobile number and a valid email address.');
+      return;
+    }
+
+    submittingRef.current = true;
+    setLoading(true);
+    setError('');
+    try {
+      const response = await apiPost<{ devOtp?: string }>('/auth/register/send-otp', {
+        name: name.trim(),
+        mobile,
+        email: email.trim().toLowerCase(),
+      });
+      setDevOtp(response.devOtp || '');
+      setOtp('');
+      setStage('otp');
+      setResendTimer(RESEND_SECONDS);
+    } catch (reason) {
+      setError(getErrorMessage(reason, 'Could not send your verification code. Please try again.'));
+    } finally {
+      setLoading(false);
+      submittingRef.current = false;
+    }
+  };
+
+  const verifyOtp = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (submittingRef.current) return;
+    if (!/^\d{6}$/.test(otp)) {
+      setError('Enter the 6-digit code sent to your email.');
+      return;
+    }
+
+    submittingRef.current = true;
+    setLoading(true);
+    setError('');
+    try {
+      const response = await apiPost<{
+        user: { id: number; name: string; mobile: string; email: string | null };
+        token: string;
+      }>('/auth/register/verify-otp', {
+        name: name.trim(),
+        mobile,
+        email: email.trim().toLowerCase(),
+        otp,
+      });
+      if (!response?.token || !response.user) {
+        throw new Error('Account verification did not complete. Please request a new code.');
+      }
+      login(response.user, response.token, false, false);
+      navigate('/onboarding', { replace: true });
+    } catch (reason) {
+      setError(getErrorMessage(reason, 'Could not verify your code. Please try again.'));
+    } finally {
+      setLoading(false);
+      submittingRef.current = false;
+    }
+  };
 
   return (
-    <IonPage className="login-page">
-      <IonContent fullscreen scrollY={true} className="login-content">
-        <div className="login-frame">
-          <div className="login-scroll">
-            <div className="brand-mark">
-              <img src={logo} alt="Aarna Market OS" className="brand-logo" />
-            </div>
+    <IonPage className="login-page register-page">
+      <IonContent fullscreen scrollY className="login-content register-content">
+        <div className="login-frame register-frame">
+          <div className="brand-mark">
+            <img src={logo} alt="Aarna Market OS" className="brand-logo" />
+          </div>
 
-            <header className="login-header">
-              <h1>Create your account</h1>
-              <p>Set up your storefront on Aarna Market OS.</p>
-            </header>
+          <header className="login-header">
+            <h1>{stage === 'details' ? 'Start growing your business' : 'Verify your email'}</h1>
+            <p>
+              {stage === 'details'
+                ? 'Create your Aarna account to get started with AI-powered marketing.'
+                : <>We sent a 6-digit verification code to <strong>{email}</strong>.</>}
+            </p>
+          </header>
 
-            <form className="login-form" onSubmit={handleRegister} noValidate>
-              <label className="field-label" htmlFor="register-name">
-                Full name
-              </label>
+          {stage === 'details' ? (
+            <form
+              className="login-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void sendOtp();
+              }}
+              noValidate
+            >
+              <label className="field-label" htmlFor="register-name">Your name</label>
               <div className="input-shell">
                 <IonIcon icon={personOutline} aria-hidden="true" />
                 <IonInput
                   id="register-name"
                   type="text"
-                  placeholder="Priya Sharma"
-                  value={name}
                   autocomplete="name"
-                  onIonInput={(e) => setName(e.detail.value ?? '')}
+                  placeholder="Full name"
+                  value={name}
+                  onIonInput={(event) => setName(event.detail.value ?? '')}
                 />
               </div>
 
-              <label className="field-label field-spaced" htmlFor="register-mobile">
-                Mobile number
-              </label>
-              <div className="input-shell">
-                <IonIcon icon={callOutline} aria-hidden="true" />
-                <IonInput
-                  id="register-mobile"
-                  type="tel"
-                  inputmode="numeric"
-                  maxlength={10}
-                  placeholder="98765 43210"
-                  value={mobile}
-                  autocomplete="tel"
-                  onIonInput={(e) => setMobile((e.detail.value ?? '').replace(/\D/g, ''))}
-                />
-              </div>
-
-              <label className="field-label field-spaced" htmlFor="register-email">
-                Email <span className="optional-tag">(optional)</span>
-              </label>
+              <label className="field-label field-spaced" htmlFor="register-email">Email address</label>
               <div className="input-shell">
                 <IonIcon icon={mailOutline} aria-hidden="true" />
                 <IonInput
                   id="register-email"
                   type="email"
                   inputmode="email"
-                  placeholder="you@business.com"
-                  value={email}
                   autocomplete="email"
-                  onIonInput={(e) => setEmail(e.detail.value ?? '')}
+                  placeholder="you@example.com"
+                  value={email}
+                  onIonInput={(event) => setEmail(event.detail.value ?? '')}
                 />
               </div>
 
-              <label className="field-label field-spaced" htmlFor="register-password">
-                Password
-              </label>
+              <label className="field-label field-spaced" htmlFor="register-mobile">Mobile number</label>
               <div className="input-shell">
-                <IonIcon icon={lockClosedOutline} aria-hidden="true" />
+                <span className="register-country-code">+91</span>
+                <span className="register-divider" aria-hidden="true" />
+                <IonIcon icon={callOutline} aria-hidden="true" />
                 <IonInput
-                  id="register-password"
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="At least 6 characters"
-                  value={password}
-                  autocomplete="new-password"
-                  onIonInput={(e) => setPassword(e.detail.value ?? '')}
+                  id="register-mobile"
+                  type="tel"
+                  inputmode="numeric"
+                  maxlength={10}
+                  autocomplete="tel"
+                  placeholder="10-digit mobile number"
+                  value={mobile}
+                  onIonInput={(event) => setMobile((event.detail.value ?? '').replace(/\D/g, '').slice(0, 10))}
                 />
-                <button
-                  type="button"
-                  className="visibility-toggle"
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  onClick={() => setShowPassword((v) => !v)}
-                >
-                  <IonIcon icon={showPassword ? eyeOffOutline : eyeOutline} />
-                </button>
               </div>
 
-              {error && (
-                <IonText color="danger" className="form-error">
-                  {error}
-                </IonText>
-              )}
+              {error && <IonText color="danger" className="form-error">{error}</IonText>}
 
               <IonButton
                 expand="block"
                 type="submit"
                 className="cta-button"
-                disabled={loading}
+                disabled={loading || !name.trim() || !validEmail || !validMobile}
               >
-                {loading ? <IonSpinner name="dots" /> : 'Create account'}
+                {loading ? <IonSpinner name="dots" /> : <>Continue with email OTP <IonIcon icon={arrowForwardOutline} slot="end" /></>}
               </IonButton>
-            </form>
 
-            <p className="signup-line">
-              Already have an account?{' '}
-              <button
-                type="button"
-                className="link-inline strong"
-                onClick={() => navigate('/login')}
+              <div className="security-box">
+                <IonIcon icon={shieldCheckmarkOutline} />
+                <div>
+                  <strong>Verify securely with email</strong>
+                  <p>We’ll send a one-time code to confirm your email before creating your account.</p>
+                </div>
+              </div>
+            </form>
+          ) : (
+            <form className="login-form" onSubmit={(event) => void verifyOtp(event)}>
+              <label className="field-label" htmlFor="register-otp">Email verification code</label>
+              <div className="input-shell register-otp-shell">
+                <IonIcon icon={mailOutline} aria-hidden="true" />
+                <IonInput
+                  id="register-otp"
+                  type="text"
+                  inputmode="numeric"
+                  autocomplete="one-time-code"
+                  maxlength={6}
+                  placeholder="Enter 6-digit code"
+                  value={otp}
+                  onIonInput={(event) => setOtp((event.detail.value ?? '').replace(/\D/g, '').slice(0, 6))}
+                />
+              </div>
+
+              {devOtp && <p className="register-dev-otp">Development code: <strong>{devOtp}</strong></p>}
+              {error && <IonText color="danger" className="form-error">{error}</IonText>}
+
+              <IonButton
+                expand="block"
+                type="submit"
+                className="cta-button"
+                disabled={loading || otp.length !== 6}
               >
-                Sign in
-              </button>
-            </p>
-          </div>
+                {loading ? <IonSpinner name="dots" /> : <>Verify & continue <IonIcon icon={arrowForwardOutline} slot="end" /></>}
+              </IonButton>
+
+              <div className="register-otp-actions">
+                <button type="button" className="link-inline" onClick={() => { setStage('details'); setError(''); }}>
+                  Edit details
+                </button>
+                <button
+                  type="button"
+                  className="link-inline"
+                  disabled={loading || resendTimer > 0}
+                  onClick={() => void sendOtp()}
+                >
+                  {resendTimer > 0 ? `Resend in ${resendTimer}s` : 'Resend code'}
+                </button>
+              </div>
+            </form>
+          )}
+
+          <p className="signup-line">
+            Already have an account?{' '}
+            <button type="button" className="link-inline strong" onClick={() => navigate('/login/mobile')}>
+              Sign in with mobile OTP
+            </button>
+          </p>
         </div>
       </IonContent>
+
     </IonPage>
   );
 };

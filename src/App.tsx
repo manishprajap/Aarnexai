@@ -71,6 +71,14 @@ const App: React.FC = () => {
               path="/login"
               element={
                 <RedirectIfAuthed>
+                  <Register />
+                </RedirectIfAuthed>
+              }
+            />
+            <Route
+              path="/login/mobile"
+              element={
+                <RedirectIfAuthed>
                   <Login />
                 </RedirectIfAuthed>
               }

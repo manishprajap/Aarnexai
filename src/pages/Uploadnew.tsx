@@ -32,10 +32,12 @@ import {
   logoWhatsapp,
   logoYoutube,
   logoGoogle,
+  personOutline,
+  businessOutline,
   sparklesOutline,
 } from 'ionicons/icons';
 
-import { apiGet, apiPost, serverApiGet, serverApiPost } from '../api';
+import { ApiError, apiGet, apiPost, serverApiGet, serverApiPost } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { useSocialConnections } from '../hooks/useSocialConnections';
 import aarnaLogo from '../assets/aarna-logo.png';
@@ -82,7 +84,6 @@ type PublishPlatform =
 
 interface LocalMedia {
   id: string;
-  /** Set once a banners row exists for this image (needed by /banners/publish). */
   bannerId?: string | number;
   name: string;
   mimeType: string;
@@ -529,6 +530,9 @@ const Uploadnew: React.FC = () => {
     facebookTargets,
     instagramTargets,
     linkedinTargets,
+    toggleLinkedInTarget,
+    toggleFacebookTarget,
+    toggleInstagramTarget,
   } = useSocialConnections();
 
   // step 'upload' = screen 1, step 'generate' = screen 2
@@ -578,6 +582,13 @@ const Uploadnew: React.FC = () => {
     setToastMessage(message);
     setShowToast(true);
   };
+
+  const missingDestinationPlatform = () => [
+    { platform: 'facebook' as const, selected: selectedFacebookTargets },
+    { platform: 'instagram' as const, selected: selectedInstagramTargets },
+    { platform: 'linkedin' as const, selected: selectedLinkedinTargets },
+  ].find(({ platform, selected }) =>
+    selectedPlatforms.includes(platform) && selected.length === 0)?.platform ?? null;
 
   const currentUserId = user?.id;
   const videoStorageKey = (mediaId: string) => `${currentUserId}:${mediaId}`;
@@ -1065,6 +1076,12 @@ const Uploadnew: React.FC = () => {
       return;
     }
 
+    const missingDestination = missingDestinationPlatform();
+    if (missingDestination) {
+      showMessage(`Select at least one ${platformLabel(missingDestination)} destination.`);
+      return;
+    }
+
     try {
       setSavingPosts(true);
 
@@ -1097,7 +1114,7 @@ const Uploadnew: React.FC = () => {
           .filter(([, result]: [string, any]) => result?.success)
           .map(([platform]) => platform);
         const failed = Object.entries(results)
-          .filter(([, result]: [string, any]) => !result?.success)
+          .filter(([, result]: [string, any]) => !result?.success || result?.message)
           .map(([platform, result]: [string, any]) =>
             `${platformLabel(platform)}: ${result?.message || 'Publishing failed'}`);
 
@@ -1150,6 +1167,22 @@ const Uploadnew: React.FC = () => {
       setPostDescription('');
     } catch (error: any) {
       console.error('SAVE SOCIAL POSTS ERROR:', error);
+
+      const results = error instanceof ApiError ? error.data?.results : null;
+      if (results && typeof results === 'object' && !Array.isArray(results)) {
+        const failures = Object.entries(results)
+          .filter(([, result]) =>
+            result && typeof result === 'object' &&
+            (result as Record<string, unknown>).success === false)
+          .map(([platform, result]) => {
+            const message = (result as Record<string, unknown>).message;
+            return `${platformLabel(platform)}: ${typeof message === 'string' ? message : 'Publishing failed'}`;
+          });
+        if (failures.length) {
+          showMessage(failures.join(' | '));
+          return;
+        }
+      }
 
       showMessage(
         error?.response?.data?.message ||
@@ -2129,7 +2162,6 @@ const Uploadnew: React.FC = () => {
               </div>
 
               <FieldLabel text="Select connected channels" />
-              <div style={{ border: `1px solid ${ui.border}`, borderRadius: 14, overflow: 'hidden' }}>
               {PUBLISH_PLATFORMS.map((platform) => {
                 const checked = selectedPlatforms.includes(platform.id);
                 const isVideo = Boolean(selectedMedia?.mimeType.startsWith('video/'));
@@ -2142,13 +2174,34 @@ const Uploadnew: React.FC = () => {
                 const unsupportedVideoPlatform = isVideo && !supportedForVideo;
                 const isConnected = connected[platform.id];
                 const disabled = checkingConnections || !isConnected || videoNeedsMp4 || unsupportedVideoPlatform;
-                const selectedTargetCount = platform.id === 'facebook'
-                  ? selectedFacebookTargets.length || facebookTargets.length
+                const destinationTargets = platform.id === 'facebook'
+                  ? facebookTargets
                   : platform.id === 'instagram'
-                    ? selectedInstagramTargets.length || instagramTargets.length
+                    ? instagramTargets
                     : platform.id === 'linkedin'
-                      ? selectedLinkedinTargets.length || linkedinTargets.length
-                      : 0;
+                      ? linkedinTargets
+                      : [];
+                const selectedDestinationTargets = platform.id === 'facebook'
+                  ? selectedFacebookTargets
+                  : platform.id === 'instagram'
+                    ? selectedInstagramTargets
+                    : platform.id === 'linkedin'
+                      ? selectedLinkedinTargets
+                      : [];
+                const toggleDestination = platform.id === 'facebook'
+                  ? toggleFacebookTarget
+                  : platform.id === 'instagram'
+                    ? toggleInstagramTarget
+                    : toggleLinkedInTarget;
+                const platformColor = platform.id === 'facebook'
+                  ? '#1877F2'
+                  : platform.id === 'instagram'
+                    ? '#DD2A7B'
+                    : platform.id === 'youtube'
+                      ? '#FF0000'
+                      : platform.id === 'linkedin'
+                        ? '#0A66C2'
+                        : ui.primary;
                 const statusLabel = checkingConnections
                   ? 'Checking connection'
                   : !isConnected
@@ -2157,53 +2210,121 @@ const Uploadnew: React.FC = () => {
                       ? 'Video not supported'
                       : videoNeedsMp4
                         ? 'MP4 required'
-                        : selectedTargetCount > 0
-                          ? `Connected · ${selectedTargetCount} target${selectedTargetCount === 1 ? '' : 's'}`
+                        : destinationTargets.length > 0
+                          ? selectedDestinationTargets.length > 0
+                            ? `Connected · ${selectedDestinationTargets.length} of ${destinationTargets.length} destinations selected`
+                            : 'Connected · select a destination'
                           : 'Connected';
 
                 return (
-                  <div
-                    key={platform.id}
-                    role="checkbox"
-                    aria-checked={checked}
-                    aria-label={`Select ${platform.name}`}
-                    aria-disabled={disabled}
-                    tabIndex={disabled ? -1 : 0}
-                    onClick={() => !disabled && togglePublishPlatform(platform.id)}
-                    onKeyDown={(e) => {
-                      if (!disabled && (e.key === ' ' || e.key === 'Enter')) {
-                        e.preventDefault();
-                        togglePublishPlatform(platform.id);
-                      }
-                    }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 12,
-                      padding: '12px 14px',
-                      cursor: disabled ? 'not-allowed' : 'pointer',
-                      borderBottom: `1px solid ${ui.border}`,
-                      background: checked ? '#EFF6FF' : disabled ? '#F8FAFC' : ui.white,
-                      opacity: disabled && isConnected ? 0.62 : 1,
-                    }}
-                  >
-                    <IonIcon icon={platform.icon} style={{ fontSize: 20, color: ui.primary }} />
-                    <span style={{ flex: 1, color: ui.text, fontSize: 14, fontWeight: 600 }}>
-                      {platform.name}
-                      <small style={{ display: 'block', marginTop: 3, color: ui.muted, fontSize: 11, fontWeight: 400 }}>
-                        {statusLabel}
-                      </small>
-                    </span>
-                    <IonCheckbox
-                      checked={checked}
-                      disabled={disabled}
-                      style={{ pointerEvents: 'none' }}
-                      tabIndex={-1}
-                    />
+                  <div key={platform.id}>
+                    <div
+                      role="checkbox"
+                      aria-checked={checked}
+                      aria-label={`Select ${platform.name}`}
+                      aria-disabled={disabled}
+                      tabIndex={disabled ? -1 : 0}
+                      onClick={() => !disabled && togglePublishPlatform(platform.id)}
+                      onKeyDown={(e) => {
+                        if (!disabled && (e.key === ' ' || e.key === 'Enter')) {
+                          e.preventDefault();
+                          togglePublishPlatform(platform.id);
+                        }
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '12px 14px',
+                        borderRadius: 12,
+                        border: `1px solid ${checked ? platformColor : ui.border}`,
+                        cursor: disabled ? 'not-allowed' : 'pointer',
+                        background: checked ? '#EFF6FF' : disabled ? '#F8FAFC' : ui.white,
+                        marginBottom: checked && isConnected && destinationTargets.length ? 4 : 10,
+                        opacity: disabled ? 0.62 : 1,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                        <IonIcon icon={platform.icon} style={{ fontSize: 22, color: platformColor }} />
+                        <span style={{ color: ui.text, fontSize: 14, fontWeight: 600 }}>
+                          {platform.name}
+                          <small style={{ display: 'block', marginTop: 3, color: ui.muted, fontSize: 11, fontWeight: 400 }}>
+                          {statusLabel}
+                          </small>
+                        </span>
+                      </div>
+                      <IonCheckbox
+                        checked={checked}
+                        disabled={disabled}
+                        style={{ pointerEvents: 'none' }}
+                        tabIndex={-1}
+                      />
+                    </div>
+                    {checked && isConnected && ['facebook', 'instagram', 'linkedin'].includes(platform.id) && (
+                      <div
+                        style={{
+                          margin: '-4px 0 10px 14px',
+                          paddingLeft: 12,
+                          borderLeft: `2px solid ${ui.border}`,
+                        }}
+                      >
+                        <p style={{
+                          margin: '0 0 6px',
+                          color: '#A9B6C2',
+                          fontSize: 10,
+                          fontWeight: 700,
+                          letterSpacing: 0.3,
+                          textTransform: 'uppercase',
+                        }}>
+                          Post to
+                        </p>
+                        {destinationTargets.length === 0 ? (
+                          <p style={{ margin: 0, color: ui.muted, fontSize: 12 }}>
+                            No connected destinations found. Manage connected accounts to refresh them.
+                          </p>
+                        ) : destinationTargets.map((target) => {
+                          const targetChecked = selectedDestinationTargets.includes(target.urn);
+                          const targetLabel = target.type === 'personal'
+                            ? 'Personal profile'
+                            : target.name;
+                          return (
+                            <div
+                              key={target.urn}
+                              role="checkbox"
+                              aria-checked={targetChecked}
+                              onClick={() => void toggleDestination(target.urn)}
+                              style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                padding: '8px 10px',
+                                borderRadius: 10,
+                                border: `1px solid ${targetChecked ? platformColor : ui.border}`,
+                                background: targetChecked ? '#F0F6FF' : ui.white,
+                                marginBottom: 6,
+                                cursor: 'pointer',
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                {platform.id === 'linkedin' && (
+                                  <IonIcon
+                                    icon={target.type === 'personal' ? personOutline : businessOutline}
+                                    style={{ fontSize: 15, color: platformColor }}
+                                  />
+                                )}
+                                <span style={{ color: ui.text, fontSize: 12, fontWeight: 600 }}>
+                                  {targetLabel}
+                                </span>
+                              </div>
+                              <IonCheckbox checked={targetChecked} style={{ pointerEvents: 'none' }} />
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
               })}
-              </div>
             </div>
 
             <div
@@ -2253,6 +2374,7 @@ const Uploadnew: React.FC = () => {
                   savingPosts ||
                   checkingConnections ||
                   selectedPlatforms.length === 0 ||
+                  Boolean(missingDestinationPlatform()) ||
                   (!selectedIsImage && selectedMedia?.mimeType !== 'video/mp4')
                 }
                 style={{

@@ -5,7 +5,7 @@
   --navy-800: #1c3554;
   --blue-600: #1a7ff0;
   --blue-700: #1569c7;
-  --bg: #ffffff;
+  --bg: #f5f8fc;
   --surface: #ffffff;
   --border: #dfe5ec;
   --muted: #6b7686;
@@ -18,25 +18,50 @@
   --padding-bottom: env(safe-area-inset-bottom);
 }
 
+.register-page,
+.register-content {
+  --background: #f5f8fc;
+}
+
 /* ---------- layout ---------- */
 .login-frame {
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: 400px;
+  max-width: 460px;
   margin: 0 auto;
-  padding: 28px 22px 120px;
+  padding: 22px 22px max(28px, env(safe-area-inset-bottom));
   box-sizing: border-box;
+}
+
+.register-frame {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding-top: max(22px, env(safe-area-inset-top));
+}
+
+.register-frame::before {
+  content: '';
+  position: fixed;
+  width: 260px;
+  height: 260px;
+  top: -150px;
+  right: -125px;
+  border-radius: 50%;
+  background: rgba(30, 127, 224, 0.07);
+  pointer-events: none;
 }
 
 .brand-mark {
   display: flex;
   justify-content: center;
-  margin-bottom: 26px;
+  margin-bottom: 15px;
 }
 
 .brand-logo {
-  width: 190px;
+  width: 150px;
   max-width: 70%;
   height: auto;
   object-fit: contain;
@@ -45,22 +70,24 @@
 /* ---------- header (left aligned) ---------- */
 .login-header {
   text-align: left;
-  margin-bottom: 26px;
+  margin: 0 auto 18px;
+  width: 100%;
+  max-width: 380px;
 }
 
 .login-header h1 {
   font-family: 'Sora', sans-serif;
   font-weight: 700;
-  font-size: 27px;
-  line-height: 1.2;
+  font-size: 23px;
+  line-height: 1.3;
   color: var(--navy-950);
   margin: 0 0 6px;
 }
 
 .login-header p {
   font-family: 'Inter', sans-serif;
-  font-size: 16px;
-  line-height: 1.4;
+  font-size: 14px;
+  line-height: 1.5;
   color: var(--muted);
   margin: 0;
 }
@@ -69,18 +96,36 @@
 .login-form {
   display: flex;
   flex-direction: column;
+  width: 100%;
+  max-width: 380px;
+  margin: 0 auto;
+  padding: 20px;
+  border: 1px solid #e4eaf1;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 12px 34px rgba(24, 48, 78, 0.08);
 }
+
+.register-frame .field-label {
+  display: block;
+  margin-bottom: 6px;
+  color: #34445b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.register-frame .field-spaced { margin-top: 1px; }
 
 .input-shell {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 0 14px;
-  height: 52px;
-  margin-bottom: 16px;
+  padding: 0 12px;
+  height: 48px;
+  margin-bottom: 12px;
   transition: border-color 160ms ease, box-shadow 160ms ease;
 }
 
@@ -90,7 +135,7 @@
 }
 
 .input-shell > ion-icon {
-  font-size: 20px;
+  font-size: 18px;
   color: var(--navy-950);
   flex: none;
 }
@@ -106,7 +151,7 @@
   --background: transparent;
   min-height: 0;
   font-family: 'Inter', sans-serif;
-  font-size: 15px;
+  font-size: 14px;
 }
 
 .visibility-toggle {
@@ -130,16 +175,16 @@
 /* ---------- buttons ---------- */
 .cta-button {
   margin: 8px 0 0;
-  height: 50px;
+  height: 44px;
   --background: var(--blue-600);
   --background-activated: var(--blue-700);
   --background-hover: var(--blue-700);
   --color: #ffffff;
   --border-radius: var(--radius);
-  --box-shadow: 0 8px 18px rgba(26, 127, 240, 0.25);
+  --box-shadow: 0 5px 12px rgba(26, 127, 240, 0.18);
   font-family: 'Inter', sans-serif;
   font-weight: 600;
-  font-size: 16px;
+  font-size: 13px;
   text-transform: none;
   letter-spacing: 0;
 }
@@ -149,7 +194,7 @@
   border: none;
   padding: 0;
   font-family: 'Inter', sans-serif;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--blue-600);
   cursor: pointer;
 }
@@ -180,7 +225,7 @@
 
 .secondary-button {
   margin: 0;
-  height: 50px;
+  height: 46px;
   --background: #ffffff;
   --color: var(--navy-950);
   --border-color: var(--border);
@@ -190,7 +235,7 @@
   --box-shadow: none;
   font-family: 'Inter', sans-serif;
   font-weight: 600;
-  font-size: 15px;
+  font-size: 14px;
   text-transform: none;
   letter-spacing: 0;
 }
@@ -213,8 +258,41 @@
     radial-gradient(120% 90% at 100% 100%, rgba(255, 140, 26, 0.10), transparent 60%);
 }
 
+.register-country-code { flex: none; color: #0f2a4a; font-size: 13px; font-weight: 700; }
+.register-divider { height: 22px; width: 1px; flex: none; background: #dce4eb; }
+.register-otp-shell ion-input { letter-spacing: 4px; font-weight: 700; }
+.register-otp-actions { display: flex; justify-content: space-between; gap: 12px; margin-top: 15px; }
+.register-otp-actions button:disabled { opacity: .55; }
+.register-dev-otp { padding: 9px 11px; border-radius: 9px; background: #fff6ec; color: #0f2a4a; font-size: 12px; }
+.signup-line { margin: 18px auto 0; text-align: center; color: #6b7686; font-size: 12px; line-height: 1.5; }
+.signup-line .strong { font-weight: 700; }
+.register-frame .security-box {
+  display: flex;
+  gap: 9px;
+  margin-top: 14px;
+  padding: 10px 11px;
+  border: 1px solid #e0eaf5;
+  border-radius: 10px;
+  background: #f5f9fe;
+}
+.register-frame .security-box > ion-icon { flex: none; color: #1e7fe0; font-size: 17px; }
+.register-frame .security-box strong { display: block; color: #0f2a4a; font-size: 11px; }
+.register-frame .security-box p { margin: 3px 0 0; color: #718096; font-size: 11px; line-height: 1.45; }
+.register-frame .form-error { margin: 0 0 8px; font-size: 12px; }
+
+@media (min-width: 700px) {
+  .register-frame { padding-top: 32px; padding-bottom: 32px; }
+  .register-frame .brand-logo { width: 164px; }
+  .register-frame .login-header h1 { font-size: 25px; }
+  .register-frame .login-form { padding: 24px; }
+}
+
 @media (max-width: 380px) {
-  .login-frame { padding: 22px 16px 110px; }
-  .login-header h1 { font-size: 24px; }
-  .brand-logo { width: 160px; }
+  .login-frame { padding-right: 16px; padding-left: 16px; }
+  .register-frame { padding-top: max(16px, env(safe-area-inset-top)); }
+  .register-frame .brand-mark { margin-bottom: 10px; }
+  .register-frame .brand-logo { width: 132px; }
+  .register-frame .login-header { margin-bottom: 14px; }
+  .register-frame .login-header h1 { font-size: 20px; }
+  .register-frame .login-form { padding: 16px; border-radius: 15px; }
 }

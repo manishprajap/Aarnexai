@@ -1,13 +1,14 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonButtons, IonButton, IonIcon, IonContent, IonInput,
   IonSelect, IonSelectOption, IonTextarea, IonSegment, IonSegmentButton, IonLabel, IonSpinner,
 } from '@ionic/react';
 import {
   arrowBack, businessOutline, pricetagOutline, locationOutline, globeOutline, callOutline, personOutline,
-  mailOutline, calendarOutline, cameraOutline, peopleOutline, cubeOutline, flagOutline, optionsOutline,
+  mailOutline, cameraOutline, peopleOutline, cubeOutline, flagOutline, optionsOutline,
   createOutline, mapOutline,
 } from 'ionicons/icons';
+import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { apiGet, apiPost } from '../api';
 import { useAuth } from '../context/AuthContext';
 import './Onboarding.css';
@@ -24,7 +25,7 @@ interface Catalog {
 
 interface FormState {
   name: string; email: string; phone: string; businessName: string;
-  country: string; state: string; city: string; start_date: string;
+  country: string; state: string; city: string;
   industry_id: number | null; business_category_id: number | null;
   service_ids: number[]; target_customer_ids: number[];
   marketing_goal: string; automation_mode: 'AUTO' | 'MANUAL'; strategy_id: number | null; custom_prompt: string;
@@ -33,8 +34,11 @@ interface FormState {
 const GOALS = ['Generate Leads', 'Increase Sales', 'Brand Awareness', 'Engagement', 'Website Traffic', 'Local Customers', 'Customer Retention'];
 const TITLES = ['Tell us about your business', 'Industry & category', 'Products / services', 'Target customers', 'Marketing strategy'];
 const TOTAL_STEPS = 5;
-const today = () => new Date().toISOString().slice(0, 10);
-const errorText = (e: any, fallback: string) => e?.error || e?.message || fallback;
+const errorText = (e: unknown, fallback: string) => {
+  if (e instanceof Error) return e.message;
+  if (e && typeof e === 'object' && 'error' in e && typeof e.error === 'string') return e.error;
+  return fallback;
+};
 
 const EMPTY_CATALOG: Catalog = { industries: [], categories: [], services: [], targets: [], strategies: [] };
 
@@ -43,16 +47,18 @@ const Onboarding: React.FC = () => {
 
   const [step, setStep] = useState(1);
   const [logo, setLogo] = useState<string | null>(null);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   const [catalog, setCatalog] = useState<Catalog>(EMPTY_CATALOG);
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState('');
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState<FormState>({
     name: '', email: '', phone: '', businessName: '',
-    country: 'India', state: 'Uttar Pradesh', city: 'Lucknow', start_date: today(),
+    country: 'India', state: 'Uttar Pradesh', city: 'Lucknow',
     industry_id: null, business_category_id: null, service_ids: [], target_customer_ids: [],
     marketing_goal: 'Generate Leads', automation_mode: 'AUTO', strategy_id: null, custom_prompt: '',
   });
@@ -66,7 +72,7 @@ const Onboarding: React.FC = () => {
     try {
       const data = await apiGet('/catalog');
       setCatalog({ ...EMPTY_CATALOG, ...data });
-    } catch (e: any) {
+    } catch (e: unknown) {
       setCatalogError(errorText(e, 'Could not load business options. Please try again.'));
       setCatalogLoading(false);
       return;
@@ -107,7 +113,7 @@ const Onboarding: React.FC = () => {
 
   const valid = (() => {
     switch (step) {
-      case 1: return !!form.name.trim() && !!form.businessName.trim() && !!form.start_date && emailOk;
+      case 1: return !!form.name.trim() && !!form.businessName.trim() && emailOk;
       case 2: return !!form.industry_id && !!form.business_category_id;
       case 3: return form.service_ids.length > 0;
       case 4: return form.target_customer_ids.length > 0;
@@ -117,10 +123,47 @@ const Onboarding: React.FC = () => {
 
   const pickLogo = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)) {
+      setError('Choose a JPG, PNG, WEBP or GIF business logo.');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Business logo must be 5 MB or smaller.');
+      return;
+    }
+    setError('');
+    setLogoFile(file);
     const r = new FileReader();
     r.onload = () => setLogo(r.result as string);
     r.readAsDataURL(file);
+  };
+
+  const takeLogoPhoto = async () => {
+    setError('');
+    try {
+      const photo = await Camera.getPhoto({
+        quality: 85,
+        allowEditing: true,
+        resultType: CameraResultType.DataUrl,
+        source: CameraSource.Camera,
+      });
+      if (!photo.dataUrl) throw new Error('Camera did not return an image.');
+      const response = await fetch(photo.dataUrl);
+      const blob = await response.blob();
+      const file = new File([blob], `business-logo.${photo.format || 'jpeg'}`, {
+        type: blob.type || `image/${photo.format || 'jpeg'}`,
+      });
+      if (file.size > 5 * 1024 * 1024) {
+        throw new Error('Business logo must be 5 MB or smaller.');
+      }
+      setLogoFile(file);
+      setLogo(photo.dataUrl);
+    } catch (cameraError) {
+      console.error('[Onboarding] Could not capture business logo:', cameraError);
+      setError(errorText(cameraError, 'Could not take a photo. Please choose an image from your device.'));
+    }
   };
 
   /* --------------------------------- submit --------------------------------- */
@@ -128,14 +171,27 @@ const Onboarding: React.FC = () => {
     setSubmitting(true);
     setError('');
     try {
-      const response = await apiPost<{ success?: boolean }>('/business', {
-        ...form,
-        name: form.name.trim(),
-        email: form.email.trim(),
-        businessName: form.businessName.trim(),
-        // AUTO mode never sends a strategy
-        strategy_id: form.automation_mode === 'MANUAL' ? form.strategy_id : null,
-      });
+      const payload = new FormData();
+      payload.append('name', form.name.trim());
+      payload.append('email', form.email.trim());
+      payload.append('phone', form.phone.trim());
+      payload.append('businessName', form.businessName.trim());
+      payload.append('country', form.country);
+      payload.append('state', form.state);
+      payload.append('city', form.city);
+      payload.append('industry_id', String(form.industry_id));
+      payload.append('business_category_id', String(form.business_category_id));
+      payload.append('service_ids', JSON.stringify(form.service_ids));
+      payload.append('target_customer_ids', JSON.stringify(form.target_customer_ids));
+      payload.append('marketing_goal', form.marketing_goal);
+      payload.append('automation_mode', form.automation_mode);
+      payload.append('strategy_id', form.automation_mode === 'MANUAL' && form.strategy_id
+        ? String(form.strategy_id)
+        : '');
+      payload.append('custom_prompt', form.custom_prompt);
+      if (logoFile) payload.append('logo', logoFile);
+
+      const response = await apiPost<{ success?: boolean }>('/business', payload);
       if (response?.success === false) {
         throw new Error('Business setup could not be saved. Please review your details and try again.');
       }
@@ -144,7 +200,7 @@ const Onboarding: React.FC = () => {
       // updated hasBusiness state and redirects this onboarding route to
       // the subscription page for accounts without an active plan.
       await refreshStatus();
-    } catch (e: any) {
+    } catch (e: unknown) {
       setError(errorText(e, 'Could not save your business. Please try again.'));
       setSubmitting(false);
     }
@@ -162,19 +218,22 @@ const Onboarding: React.FC = () => {
   /* --------------------------------- render --------------------------------- */
   return (
     <IonPage>
-      <IonHeader className="ion-no-border">
+      <IonHeader className="ion-no-border setup-header">
         <IonToolbar className="grad-bar">
           {step > 1 && (
             <IonButtons slot="start">
               <IonButton onClick={back}><IonIcon slot="icon-only" icon={arrowBack} /></IonButton>
             </IonButtons>
           )}
-          <div className="bar-title" style={step === 1 ? { paddingLeft: 16 } : undefined}>{TITLES[step - 1]}</div>
+          <div className="setup-heading">
+            <div className="bar-title">{TITLES[step - 1]}</div>
+            <span className="step-count">STEP {step} OF {TOTAL_STEPS}</span>
+          </div>
         </IonToolbar>
         <div className="progress"><div style={{ width: `${(step / TOTAL_STEPS) * 100}%` }} /></div>
       </IonHeader>
 
-      <IonContent className="page-bg">
+      <IonContent className="page-bg setup-content">
         {catalogLoading && (
           <div className="state-box"><IonSpinner name="crescent" /></div>
         )}
@@ -193,16 +252,31 @@ const Onboarding: React.FC = () => {
             {/* STEP 1 — Business details */}
             {step === 1 && (
               <>
-                <div className="logo-wrap">
-                  <label className="logo-circle">
+                <div className="logo-wrap setup-logo-wrap">
+                  <div className="logo-circle">
                     {logo && <img src={logo} alt="Business logo" />}
                     <span className="cam"><IonIcon icon={cameraOutline} /></span>
-                    <input type="file" accept="image/*" hidden onChange={pickLogo} />
-                  </label>
-                  <div className="logo-caption">ADD BUSINESS LOGO (OPTIONAL)</div>
+                  </div>
+                  <input
+                    id="business-logo-file"
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    hidden
+                    onChange={pickLogo}
+                  />
+                  <div className="logo-actions">
+                    <button type="button" onClick={() => logoInputRef.current?.click()}>
+                      Choose from device
+                    </button>
+                    <button type="button" onClick={() => void takeLogoPhoto()}>
+                      Take a photo
+                    </button>
+                  </div>
+                  <div className="logo-caption">{logoFile?.name || 'BUSINESS LOGO · OPTIONAL · MAX 5 MB'}</div>
                 </div>
 
-                <div className="sheet">
+                <div className="sheet setup-sheet">
                   <div className="field">
                     <IonIcon icon={personOutline} className="ico blue" />
                     <span className="lbl">Owner / Contact Name *</span>
@@ -240,18 +314,13 @@ const Onboarding: React.FC = () => {
                     <span className="lbl">City</span>
                     <IonInput value={form.city} placeholder="City" onIonInput={e => set('city', String(e.detail.value ?? ''))} />
                   </div>
-                  <div className="field">
-                    <IonIcon icon={calendarOutline} className="ico navy" />
-                    <span className="lbl">Start Date *</span>
-                    <IonInput type="date" value={form.start_date} onIonInput={e => set('start_date', String(e.detail.value ?? ''))} />
-                  </div>
                 </div>
               </>
             )}
 
             {/* STEP 2 — Industry & category */}
             {step === 2 && (
-              <div className="sheet top">
+              <div className="sheet top setup-sheet">
                 <div className="field">
                   <IonIcon icon={businessOutline} className="ico blue" />
                   <span className="lbl">Industry *</span>
@@ -283,7 +352,7 @@ const Onboarding: React.FC = () => {
 
             {/* STEP 3 — Services */}
             {step === 3 && (
-              <div className="sheet top">
+              <div className="sheet top setup-sheet">
                 <div className="field">
                   <IonIcon icon={cubeOutline} className="ico blue" />
                   <span className="lbl">Products / Services *</span>
@@ -298,7 +367,7 @@ const Onboarding: React.FC = () => {
 
             {/* STEP 4 — Target customers */}
             {step === 4 && (
-              <div className="sheet top">
+              <div className="sheet top setup-sheet">
                 <div className="field">
                   <IonIcon icon={peopleOutline} className="ico green" />
                   <span className="lbl">Target Customers *</span>
@@ -313,7 +382,7 @@ const Onboarding: React.FC = () => {
 
             {/* STEP 5 — Strategy */}
             {step === 5 && (
-              <div className="sheet top">
+              <div className="sheet top setup-sheet">
                 <div className="field">
                   <IonIcon icon={flagOutline} className="ico blue" />
                   <span className="lbl">Marketing Goal</span>
@@ -354,7 +423,7 @@ const Onboarding: React.FC = () => {
               </div>
             )}
 
-            <div className="cta-wrap">
+            <div className="cta-wrap setup-actions">
               {error && <p className="form-error">{error}</p>}
               <button className="cta" disabled={!valid || submitting} onClick={next}>
                 {submitting ? <IonSpinner name="dots" /> : step < TOTAL_STEPS ? 'CONTINUE' : 'SAVE & CONTINUE'}

@@ -290,6 +290,16 @@ const Login: React.FC = () => {
           </div>
 
           <div className="login-footer">
+            <p>
+              New to Aarna?{' '}
+              <button
+                type="button"
+                className="link-inline"
+                onClick={() => navigate('/register')}
+              >
+                Create an account
+              </button>
+            </p>
             <p>By continuing, you agree to our</p>
             <p>Terms of Service &nbsp;•&nbsp; Privacy Policy</p>
             <small>© {new Date().getFullYear()} Aarnex AI</small>
