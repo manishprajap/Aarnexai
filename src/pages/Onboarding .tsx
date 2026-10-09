@@ -285,13 +285,20 @@ const Onboarding: React.FC = () => {
                   <div className="field">
                     <IonIcon icon={mailOutline} className="ico teal" />
                     <span className="lbl">Email</span>
-                    <IonInput type="email" value={form.email} placeholder="you@example.com" onIonInput={e => set('email', String(e.detail.value ?? ''))} />
+                    <IonInput
+                      type="email"
+                      value={form.email}
+                      placeholder="you@example.com"
+                      readonly={Boolean(form.email.trim())}
+                      onIonInput={e => set('email', String(e.detail.value ?? ''))}
+                    />
                     {!emailOk && <span className="field-err">Enter a valid email</span>}
                   </div>
                   <div className="field">
                     <IonIcon icon={callOutline} className="ico navy" />
                     <span className="lbl">Phone</span>
                     <IonInput type="tel" inputmode="numeric" maxlength={15} value={form.phone} placeholder="Phone number"
+                      readonly={Boolean(form.phone.trim())}
                       onIonInput={e => set('phone', String(e.detail.value ?? '').replace(/[^\d+]/g, ''))} />
                   </div>
                   <div className="field">
