@@ -309,18 +309,75 @@
   text-align: center;
 }
 
-.analytics-post-list {
+.analytics-post-platforms {
   display: grid;
+  gap: 17px;
+}
+
+.analytics-post-platform-section {
+  min-width: 0;
+  padding: 12px 0 13px;
+  border: 1px solid var(--analytics-border);
+  border-radius: 15px;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(25, 55, 88, 0.04);
+}
+
+.analytics-post-platform-heading {
+  display: flex;
+  align-items: center;
   gap: 10px;
+  margin: 0 13px 11px;
+}
+
+.analytics-post-platform-icon {
+  display: grid;
+  flex: none;
+  width: 35px;
+  height: 35px;
+  place-items: center;
+  border-radius: 11px;
+  background: #edf3f9;
+  color: var(--analytics-blue);
+  font-size: 19px;
+}
+
+.analytics-post-platform-heading h3 {
+  margin: 0;
+  color: var(--analytics-ink);
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.analytics-post-platform-heading p {
+  margin: 3px 0 0;
+  color: var(--analytics-muted);
+  font-size: 10px;
+}
+
+.analytics-post-slider {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 0 13px 5px;
+  scroll-snap-type: x mandatory;
+  scrollbar-color: #cbd7e4 transparent;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
 }
 
 .analytics-post-card {
+  flex: 0 0 min(82vw, 370px);
   min-width: 0;
+  scroll-snap-align: start;
   padding: 13px;
-  border: 1px solid var(--analytics-border);
-  border-radius: 14px;
+  border: 1px solid #e8eef4;
+  border-radius: 13px;
   background: #fff;
-  box-shadow: 0 4px 14px rgba(25, 55, 88, 0.04);
+}
+
+.analytics-post-slider .analytics-post-card:only-child {
+  flex-basis: min(100%, 370px);
 }
 
 .analytics-post-main {
@@ -399,6 +456,47 @@
   margin-top: 5px;
   color: #8997a5;
   font-size: 9px;
+}
+
+.analytics-youtube-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 11px;
+}
+
+.analytics-youtube-metrics > div {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  column-gap: 5px;
+  min-width: 0;
+  padding: 8px 7px;
+  border-radius: 9px;
+  background: #f6f9fc;
+}
+
+.analytics-youtube-metrics ion-icon {
+  color: #687e94;
+  font-size: 13px;
+}
+
+.analytics-youtube-metrics strong {
+  overflow: hidden;
+  color: var(--analytics-ink);
+  font-size: 12px;
+  text-overflow: ellipsis;
+}
+
+.analytics-youtube-metrics span {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  margin-top: 3px;
+  color: var(--analytics-muted);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  text-transform: capitalize;
+  white-space: nowrap;
 }
 
 .analytics-post-actions {
@@ -486,6 +584,10 @@
 
   .analytics-summary span {
     font-size: 11px;
+  }
+
+  .analytics-post-card {
+    flex-basis: min(68vw, 370px);
   }
 }
 

@@ -18,20 +18,13 @@ import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import {
   arrowBack,
   camera,
-  chevronDownOutline,
   imagesOutline,
   sparklesOutline,
 } from 'ionicons/icons';
 
-import { apiGet, apiPost } from '../api';
+import { apiPost } from '../api';
 import { useAuth } from '../context/AuthContext';
 import aarnaLogo from '../assets/aarna-logo.png';
-import {
-  BusinessCategory,
-  getBusinessCategory,
-  resolveBusinessCategory,
-  saveBusinessCategory,
-} from '../utils/businessCategory';
 
 // ==================================================
 // BRAND / TOKENS
@@ -56,16 +49,6 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB (change to 5MB if you want to ma
 // ==================================================
 // TYPES
 // ==================================================
-
-interface Subcategory {
-  id: number;
-  name: string;
-}
-
-interface ChildCategory {
-  id: number;
-  name: string;
-}
 
 type AspectRatio = '1:1' | '16:9' | '9:16';
 
@@ -150,10 +133,6 @@ const ASPECT_OPTIONS: {
   { value: '9:16', ratio: '9:16', label: 'Portrait', w: 13, h: 22 },
 ];
 
-const unwrapList = <T,>(res: any, key: string): T[] => {
-  return res?.data?.[key] ?? res?.[key] ?? [];
-};
-
 // ==================================================
 // SMALL UI PIECES
 // ==================================================
@@ -183,71 +162,6 @@ const FieldLabel: React.FC<{ text: string }> = ({ text }) => (
   <p style={{ fontSize: 14, fontWeight: 600, color: ui.text, margin: '0 0 10px' }}>{text}</p>
 );
 
-interface SelectFieldProps {
-  value: number | null;
-  options: { id: number; name: string }[];
-  placeholder: string;
-  loading?: boolean;
-  onChange: (id: number | null) => void;
-}
-
-const SelectField: React.FC<SelectFieldProps> = ({
-  value,
-  options,
-  placeholder,
-  loading,
-  onChange,
-}) => {
-  if (loading) {
-    return (
-      <div
-        className="animate-pulse"
-        style={{ height: 48, borderRadius: 12, background: ui.border }}
-      />
-    );
-  }
-
-  return (
-    <div style={{ position: 'relative' }}>
-      <select
-        value={value ?? ''}
-        onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}
-        style={{
-          width: '100%',
-          height: 48,
-          appearance: 'none',
-          WebkitAppearance: 'none',
-          borderRadius: 12,
-          border: `1px solid ${ui.border}`,
-          background: ui.white,
-          padding: '0 40px 0 14px',
-          fontSize: 14,
-          color: value ? ui.text : ui.muted,
-          outline: 'none',
-        }}
-      >
-        <option value="">{placeholder}</option>
-        {options.map((o) => (
-          <option key={o.id} value={o.id}>
-            {o.name}
-          </option>
-        ))}
-      </select>
-      <IonIcon
-        icon={chevronDownOutline}
-        style={{
-          position: 'absolute',
-          right: 14,
-          top: 16,
-          fontSize: 16,
-          color: ui.muted,
-          pointerEvents: 'none',
-        }}
-      />
-    </div>
-  );
-};
-
 // ==================================================
 // PAGE
 // ==================================================
@@ -255,7 +169,6 @@ const SelectField: React.FC<SelectFieldProps> = ({
 const Upload: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-
   // step 'upload' = screen 1, step 'generate' = screen 2
   const [step, setStep] = useState<'upload' | 'generate'>('upload');
 
@@ -264,21 +177,7 @@ const Upload: React.FC = () => {
 
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1');
 
-  // Category comes from Business Setup (saved in localStorage), not selected here
-  const [businessCategory, setBusinessCategory] = useState<BusinessCategory | null>(null);
-
-  // Chosen per product on this screen (both optional)
-  const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
-  const [childCategories, setChildCategories] = useState<ChildCategory[]>([]);
-  const [subcategoryId, setSubcategoryId] = useState<number | null>(null);
-  const [childCategoryId, setChildCategoryId] = useState<number | null>(null);
-  const [loadingSubcategories, setLoadingSubcategories] = useState(false);
-  const [loadingChildCategories, setLoadingChildCategories] = useState(false);
-
   const [promptDescription, setPromptDescription] = useState('');
-
-  // Today's TEMPLATE prompt from the server (contains {category} {subcategory} {childcategory})
-  const [planTemplate, setPlanTemplate] = useState< | null>(null);
 
   const [uploadingImage, setUploadingImage] = useState(false); // step 1: image upload
   const [generating, setGenerating] = useState(false); // step 2: analyze / generate ad
@@ -311,203 +210,6 @@ const Upload: React.FC = () => {
       }
     };
   }, [previewUrl]);
-
-  /*
-  |--------------------------------------------------------------------------
-  | Read the business category saved by Business Setup.
-  | localStorage first; if it is empty (cleared / new device) fall back to the
-  | profile from the backend and cache it again.
-  |--------------------------------------------------------------------------
-  */
-
-  useEffect(() => {
-    if (!user?.id && !user?.categoryId) {
-      return;
-    }
-
-    const saved = getBusinessCategory(user.id ?? null);
-    const resolved = resolveBusinessCategory(user, saved);
-
-    if (resolved) {
-      setBusinessCategory(resolved);
-
-      if (user?.id) {
-        saveBusinessCategory(user.id, resolved);
-      }
-      return;
-    }
-
-    let cancelled = false;
-
-    const loadFromProfile = async () => {
-      try {
-        const res = await apiGet('/auth/me');
-        const u = res?.user;
-
-        if (cancelled) {
-          return;
-        }
-
-        const fromProfile = resolveBusinessCategory(u, null);
-
-        if (!fromProfile) {
-          return;
-        }
-
-        saveBusinessCategory(user?.id ?? u?.id ?? null, fromProfile);
-        setBusinessCategory(fromProfile);
-      } catch (error) {
-        console.error('LOAD BUSINESS CATEGORY ERROR:', error);
-      }
-    };
-
-    loadFromProfile();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id, user?.categoryId, user?.category]);
-
-  /*
-  |--------------------------------------------------------------------------
-  | Subcategories of the saved business category
-  |--------------------------------------------------------------------------
-  */
-
-  const businessCategoryId = businessCategory?.categoryId ?? null;
-
-  useEffect(() => {
-    setSubcategories([]);
-    setSubcategoryId(null);
-
-    if (!businessCategoryId) {
-      return;
-    }
-
-    let cancelled = false;
-
-    const load = async () => {
-      try {
-        setLoadingSubcategories(true);
-        const res = await apiGet(`/categories/${businessCategoryId}/subcategories`);
-
-        if (!cancelled) {
-          setSubcategories(unwrapList<Subcategory>(res, 'subcategories'));
-        }
-      } catch (error) {
-        console.error('LOAD SUBCATEGORIES ERROR:', error);
-
-        if (!cancelled) {
-          showMessage('Unable to load subcategories');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingSubcategories(false);
-        }
-      }
-    };
-
-    load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [businessCategoryId]);
-
-  /*
-  |--------------------------------------------------------------------------
-  | Child categories of the selected subcategory
-  |--------------------------------------------------------------------------
-  */
-
-  useEffect(() => {
-    setChildCategories([]);
-    setChildCategoryId(null);
-
-    if (!subcategoryId) {
-      return;
-    }
-
-    let cancelled = false;
-
-    const load = async () => {
-      try {
-        setLoadingChildCategories(true);
-        const res = await apiGet(`/subcategories/${subcategoryId}/childcategories`);
-
-        if (!cancelled) {
-          setChildCategories(unwrapList<ChildCategory>(res, 'childCategories'));
-        }
-      } catch (error) {
-        console.error('LOAD CHILD CATEGORIES ERROR:', error);
-
-        if (!cancelled) {
-          showMessage('Unable to load child categories');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoadingChildCategories(false);
-        }
-      }
-    };
-
-    load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [subcategoryId]);
-
-  /*
-  |--------------------------------------------------------------------------
-  | 1) Today's TEMPLATE prompt comes from the server (DB).
-  |    If the user has no plan yet (or only an old one without placeholders)
-  |    the API generates a fresh 30-day plan once via Gemini.
-  |--------------------------------------------------------------------------
-  */
-
-  useEffect(() => {
-    const categoryName = businessCategory?.categoryName?.trim();
-
-    if (!user?.id || !categoryName) {
-      return;
-    }
-
-    let cancelled = false;
-
-
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id, businessCategory?.categoryId, businessCategory?.categoryName]);
-
-  /*
-  |--------------------------------------------------------------------------
-  | 2) Fill {category} / {subcategory} / {childcategory} with the real names
-  |    whenever the selection changes. Works for businesses without
-  |    subcategories too (they fall back to the category name).
-  |--------------------------------------------------------------------------
-  */
-
-  useEffect(() => {
-    if (!planTemplate) {
-      return;
-    }
-
-    const subcategoryName = subcategories.find((item) => item.id === subcategoryId)?.name ?? '';
-    const childCategoryName =
-      childCategories.find((item) => item.id === childCategoryId)?.name ?? '';
-
-  
-  }, [
-    planTemplate,
-    step,
-    subcategoryId,
-    childCategoryId,
-    subcategories,
-    childCategories,
-    businessCategory?.categoryName,
-  ]);
 
   /*
   |--------------------------------------------------------------------------
@@ -651,8 +353,6 @@ const Upload: React.FC = () => {
     setPreviewUrl(null);
     setProductId(null);
     setUploadedImageUrl(null);
-    setSubcategoryId(null);
-    setChildCategoryId(null);
     setPromptDescription('');
     setAspectRatio('1:1');
     setStep('upload');
@@ -687,33 +387,6 @@ const Upload: React.FC = () => {
       return;
     }
 
-    // The category may still be hydrating after this page opens. Re-read the
-    // cache/profile at submit time before blocking a valid generation request.
-    let category = resolveBusinessCategory(
-      user,
-      getBusinessCategory(user?.id ?? null),
-    ) ?? businessCategory;
-
-    if (!category?.categoryId) {
-      try {
-        const res = await apiGet('/auth/me');
-        const profileCategory = resolveBusinessCategory(res?.user, null);
-
-        if (profileCategory) {
-          category = profileCategory;
-          setBusinessCategory(profileCategory);
-          saveBusinessCategory(user?.id ?? res?.user?.id ?? null, profileCategory);
-        }
-      } catch (error) {
-        console.error('LOAD BUSINESS CATEGORY BEFORE GENERATE ERROR:', error);
-      }
-    }
-
-    if (!category?.categoryId) {
-      showMessage('Please set your business category in Business Setup first');
-      return;
-    }
-
     isSubmittingRef.current = true;
 
     try {
@@ -724,9 +397,6 @@ const Upload: React.FC = () => {
       // STEP 2 — analyze product + generate ad (product analyze API)
       const analyzeResponse: AnalyzeResponse = await apiPost('/product/analyze', {
         productId,
-        categoryId: category.categoryId,
-        subcategoryId,
-        childCategoryId,
         aspectRatio,
         promptDescription: promptDescription.trim(),
       });
@@ -1098,56 +768,6 @@ const Upload: React.FC = () => {
                 );
               })}
             </div>
-
-            {/* Category (from Business Setup, read only) */}
-            {businessCategory?.categoryName && (
-              <div style={{ marginTop: 24 }}>
-                <FieldLabel text="Category" />
-                <div
-                  style={{
-                    height: 48,
-                    display: 'flex',
-                    alignItems: 'center',
-                    padding: '0 14px',
-                    borderRadius: 12,
-                    border: `1px solid ${ui.border}`,
-                    background: ui.surface,
-                    fontSize: 14,
-                    color: ui.text,
-                  }}
-                >
-                  {businessCategory.categoryName}
-                </div>
-              </div>
-            )}
-
-            {/* Subcategory — only when this category has some */}
-            {businessCategoryId && (loadingSubcategories || subcategories.length > 0) && (
-              <div style={{ marginTop: 16 }}>
-                <FieldLabel text="Subcategory (optional)" />
-                <SelectField
-                  value={subcategoryId}
-                  options={subcategories}
-                  placeholder="Select a subcategory"
-                  loading={loadingSubcategories}
-                  onChange={setSubcategoryId}
-                />
-              </div>
-            )}
-
-            {/* Child category — only when this subcategory has some */}
-            {subcategoryId && (loadingChildCategories || childCategories.length > 0) && (
-              <div style={{ marginTop: 16 }}>
-                <FieldLabel text="Child category (optional)" />
-                <SelectField
-                  value={childCategoryId}
-                  options={childCategories}
-                  placeholder="Select a child category"
-                  loading={loadingChildCategories}
-                  onChange={setChildCategoryId}
-                />
-              </div>
-            )}
 
             {/* Description */}
             <div style={{ marginTop: 24 }}>

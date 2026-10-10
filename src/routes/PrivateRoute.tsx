@@ -18,11 +18,11 @@ const PrivateRoute: React.FC = () => {
     return <Navigate to="/onboarding" replace />;
   }
 
-  if (hasBusiness && !hasSubscription && path !== '/subscription') {
-    return <Navigate to="/subscription" replace />;
+  if (hasBusiness && path === '/onboarding') {
+    return <Navigate to="/dashboard" replace />;
   }
 
-  if (hasBusiness && hasSubscription && (path === '/onboarding' || path === '/subscription')) {
+  if (hasBusiness && hasSubscription && path === '/subscription') {
     return <Navigate to="/dashboard" replace />;
   }
 

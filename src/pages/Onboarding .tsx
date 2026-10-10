@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   IonPage, IonHeader, IonToolbar, IonButtons, IonButton, IonIcon, IonContent, IonInput,
-  IonSelect, IonSelectOption, IonTextarea, IonSegment, IonSegmentButton, IonLabel, IonSpinner,
+  IonSelect, IonSelectOption, IonTextarea, IonSpinner,
 } from '@ionic/react';
 import {
-  arrowBack, businessOutline, pricetagOutline, locationOutline, globeOutline, callOutline, personOutline,
-  mailOutline, cameraOutline, peopleOutline, cubeOutline, flagOutline, optionsOutline,
+  arrowBack, businessOutline, pricetagOutline, locationOutline, globeOutline,
+  cameraOutline, peopleOutline, cubeOutline, flagOutline,
   createOutline, mapOutline,
 } from 'ionicons/icons';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
@@ -42,8 +42,18 @@ const errorText = (e: unknown, fallback: string) => {
 
 const EMPTY_CATALOG: Catalog = { industries: [], categories: [], services: [], targets: [], strategies: [] };
 
+const selectedId = (value: unknown): number | null => {
+  const id = Number(value);
+  return Number.isInteger(id) && id > 0 ? id : null;
+};
+
+const selectedIds = (value: unknown): number[] =>
+  Array.isArray(value)
+    ? value.map(Number).filter((id) => Number.isInteger(id) && id > 0)
+    : [];
+
 const Onboarding: React.FC = () => {
-  const { refreshStatus } = useAuth();
+  const { refreshStatus, user } = useAuth();
 
   const [step, setStep] = useState(1);
   const [logo, setLogo] = useState<string | null>(null);
@@ -57,7 +67,7 @@ const Onboarding: React.FC = () => {
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState<FormState>({
-    name: '', email: '', phone: '', businessName: '',
+    name: user?.name || '', email: user?.email || '', phone: user?.mobile || '', businessName: '',
     country: 'India', state: 'Uttar Pradesh', city: 'Lucknow',
     industry_id: null, business_category_id: null, service_ids: [], target_customer_ids: [],
     marketing_goal: 'Generate Leads', automation_mode: 'AUTO', strategy_id: null, custom_prompt: '',
@@ -85,9 +95,9 @@ const Onboarding: React.FC = () => {
       if (b) {
         setForm(p => ({
           ...p,
-          name: b.name || p.name,
-          email: b.email || p.email,
-          phone: b.mobile || p.phone,
+          name: b.name || p.name || user?.name || '',
+          email: b.email || p.email || user?.email || '',
+          phone: b.mobile || p.phone || user?.mobile || '',
           businessName: b.businessName || p.businessName,
           country: b.country || p.country,
           state: b.state || p.state,
@@ -100,7 +110,7 @@ const Onboarding: React.FC = () => {
       }
     } catch { /* ignore, form just starts empty */ }
     setCatalogLoading(false);
-  }, []);
+  }, [user?.email, user?.mobile, user?.name]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -196,9 +206,13 @@ const Onboarding: React.FC = () => {
         throw new Error('Business setup could not be saved. Please review your details and try again.');
       }
 
-      // Refresh the auth flags before navigating. RequireAuth observes the
-      // updated hasBusiness state and redirects this onboarding route to
-      // the subscription page for accounts without an active plan.
+      const savedPlan = await apiGet<{ items?: unknown[] }>('/prompt-plan');
+      if (!Array.isArray(savedPlan.items) || savedPlan.items.length !== 30) {
+        await apiPost('/prompt-plan/generate', {});
+      }
+      await apiPost('/business/initial-banner', {});
+
+      // RequireAuth sends completed onboarding directly to the dashboard.
       await refreshStatus();
     } catch (e: unknown) {
       setError(errorText(e, 'Could not save your business. Please try again.'));
@@ -208,10 +222,16 @@ const Onboarding: React.FC = () => {
 
   const next = () => {
     if (!valid || submitting) return;
+    setError('');
     if (step < TOTAL_STEPS) setStep(step + 1);
     else submit();
   };
-  const back = () => { if (step > 1 && !submitting) setStep(step - 1); };
+  const back = () => {
+    if (step > 1 && !submitting) {
+      setError('');
+      setStep(step - 1);
+    }
+  };
 
   const caret = { interface: 'action-sheet' as const, toggleIcon: 'caret-down-sharp' };
 
@@ -222,7 +242,9 @@ const Onboarding: React.FC = () => {
         <IonToolbar className="grad-bar">
           {step > 1 && (
             <IonButtons slot="start">
-              <IonButton onClick={back}><IonIcon slot="icon-only" icon={arrowBack} /></IonButton>
+              <IonButton onClick={back} disabled={submitting} aria-label="Go to previous setup step">
+                <IonIcon slot="icon-only" icon={arrowBack} />
+              </IonButton>
             </IonButtons>
           )}
           <div className="setup-heading">
@@ -278,23 +300,6 @@ const Onboarding: React.FC = () => {
 
                 <div className="sheet setup-sheet">
                   <div className="field">
-                    <IonIcon icon={personOutline} className="ico blue" />
-                    <span className="lbl">Owner / Contact Name *</span>
-                    <IonInput value={form.name} placeholder="Your name" onIonInput={e => set('name', String(e.detail.value ?? ''))} />
-                  </div>
-                  <div className="field">
-                    <IonIcon icon={mailOutline} className="ico teal" />
-                    <span className="lbl">Email</span>
-                    <IonInput type="email" value={form.email} placeholder="you@example.com" onIonInput={e => set('email', String(e.detail.value ?? ''))} />
-                    {!emailOk && <span className="field-err">Enter a valid email</span>}
-                  </div>
-                  <div className="field">
-                    <IonIcon icon={callOutline} className="ico navy" />
-                    <span className="lbl">Phone</span>
-                    <IonInput type="tel" inputmode="numeric" maxlength={15} value={form.phone} placeholder="Phone number"
-                      onIonInput={e => set('phone', String(e.detail.value ?? '').replace(/[^\d+]/g, ''))} />
-                  </div>
-                  <div className="field">
                     <IonIcon icon={businessOutline} className="ico blue" />
                     <span className="lbl">Business Name *</span>
                     <IonInput value={form.businessName} placeholder="Business name" onIonInput={e => set('businessName', String(e.detail.value ?? ''))} />
@@ -326,7 +331,7 @@ const Onboarding: React.FC = () => {
                   <span className="lbl">Industry *</span>
                   <IonSelect value={form.industry_id} placeholder="Select industry" {...caret}
                     onIonChange={e => {
-                      const v = e.detail.value;
+                      const v = selectedId(e.detail.value);
                       if (v === form.industry_id) return; // ignore no-op / prefill echoes
                       setForm(p => ({ ...p, industry_id: v, business_category_id: null, service_ids: [], target_customer_ids: [] }));
                     }}>
@@ -339,7 +344,7 @@ const Onboarding: React.FC = () => {
                   <IonSelect value={form.business_category_id} disabled={!form.industry_id}
                     placeholder={form.industry_id ? 'Select category' : 'Select industry first'} {...caret}
                     onIonChange={e => {
-                      const v = e.detail.value;
+                      const v = selectedId(e.detail.value);
                       if (v === form.business_category_id) return;
                       setForm(p => ({ ...p, business_category_id: v, service_ids: [], target_customer_ids: [] }));
                     }}>
@@ -357,7 +362,7 @@ const Onboarding: React.FC = () => {
                   <IonIcon icon={cubeOutline} className="ico blue" />
                   <span className="lbl">Products / Services *</span>
                   <IonSelect multiple value={form.service_ids} placeholder="Select one or more" interface="alert" toggleIcon="caret-down-sharp"
-                    onIonChange={e => set('service_ids', e.detail.value ?? [])}>
+                    onIonChange={e => set('service_ids', selectedIds(e.detail.value))}>
                     {services.map(s => <IonSelectOption key={s.id} value={s.id}>{s.name}</IonSelectOption>)}
                   </IonSelect>
                 </div>
@@ -372,7 +377,7 @@ const Onboarding: React.FC = () => {
                   <IonIcon icon={peopleOutline} className="ico green" />
                   <span className="lbl">Target Customers *</span>
                   <IonSelect multiple value={form.target_customer_ids} placeholder="Select one or more" interface="alert" toggleIcon="caret-down-sharp"
-                    onIonChange={e => set('target_customer_ids', e.detail.value ?? [])}>
+                    onIonChange={e => set('target_customer_ids', selectedIds(e.detail.value))}>
                     {targets.map(t => <IonSelectOption key={t.id} value={t.id}>{t.name}</IonSelectOption>)}
                   </IonSelect>
                 </div>
@@ -391,27 +396,43 @@ const Onboarding: React.FC = () => {
                   </IonSelect>
                 </div>
 
-                <div className="seg-title"><IonIcon icon={optionsOutline} /> Automation Mode</div>
-                <IonSegment className="seg" value={form.automation_mode}
-                  onIonChange={e => {
-                    const v = e.detail.value;
-                    if (v !== 'AUTO' && v !== 'MANUAL') return;
-                    if (v === form.automation_mode) return;
-                    setForm(p => ({ ...p, automation_mode: v, strategy_id: null }));
-                  }}>
-                  <IonSegmentButton value="AUTO"><IonLabel>Auto – we decide</IonLabel></IonSegmentButton>
-                  <IonSegmentButton value="MANUAL"><IonLabel>Manual – I choose</IonLabel></IonSegmentButton>
-                </IonSegment>
-
-                <div className="field">
-                  <IonIcon icon={pricetagOutline} className="ico teal" />
-                  <span className="lbl">Monthly Promotion Strategy{form.automation_mode === 'MANUAL' ? ' *' : ''}</span>
-                  <IonSelect value={form.strategy_id} disabled={form.automation_mode === 'AUTO'}
-                    placeholder={form.automation_mode === 'AUTO' ? 'Auto will choose and rotate strategies' : 'Select strategy'}
-                    interface="alert" toggleIcon="caret-down-sharp" onIonChange={e => set('strategy_id', e.detail.value ?? null)}>
-                    {catalog.strategies.map(s => <IonSelectOption key={s.id} value={s.id}>{s.name} — {s.objective}</IonSelectOption>)}
-                  </IonSelect>
+                <div className="seg-title">Choose your marketing strategy mode</div>
+                <div className="automation-options" role="group" aria-label="Marketing strategy mode">
+                  <button
+                    type="button"
+                    aria-pressed={form.automation_mode === 'AUTO'}
+                    className={`automation-option${form.automation_mode === 'AUTO' ? ' is-selected' : ''}`}
+                    onClick={() => setForm(p => ({ ...p, automation_mode: 'AUTO', strategy_id: null }))}
+                  >
+                    <span className="automation-option-title">AarnexAi AI</span>
+                    <span className="automation-option-description">Let AI plan and optimize your monthly promotions.</span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={form.automation_mode === 'MANUAL'}
+                    className={`automation-option${form.automation_mode === 'MANUAL' ? ' is-selected' : ''}`}
+                    onClick={() => setForm(p => ({ ...p, automation_mode: 'MANUAL', strategy_id: null }))}
+                  >
+                    <span className="automation-option-title">Manual control</span>
+                    <span className="automation-option-description">Choose the promotion strategy that suits you.</span>
+                  </button>
                 </div>
+
+                {form.automation_mode === 'MANUAL' && (
+                  <div className="field">
+                    <IonIcon icon={pricetagOutline} className="ico teal" />
+                    <span className="lbl">Monthly Promotion Strategy *</span>
+                    <IonSelect value={form.strategy_id} placeholder="Select a strategy"
+                      interface="alert" toggleIcon="caret-down-sharp" onIonChange={e => set('strategy_id', e.detail.value ?? null)}>
+                      {catalog.strategies.map(s => <IonSelectOption key={s.id} value={s.id}>{s.name} — {s.objective}</IonSelectOption>)}
+                    </IonSelect>
+                  </div>
+                )}
+                {form.automation_mode === 'AUTO' && (
+                  <p className="note automation-note">
+                    AarnexAi AI will create and rotate a monthly strategy tailored to your business, audience and goals.
+                  </p>
+                )}
 
                 <div className="field">
                   <IonIcon icon={createOutline} className="ico navy" />
@@ -425,9 +446,18 @@ const Onboarding: React.FC = () => {
 
             <div className="cta-wrap setup-actions">
               {error && <p className="form-error">{error}</p>}
-              <button className="cta" disabled={!valid || submitting} onClick={next}>
-                {submitting ? <IonSpinner name="dots" /> : step < TOTAL_STEPS ? 'CONTINUE' : 'SAVE & CONTINUE'}
-              </button>
+              <div className={`setup-step-actions${step === 1 ? ' is-first-step' : ''}`}>
+                {step > 1 && (
+                  <button type="button" className="cta cta-previous" disabled={submitting} onClick={back}>
+                    Previous
+                  </button>
+                )}
+                <button type="button" className="cta cta-next" disabled={!valid || submitting} onClick={next}>
+                  {submitting
+                    ? <><IonSpinner name="dots" /> Preparing your plan & first banner…</>
+                    : step < TOTAL_STEPS ? 'Continue' : 'Save & continue'}
+                </button>
+              </div>
             </div>
           </>
         )}

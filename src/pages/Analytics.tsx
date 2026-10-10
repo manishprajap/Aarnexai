@@ -81,6 +81,11 @@ type PublishedPost = {
   };
 };
 
+type PublishedPostGroup = {
+  platform: string;
+  posts: PublishedPost[];
+};
+
 type BannerAnalytics = {
   bannerId: number;
   day?: number | null;
@@ -209,6 +214,11 @@ const PLATFORM_ORDER = Object.keys(PLATFORM_DETAILS) as PlatformKey[];
 function formatNumber(value: number | null | undefined): string {
   if (value === null || value === undefined || !Number.isFinite(Number(value))) return '—';
   return new Intl.NumberFormat().format(Number(value));
+}
+
+function publishedTimestamp(value: string): number {
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
 const MEDIA_ORIGIN = 'https://aarnexai.com';
@@ -348,7 +358,7 @@ const Analytics: React.FC = () => {
               },
             }))
           )
-          .sort((a, b) => new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime())
+          .sort((a, b) => publishedTimestamp(b.publishedAt) - publishedTimestamp(a.publishedAt))
           .slice(0, 30);
 
         setPosts(publishedPosts);
@@ -400,6 +410,19 @@ const Analytics: React.FC = () => {
     conversations = Number(platforms.whatsapp?.conversations) || 0;
     return { connected, published, conversations };
   }, [platforms]);
+
+  const postGroups = useMemo(() => {
+    const groups = new Map<string, PublishedPost[]>();
+    for (const post of posts) {
+      const group = groups.get(post.platform) ?? [];
+      group.push(post);
+      groups.set(post.platform, group);
+    }
+    return Array.from(groups, ([platform, groupedPosts]): PublishedPostGroup => ({
+      platform,
+      posts: groupedPosts,
+    }));
+  }, [posts]);
 
   return (
     <IonPage className="analytics-page">
@@ -563,71 +586,109 @@ const Analytics: React.FC = () => {
               )}
 
               {!postsLoading && !postsError && posts.length > 0 && (
-                <div className="analytics-post-list">
-                  {posts.map((post) => {
-                    const insight = postInsights[post.id];
-                    const expanded = expandedPostId === post.id;
-                    const postMetricEntries = Object.entries(insight?.metrics || {});
+                <div className="analytics-post-platforms">
+                  {postGroups.map((group) => {
+                    const platformKey = group.platform as PlatformKey;
+                    const details = PLATFORM_DETAILS[platformKey];
+                    const label = details?.label ?? group.platform.replaceAll('_', ' ');
 
                     return (
-                      <article className="analytics-post-card" key={post.id}>
-                        <div className="analytics-post-main">
-                          <AnalyticsPostImage
-                            src={post.imageUrl}
-                            alt={post.productTitle || post.caption || 'Published banner'}
-                          />
-                          <div className="analytics-post-copy">
-                            <span className={`analytics-post-platform is-${post.platform}`}>
-                              {post.platform.replaceAll('_', ' ')}
-                            </span>
-                            <h3>{post.productTitle || post.caption || `Post #${post.id}`}</h3>
-                            {post.caption && post.caption !== post.productTitle && (
-                              <p>{post.caption}</p>
-                            )}
-                            {post.publishedAt && (
-                              <time dateTime={post.publishedAt}>
-                                {new Date(post.publishedAt).toLocaleString()}
-                              </time>
-                            )}
+                      <section className="analytics-post-platform-section" key={group.platform}>
+                        <header className="analytics-post-platform-heading">
+                          <span
+                            className="analytics-post-platform-icon"
+                            style={details ? { color: details.color, background: details.background } : undefined}
+                          >
+                            <IonIcon icon={details?.icon ?? shareSocialOutline} aria-hidden="true" />
+                          </span>
+                          <div>
+                            <h3>{label}</h3>
+                            <p>{group.posts.length} {group.posts.length === 1 ? 'published post' : 'published posts'} · Latest first</p>
                           </div>
-                        </div>
-                        <div className="analytics-post-actions">
-                          {post.permalink && (
-                            <a href={post.permalink} target="_blank" rel="noreferrer">
-                              View post
-                            </a>
-                          )}
-                          <IonButton size="small" fill="outline" onClick={() => void togglePostInsights(post)}>
-                            {expanded ? 'Hide insights' : 'View insights'}
-                          </IonButton>
-                        </div>
-                        {expanded && (
-                          <div className="analytics-post-insights">
-                            {insight?.loading && (
-                              <div className="analytics-posts-loading" role="status">
-                                <IonSpinner name="crescent" />
-                                <span>Fetching post insights…</span>
-                              </div>
-                            )}
-                            {!insight?.loading && !insight?.error && postMetricEntries.length > 0 && (
-                              <div className="analytics-post-metrics">
-                                {postMetricEntries.map(([label, value]) => (
-                                  <div key={label}>
-                                    <strong>{formatNumber(value)}</strong>
-                                    <span>{label.replaceAll('_', ' ')}</span>
+                        </header>
+                        <div className="analytics-post-slider" aria-label={`${label} published posts`}>
+                          {group.posts.map((post) => {
+                            const insight = postInsights[post.id];
+                            const expanded = expandedPostId === post.id;
+                            const postMetricEntries = Object.entries(insight?.metrics || {});
+
+                            return (
+                              <article className="analytics-post-card" key={post.id}>
+                                <div className="analytics-post-main">
+                                  <AnalyticsPostImage
+                                    src={post.imageUrl}
+                                    alt={post.productTitle || post.caption || 'Published banner'}
+                                  />
+                                  <div className="analytics-post-copy">
+                                    <span className={`analytics-post-platform is-${post.platform}`}>
+                                      {label}
+                                    </span>
+                                    <h3>{post.productTitle || post.caption || `Post #${post.id}`}</h3>
+                                    {post.caption && post.caption !== post.productTitle && (
+                                      <p>{post.caption}</p>
+                                    )}
+                                    {post.publishedAt && (
+                                      <time dateTime={post.publishedAt}>
+                                        {new Date(post.publishedAt).toLocaleString()}
+                                      </time>
+                                    )}
                                   </div>
-                                ))}
-                              </div>
-                            )}
-                            {!insight?.loading && !insight?.error && insight?.note && (
-                              <p className="analytics-note">{insight.note}</p>
-                            )}
-                            {!insight?.loading && !insight?.error && !insight?.note && postMetricEntries.length === 0 && (
-                              <p className="analytics-note">No post insights are available yet.</p>
-                            )}
-                          </div>
-                        )}
-                      </article>
+                                </div>
+                                {post.platform === 'youtube' && post.insights?.metrics && (
+                                  <div className="analytics-youtube-metrics" aria-label="YouTube video statistics">
+                                    {Object.entries(post.insights.metrics).map(([metricLabel, value]) => (
+                                      <div key={metricLabel}>
+                                        <IonIcon
+                                          icon={metricLabel === 'views' ? eyeOutline : metricLabel === 'comments' ? chatbubblesOutline : peopleOutline}
+                                          aria-hidden="true"
+                                        />
+                                        <strong>{formatNumber(value)}</strong>
+                                        <span>{metricLabel}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                <div className="analytics-post-actions">
+                                  {post.permalink && (
+                                    <a href={post.permalink} target="_blank" rel="noreferrer">
+                                      View post
+                                    </a>
+                                  )}
+                                  <IonButton size="small" fill="outline" onClick={() => void togglePostInsights(post)}>
+                                    {expanded ? 'Hide insights' : 'View insights'}
+                                  </IonButton>
+                                </div>
+                                {expanded && (
+                                  <div className="analytics-post-insights">
+                                    {insight?.loading && (
+                                      <div className="analytics-posts-loading" role="status">
+                                        <IonSpinner name="crescent" />
+                                        <span>Fetching post insights…</span>
+                                      </div>
+                                    )}
+                                    {!insight?.loading && !insight?.error && postMetricEntries.length > 0 && (
+                                      <div className="analytics-post-metrics">
+                                        {postMetricEntries.map(([metricLabel, value]) => (
+                                          <div key={metricLabel}>
+                                            <strong>{formatNumber(value)}</strong>
+                                            <span>{metricLabel.replaceAll('_', ' ')}</span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                    {!insight?.loading && !insight?.error && insight?.note && (
+                                      <p className="analytics-note">{insight.note}</p>
+                                    )}
+                                    {!insight?.loading && !insight?.error && !insight?.note && postMetricEntries.length === 0 && (
+                                      <p className="analytics-note">No post insights are available yet.</p>
+                                    )}
+                                  </div>
+                                )}
+                              </article>
+                            );
+                          })}
+                        </div>
+                      </section>
                     );
                   })}
                 </div>

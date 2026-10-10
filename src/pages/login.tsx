@@ -137,8 +137,6 @@ const Login: React.FC = () => {
 
       if (!res.hasBusiness) {
         navigate('/onboarding');
-      } else if (!res.hasSubscription) {
-        navigate('/subscription');
       } else {
         navigate('/dashboard');
       }
