@@ -1,5 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useIonRouter } from '@ionic/react';
+import { Capacitor } from '@capacitor/core';
+import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import {
   IonContent,
   IonHeader,
@@ -36,6 +38,7 @@ import {
   statsChartOutline,
   cubeOutline,
   imageOutline,
+  cameraOutline,
   chatbubblesOutline,
   sparklesOutline,
 } from 'ionicons/icons';
@@ -48,7 +51,7 @@ import { useSocialConnections } from '../hooks/useSocialConnections';
 import { useLogoTheme } from '../hooks/useLogoTheme';
 import BottomTabBar from '../components/BottomTabBar';
 import { clearBusinessCategory, saveBusinessCategory } from '../utils/businessCategory';
-import { apiGet } from '../api';
+import { apiGet, apiPost } from '../api';
 
 import {
   fetchPromptPlan,
@@ -56,13 +59,13 @@ import {
   generatePromptPlan,
   getPromptPlanRegenerationState,
 } from '../utils/promptPlan';
-import {
-  createCatalogProduct,
-  createWhatsAppCatalog,
-  getWhatsAppCatalog,
-  ProductAvailability,
-  ProductInput,
-} from '../services/whatsappCommerce';
+type ProductDraft = {
+  name: string;
+  description: string;
+  price: string;
+  currency: string;
+  image: File | null;
+};
 
 type PromptPlanItem = {
   day: number;
@@ -78,17 +81,11 @@ type SubscriptionReminder = {
 
 const GENERATE_WATCHDOG_MS = 95_000;
 
-const emptyCatalogProduct = (): ProductInput => ({
-  catalogId: '',
+const emptyProduct = (): ProductDraft => ({
   name: '',
   description: '',
   price: '',
   currency: 'INR',
-  sku: '',
-  availability: 'in_stock',
-  categoryId: '',
-  businessCategoryId: '',
-  businessCategory: '',
   image: null,
 });
 
@@ -124,10 +121,12 @@ const Home: React.FC = () => {
   const { user, logout } = useAuth() as any;
   const [activeAdSlide, setActiveAdSlide] = useState(0);
   const [productModalOpen, setProductModalOpen] = useState(false);
-  const [productDraft, setProductDraft] = useState<ProductInput>(emptyCatalogProduct);
+  const [productDraft, setProductDraft] = useState<ProductDraft>(emptyProduct);
   const [savingProduct, setSavingProduct] = useState(false);
   const [productFormError, setProductFormError] = useState('');
   const [productToast, setProductToast] = useState('');
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const popoverRef = useRef<HTMLIonPopoverElement>(null);
   const themeStyle = useLogoTheme();
@@ -345,20 +344,68 @@ const Home: React.FC = () => {
   };
 
   const openProductForm = () => {
-    setProductDraft(emptyCatalogProduct());
+    setProductDraft(emptyProduct());
     setProductFormError('');
     setProductModalOpen(true);
   };
 
+  const handleProductImage = (file?: File) => {
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setProductFormError('Choose a JPG, PNG or WEBP image.');
+      return;
+    }
+    setProductDraft((draft) => ({ ...draft, image: file }));
+    setProductFormError('');
+  };
+
+  const takeProductPhoto = async () => {
+    setProductFormError('');
+    if (!Capacitor.isNativePlatform()) {
+      cameraInputRef.current?.click();
+      return;
+    }
+
+    try {
+      const photo = await Camera.getPhoto({
+        quality: 85,
+        allowEditing: false,
+        resultType: CameraResultType.Uri,
+        source: CameraSource.Camera,
+        correctOrientation: true,
+      });
+      if (!photo.webPath) {
+        throw new Error('Could not read the captured photo.');
+      }
+      const response = await fetch(photo.webPath);
+      if (!response.ok) {
+        throw new Error('Could not load the captured photo.');
+      }
+      const blob = await response.blob();
+      const extension = blob.type === 'image/png' ? 'png' : blob.type === 'image/webp' ? 'webp' : 'jpg';
+      handleProductImage(new File([blob], `product-${Date.now()}.${extension}`, {
+        type: blob.type || 'image/jpeg',
+      }));
+    } catch (error) {
+      if (error instanceof Error && /cancel/i.test(error.message)) return;
+      console.error('PRODUCT IMAGE CAMERA ERROR:', error);
+      setProductFormError(error instanceof Error ? error.message : 'Unable to open the camera.');
+    }
+  };
+
   const saveProduct = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!productDraft.name.trim()) {
+      setProductFormError('Enter a product or service name.');
+      return;
+    }
     if (!productDraft.image) {
       setProductFormError('Choose an image for your product or service.');
       return;
     }
 
-    const price = Number(productDraft.price);
-    if (!Number.isFinite(price) || price < 0) {
+    const price = productDraft.price.trim() ? Number(productDraft.price) : null;
+    if (price !== null && (!Number.isFinite(price) || price < 0)) {
       setProductFormError('Enter a valid price.');
       return;
     }
@@ -366,33 +413,35 @@ const Home: React.FC = () => {
     setSavingProduct(true);
     setProductFormError('');
     try {
-      let catalog = await getWhatsAppCatalog();
-      const categoryId = businessCategoryId ? String(businessCategoryId) : '';
-      if (!catalog) {
-        catalog = await createWhatsAppCatalog(
-          `${businessCategory || firstName + "'s"} Catalog`,
-          categoryId,
-          businessCategory
-        );
+      const imageForm = new FormData();
+      imageForm.set('image', productDraft.image);
+      if (user?.id) imageForm.set('userId', String(user.id));
+
+      const uploadResult = await apiPost<{
+        success?: boolean;
+        message?: string;
+        imageUrl?: string;
+      }>('/upload', imageForm);
+      if (!uploadResult?.success) {
+        throw new Error(uploadResult?.message || 'Image upload failed.');
       }
-      if (!catalog?.id) {
-        throw new Error('The catalog could not be prepared. Please try again.');
+      if (!uploadResult.imageUrl?.trim()) {
+        throw new Error('Image upload succeeded but no image URL was returned.');
       }
 
-      const result = await createCatalogProduct({
-        ...productDraft,
-        catalogId: String(catalog.id),
-        businessCategoryId: categoryId,
-        businessCategory,
-        price: String(price),
+      const result = await apiPost<{ success?: boolean; message?: string }>('/userproduct', {
+        name: productDraft.name.trim(),
+        originalImageUrl: uploadResult.imageUrl,
+        description: productDraft.description.trim(),
+        price: price === null ? null : String(price),
       });
-      if (result?.success === false) {
-        throw new Error(result.message || 'Could not save this product or service.');
+      if (!result?.success) {
+        throw new Error(result?.message || 'The product could not be saved.');
       }
 
       setProductModalOpen(false);
-      setProductDraft(emptyCatalogProduct());
-      setProductToast('Product or service added to your catalog.');
+      setProductDraft(emptyProduct());
+      setProductToast('Product or service saved successfully.');
     } catch (error) {
       setProductFormError(
         error instanceof Error ? error.message : 'Could not save this product or service. Please try again.'
@@ -875,30 +924,46 @@ const Home: React.FC = () => {
           </header>
 
           <form id="home-product-form" className="home-product-form" onSubmit={(event) => void saveProduct(event)}>
-            <label className="home-product-image-picker">
-              {productDraft.image ? (
-                <>
-                  <IonIcon icon={imageOutline} />
-                  <span>{productDraft.image.name}</span>
-                  <small>Image selected</small>
-                </>
-              ) : (
-                <>
-                  <IonIcon icon={imageOutline} />
-                  <span>Add product or service image</span>
-                  <small>JPG, PNG or WEBP</small>
-                </>
-              )}
+            <div className="home-product-image-section">
+              <span className="home-product-image-label">Product or service image</span>
+              <div className={`home-product-image-picker${productDraft.image ? ' has-image' : ''}`}>
+                <IonIcon icon={productDraft.image ? checkmarkCircleOutline : imageOutline} />
+                <span>{productDraft.image?.name ?? 'Choose an image to upload'}</span>
+                <small>{productDraft.image ? 'Image ready' : 'JPG, PNG or WEBP'}</small>
+              </div>
+              <div className="home-product-image-actions">
+                <button type="button" onClick={() => galleryInputRef.current?.click()}>
+                  <IonIcon icon={imagesOutline} />
+                  Choose from gallery
+                </button>
+                <button type="button" onClick={() => void takeProductPhoto()}>
+                  <IonIcon icon={cameraOutline} />
+                  Take photo
+                </button>
+              </div>
               <input
+                ref={galleryInputRef}
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
-                aria-label="Product or service image"
-                onChange={(event) => setProductDraft((draft) => ({
-                  ...draft,
-                  image: event.target.files?.[0] ?? null,
-                }))}
+                onChange={(event) => {
+                  handleProductImage(event.target.files?.[0]);
+                  event.currentTarget.value = '';
+                }}
+                className="home-product-file-input"
               />
-            </label>
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                capture="environment"
+                aria-label="Take product or service photo"
+                onChange={(event) => {
+                  handleProductImage(event.target.files?.[0]);
+                  event.currentTarget.value = '';
+                }}
+                className="home-product-file-input"
+              />
+            </div>
 
             <label>
               Product or service name
@@ -924,13 +989,12 @@ const Home: React.FC = () => {
               <label>
                 Price
                 <input
-                  required
                   type="number"
                   min="0"
                   step="0.01"
                   value={productDraft.price}
                   onChange={(event) => setProductDraft((draft) => ({ ...draft, price: event.target.value }))}
-                  placeholder="0.00"
+                  placeholder="Optional"
                 />
               </label>
               <label>
@@ -946,35 +1010,12 @@ const Home: React.FC = () => {
                 </select>
               </label>
             </div>
-            <label>
-              SKU <span className="home-product-optional">(optional)</span>
-              <input
-                maxLength={80}
-                value={productDraft.sku}
-                onChange={(event) => setProductDraft((draft) => ({ ...draft, sku: event.target.value }))}
-                placeholder="Optional SKU"
-              />
-            </label>
-            <label>
-              Availability
-              <select
-                value={productDraft.availability}
-                onChange={(event) => setProductDraft((draft) => ({
-                  ...draft,
-                  availability: event.target.value as ProductAvailability,
-                }))}
-              >
-                <option value="in_stock">In stock</option>
-                <option value="out_of_stock">Out of stock</option>
-                <option value="preorder">Pre-order</option>
-              </select>
-            </label>
             {productFormError && <p className="home-product-form-error" role="alert">{productFormError}</p>}
           </form>
           <footer className="home-product-savebar">
             <button form="home-product-form" type="submit" disabled={savingProduct}>
               {savingProduct ? <IonSpinner name="crescent" /> : null}
-              {savingProduct ? 'Saving...' : 'Save to catalog'}
+              {savingProduct ? 'Saving...' : 'Save product or service'}
             </button>
           </footer>
         </div>
