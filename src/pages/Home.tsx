@@ -139,63 +139,32 @@ const getLocalDateKey = (date: Date): string => {
   return `${year}-${month}-${day}`;
 };
 
-const getLocalDateKey = (date: Date): string => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-};
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const normalizeHomeContent = (response: unknown): HomeContentItem[] => {
-  if (!isRecord(response) || response.success !== true || !Array.isArray(response.data)) {
-    throw new Error(
-      isRecord(response) && typeof response.message === 'string'
-        ? response.message
-        : 'The home content response was invalid.'
-    );
-  }
-
-  return response.data.flatMap((row): HomeContentItem[] => {
-    if (!isRecord(row)) return [];
-    const contentType = row.content_type;
-    const mediaType = row.media_type;
-    const active = row.is_active === true || row.is_active === 1 || row.is_active === '1';
-    const id = Number(row.id);
-    const title = typeof row.title === 'string' ? row.title.trim() : '';
-    if (
-      !active ||
-      !Number.isInteger(id) ||
-      !title ||
-      (contentType !== 'banner' && contentType !== 'news') ||
-      (mediaType !== 'image' && mediaType !== 'video' && mediaType !== 'text' && mediaType !== 'none')
-    ) {
-      return [];
-    }
-
-    const mediaPath = typeof row.media_url === 'string' ? row.media_url.trim() : '';
-    const mediaUrl = mediaPath
-      ? /^https?:\/\//i.test(mediaPath)
-        ? mediaPath
-        : new URL(mediaPath, window.location.origin).toString()
-      : null;
-
-    return [{
-      id,
-      contentType,
-      title,
-      description: typeof row.description === 'string' ? row.description.trim() : '',
-      mediaUrl,
-      mediaType,
-      buttonText: typeof row.button_text === 'string' ? row.button_text.trim() : null,
-      buttonUrl: typeof row.button_url === 'string' ? row.button_url.trim() : null,
-      newsUrl: typeof row.news_url === 'string' ? row.news_url.trim() : null,
-      displayOrder: Number(row.display_order) || 0,
-    }];
-  }).sort((a, b) => a.displayOrder - b.displayOrder || b.id - a.id);
-};
+const adSlides = [
+  {
+    type: 'image',
+    label: 'IMAGE AD',
+    title: 'Make every product stand out',
+    description: 'Turn product photos into scroll-stopping ads.',
+    media: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=1200&q=85',
+    alt: 'Red sneaker featured in a product advertisement',
+  },
+  {
+    type: 'video',
+    label: 'VIDEO AD',
+    title: 'Bring your story to life',
+    description: 'Create short videos that make people stop and watch.',
+    media: 'https://videos.pexels.com/video-files/3195394/3195394-hd_1920_1080_25fps.mp4',
+    poster: 'https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?auto=format&fit=crop&w=1200&q=85',
+  },
+  {
+    type: 'image',
+    label: 'IMAGE AD',
+    title: 'Share your next big offer',
+    description: 'Design polished campaign creatives in minutes.',
+    media: 'https://images.unsplash.com/photo-1607082349566-187342175e2f?auto=format&fit=crop&w=1200&q=85',
+    alt: 'Shopping bags and products arranged for a retail promotion',
+  },
+] as const;
 
 const Home: React.FC = () => {
   const ionRouter = useIonRouter();
@@ -1511,3 +1480,7 @@ const Home: React.FC = () => {
 };
 
 export default Home;
+
+function normalizeHomeContent(response: unknown): import("react").SetStateAction<HomeContentItem[]> {
+  throw new Error('Function not implemented.');
+}
