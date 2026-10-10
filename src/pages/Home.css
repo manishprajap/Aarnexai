@@ -1563,6 +1563,50 @@ ion-modal.connect-sheet ion-content.cs-content {
   padding-right: 36px;
 }
 
+.ad-news-item a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.ad-news-item a:hover {
+  text-decoration: underline;
+}
+
+.home-content-error,
+.home-content-empty {
+  margin: 0 0 12px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #fff4f2;
+  color: #a2362a;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.home-content-empty {
+  background: #ffffff;
+  color: var(--dashboard-muted, #6b7a90);
+  text-align: center;
+}
+
+.home-content-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 130px;
+  margin-bottom: 16px;
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--dashboard-muted, #6b7a90);
+  font-size: 12px;
+}
+
+.home-content-loading ion-spinner {
+  color: var(--brand);
+}
+
 @keyframes ad-news-scroll {
   to {
     transform: translateX(-50%);
@@ -1610,7 +1654,8 @@ ion-modal.connect-sheet ion-content.cs-content {
   line-height: 1.4;
 }
 
-.ad-carousel-copy button {
+.ad-carousel-copy button,
+.ad-carousel-copy a {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -1624,9 +1669,11 @@ ion-modal.connect-sheet ion-content.cs-content {
   font-size: 11px;
   font-weight: 800;
   pointer-events: auto;
+  text-decoration: none;
 }
 
-.ad-carousel-copy button ion-icon {
+.ad-carousel-copy button ion-icon,
+.ad-carousel-copy a ion-icon {
   font-size: 14px;
 }
 
@@ -1704,6 +1751,7 @@ ion-modal.connect-sheet ion-content.cs-content {
 
 .ad-carousel-arrow:focus-visible,
 .ad-carousel-copy button:focus-visible,
+.ad-carousel-copy a:focus-visible,
 .ad-carousel-dots button:focus-visible {
   outline: 2px solid #ffffff;
   outline-offset: 2px;

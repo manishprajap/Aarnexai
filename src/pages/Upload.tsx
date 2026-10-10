@@ -8,6 +8,7 @@ import {
   IonContent,
   IonHeader,
   IonIcon,
+  IonModal,
   IonPage,
   IonSpinner,
   IonToast,
@@ -18,11 +19,12 @@ import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import {
   arrowBack,
   camera,
+  closeOutline,
   imagesOutline,
   sparklesOutline,
 } from 'ionicons/icons';
 
-import { apiPost } from '../api';
+import { apiGet, apiPost } from '../api';
 import { useAuth } from '../context/AuthContext';
 import aarnaLogo from '../assets/aarna-logo.png';
 
@@ -121,6 +123,58 @@ interface ProductDetailsState {
   banners: ProductDetailsBanner[];
 }
 
+interface UserProduct {
+  id: string | number;
+  title: string;
+  originalImageUrl: string;
+  description: string;
+  price: string | null;
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const normalizeUserProducts = (response: unknown): UserProduct[] => {
+  const root = isRecord(response) ? response : {};
+  const data = isRecord(root.data) ? root.data : {};
+  const rows = [
+    root.products,
+    root.userProducts,
+    root.userproducts,
+    root.items,
+    root.data,
+    data.products,
+    data.userProducts,
+    data.userproducts,
+    data.items,
+  ].find(Array.isArray);
+
+  if (!Array.isArray(rows)) return [];
+
+  return rows.flatMap((value): UserProduct[] => {
+    if (!isRecord(value)) return [];
+    const id = value.id ?? value.productId;
+    const title = String(value.title ?? value.name ?? value.productName ?? '').trim();
+    const originalImageUrl = String(
+      value.originalImageUrl ?? value.imageUrl ?? value.image ?? ''
+    ).trim();
+    if ((typeof id !== 'string' && typeof id !== 'number') || !title || !originalImageUrl) {
+      return [];
+    }
+
+    const rawPrice = value.price;
+    return [{
+      id,
+      title,
+      originalImageUrl,
+      description: String(value.description ?? ''),
+      price: rawPrice === null || rawPrice === undefined || rawPrice === ''
+        ? null
+        : String(rawPrice),
+    }];
+  });
+};
+
 const ASPECT_OPTIONS: {
   value: AspectRatio;
   ratio: string;
@@ -184,6 +238,11 @@ const Upload: React.FC = () => {
   const uploading = uploadingImage || generating;
   const [productId, setProductId] = useState<string | number | null>(null);
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
+  const [savedProducts, setSavedProducts] = useState<UserProduct[]>([]);
+  const [savedProductsOpen, setSavedProductsOpen] = useState(false);
+  const [loadingSavedProducts, setLoadingSavedProducts] = useState(false);
+  const [savedProductsError, setSavedProductsError] = useState('');
+  const [selectedSavedProduct, setSelectedSavedProduct] = useState<UserProduct | null>(null);
   const isSubmittingRef = useRef(false);
 
   const [toastMessage, setToastMessage] = useState('');
@@ -195,6 +254,33 @@ const Upload: React.FC = () => {
   const showMessage = (message: string) => {
     setToastMessage(message);
     setShowToast(true);
+  };
+
+  const openSavedProducts = async () => {
+    setSavedProductsOpen(true);
+    setLoadingSavedProducts(true);
+    setSavedProductsError('');
+    try {
+      const response = await apiGet<unknown>('/userproduct');
+      setSavedProducts(normalizeUserProducts(response));
+    } catch (error) {
+      setSavedProductsError(
+        error instanceof Error ? error.message : 'Unable to load your saved products.'
+      );
+    } finally {
+      setLoadingSavedProducts(false);
+    }
+  };
+
+  const selectSavedProduct = (product: UserProduct) => {
+    setSelectedSavedProduct(product);
+    setSelectedFile(null);
+    setPreviewUrl(product.originalImageUrl);
+    setProductId(product.id);
+    setUploadedImageUrl(product.originalImageUrl);
+    setPromptDescription(product.description.slice(0, MAX_DESCRIPTION));
+    setStep('generate');
+    setSavedProductsOpen(false);
   };
 
   /*
@@ -249,6 +335,7 @@ const Upload: React.FC = () => {
     }
 
     setSelectedFile(file);
+    setSelectedSavedProduct(null);
     setPreviewUrl(URL.createObjectURL(file));
 
     // upload right away; the Generate Ad screen opens once this succeeds
@@ -353,6 +440,7 @@ const Upload: React.FC = () => {
     setPreviewUrl(null);
     setProductId(null);
     setUploadedImageUrl(null);
+    setSelectedSavedProduct(null);
     setPromptDescription('');
     setAspectRatio('1:1');
     setStep('upload');
@@ -443,14 +531,14 @@ const Upload: React.FC = () => {
         originalImageUrl: uploadedImageUrl,
         cleanImageUrl: aiProduct.cleanImageUrl ?? null,
 
-        productName: aiProduct.productName ?? null,
+        productName: aiProduct.productName ?? selectedSavedProduct?.title ?? null,
         brand: aiProduct.brand ?? null,
         companyName: aiProduct.companyName ?? null,
-        price: aiProduct.price ?? null,
+        price: aiProduct.price ?? selectedSavedProduct?.price ?? null,
         category: aiProduct.category ?? null,
         subcategory: aiProduct.subcategory ?? null,
         color: aiProduct.color ?? null,
-        description: aiProduct.description ?? null,
+        description: aiProduct.description ?? selectedSavedProduct?.description ?? null,
         metaDescription: aiProduct.metaDescription ?? null,
 
         confidence: typeof aiProduct.confidence === 'number' ? aiProduct.confidence : null,
@@ -643,6 +731,23 @@ const Upload: React.FC = () => {
               Choose from gallery
             </IonButton>
 
+            <IonButton
+              expand="block"
+              fill="clear"
+              onClick={() => void openSavedProducts()}
+              disabled={uploadingImage}
+              style={
+                {
+                  marginTop: 8,
+                  '--color': ui.primary,
+                  height: 44,
+                  fontWeight: 650,
+                } as React.CSSProperties
+              }
+            >
+              Choose from my saved products
+            </IonButton>
+
             <p
               style={{
                 margin: '18px 0 0',
@@ -695,8 +800,23 @@ const Upload: React.FC = () => {
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    {selectedFile?.name}
+                    {selectedSavedProduct?.title ?? selectedFile?.name ?? 'Selected product'}
                   </p>
+                  {selectedSavedProduct?.description && (
+                    <p
+                      style={{
+                        margin: '4px 0 0',
+                        overflow: 'hidden',
+                        color: ui.muted,
+                        fontSize: 11,
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {selectedSavedProduct.description}
+                      {selectedSavedProduct.price ? ` · ${selectedSavedProduct.price}` : ''}
+                    </p>
+                  )}
                   <button
                     type="button"
                     onClick={resetToUpload}
@@ -828,6 +948,120 @@ const Upload: React.FC = () => {
             </IonButton>
           </div>
         )}
+
+        <IonModal
+          isOpen={savedProductsOpen}
+          onDidDismiss={() => setSavedProductsOpen(false)}
+          breakpoints={[0, 0.65, 0.9]}
+          initialBreakpoint={0.65}
+          style={{ '--border-radius': '18px 18px 0 0' } as React.CSSProperties}
+        >
+          <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: ui.white }}>
+            <header
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                padding: '18px 18px 12px',
+                borderBottom: `1px solid ${ui.border}`,
+              }}
+            >
+              <div>
+                <h2 style={{ margin: 0, color: ui.text, fontSize: 18 }}>Your saved products</h2>
+                <p style={{ margin: '4px 0 0', color: ui.muted, fontSize: 12 }}>
+                  Select a product to continue with its image and details.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSavedProductsOpen(false)}
+                aria-label="Close saved products"
+                style={{
+                  display: 'grid',
+                  flex: 'none',
+                  placeItems: 'center',
+                  width: 36,
+                  height: 36,
+                  border: `1px solid ${ui.border}`,
+                  borderRadius: 10,
+                  background: ui.white,
+                  color: ui.text,
+                  fontSize: 20,
+                }}
+              >
+                <IonIcon icon={closeOutline} />
+              </button>
+            </header>
+
+            <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 16 }}>
+              {loadingSavedProducts ? (
+                <div style={{ display: 'grid', placeItems: 'center', gap: 10, padding: 36, color: ui.muted }}>
+                  <IonSpinner name="crescent" />
+                  <span>Loading your products...</span>
+                </div>
+              ) : savedProductsError ? (
+                <div role="alert" style={{ padding: 14, borderRadius: 10, background: '#fff4f2', color: '#a2362a', fontSize: 13 }}>
+                  {savedProductsError}
+                </div>
+              ) : savedProducts.length === 0 ? (
+                <div style={{ padding: 28, textAlign: 'center', color: ui.muted, fontSize: 13 }}>
+                  No saved products yet. Add a product first, then select it here.
+                </div>
+              ) : (
+                <ul style={{ display: 'grid', gap: 10, margin: 0, padding: 0, listStyle: 'none' }}>
+                  {savedProducts.map((product) => (
+                    <li key={String(product.id)}>
+                      <button
+                        type="button"
+                        onClick={() => selectSavedProduct(product)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 12,
+                          width: '100%',
+                          padding: 10,
+                          border: `1px solid ${ui.border}`,
+                          borderRadius: 12,
+                          background: ui.white,
+                          textAlign: 'left',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <img
+                          src={product.originalImageUrl}
+                          alt=""
+                          loading="lazy"
+                          style={{
+                            flex: 'none',
+                            width: 64,
+                            height: 64,
+                            borderRadius: 9,
+                            objectFit: 'cover',
+                            background: ui.surface,
+                          }}
+                        />
+                        <span style={{ display: 'grid', flex: 1, minWidth: 0, gap: 4 }}>
+                          <strong style={{ overflow: 'hidden', color: ui.text, fontSize: 13, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {product.title}
+                          </strong>
+                          <span style={{ overflow: 'hidden', color: ui.muted, fontSize: 11, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {product.description || 'No description'}
+                          </span>
+                          {product.price && (
+                            <span style={{ color: ui.primary, fontSize: 11, fontWeight: 700 }}>
+                              {product.price}
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </IonModal>
 
         <IonToast
           isOpen={showToast}

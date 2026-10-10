@@ -83,6 +83,19 @@ type SubscriptionReminder = {
   endDate: string;
 } | null;
 
+type HomeContentItem = {
+  id: number;
+  contentType: 'banner' | 'news';
+  title: string;
+  description: string;
+  mediaUrl: string | null;
+  mediaType: 'image' | 'video' | 'text' | 'none';
+  buttonText: string | null;
+  buttonUrl: string | null;
+  newsUrl: string | null;
+  displayOrder: number;
+};
+
 const GENERATE_WATCHDOG_MS = 95_000;
 
 const emptyProduct = (): ProductDraft => ({
@@ -94,37 +107,64 @@ const emptyProduct = (): ProductDraft => ({
 });
 const INSPIRATION_DISMISSAL_MS = 30 * 60 * 1000;
 
-const adSlides = [
-  {
-    type: 'image',
-    label: 'IMAGE AD',
-    title: 'Make every product stand out',
-    description: 'Turn product photos into scroll-stopping ads.',
-    media: 'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=1200&q=85',
-    alt: 'Red sneaker featured in a product advertisement',
-  },
-  {
-    type: 'video',
-    label: 'VIDEO AD',
-    title: 'Bring your story to life',
-    description: 'Create short videos that make people stop and watch.',
-    media: 'https://videos.pexels.com/video-files/3195394/3195394-hd_1920_1080_25fps.mp4',
-    poster: 'https://images.unsplash.com/photo-1608571423902-eed4a5ad8108?auto=format&fit=crop&w=1200&q=85',
-  },
-  {
-    type: 'image',
-    label: 'IMAGE AD',
-    title: 'Share your next big offer',
-    description: 'Design polished campaign creatives in minutes.',
-    media: 'https://images.unsplash.com/photo-1607082349566-187342175e2f?auto=format&fit=crop&w=1200&q=85',
-    alt: 'Shopping bags and products arranged for a retail promotion',
-  },
-] as const;
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const normalizeHomeContent = (response: unknown): HomeContentItem[] => {
+  if (!isRecord(response) || response.success !== true || !Array.isArray(response.data)) {
+    throw new Error(
+      isRecord(response) && typeof response.message === 'string'
+        ? response.message
+        : 'The home content response was invalid.'
+    );
+  }
+
+  return response.data.flatMap((row): HomeContentItem[] => {
+    if (!isRecord(row)) return [];
+    const contentType = row.content_type;
+    const mediaType = row.media_type;
+    const active = row.is_active === true || row.is_active === 1 || row.is_active === '1';
+    const id = Number(row.id);
+    const title = typeof row.title === 'string' ? row.title.trim() : '';
+    if (
+      !active ||
+      !Number.isInteger(id) ||
+      !title ||
+      (contentType !== 'banner' && contentType !== 'news') ||
+      (mediaType !== 'image' && mediaType !== 'video' && mediaType !== 'text' && mediaType !== 'none')
+    ) {
+      return [];
+    }
+
+    const mediaPath = typeof row.media_url === 'string' ? row.media_url.trim() : '';
+    const mediaUrl = mediaPath
+      ? /^https?:\/\//i.test(mediaPath)
+        ? mediaPath
+        : new URL(mediaPath, window.location.origin).toString()
+      : null;
+
+    return [{
+      id,
+      contentType,
+      title,
+      description: typeof row.description === 'string' ? row.description.trim() : '',
+      mediaUrl,
+      mediaType,
+      buttonText: typeof row.button_text === 'string' ? row.button_text.trim() : null,
+      buttonUrl: typeof row.button_url === 'string' ? row.button_url.trim() : null,
+      newsUrl: typeof row.news_url === 'string' ? row.news_url.trim() : null,
+      displayOrder: Number(row.display_order) || 0,
+    }];
+  }).sort((a, b) => a.displayOrder - b.displayOrder || b.id - a.id);
+};
 
 const Home: React.FC = () => {
   const ionRouter = useIonRouter();
   const { user, logout } = useAuth() as any;
   const [activeAdSlide, setActiveAdSlide] = useState(0);
+  const [homeContent, setHomeContent] = useState<HomeContentItem[]>([]);
+  const [homeContentError, setHomeContentError] = useState('');
+  const [loadingHomeContent, setLoadingHomeContent] = useState(true);
   const [productModalOpen, setProductModalOpen] = useState(false);
   const [productDraft, setProductDraft] = useState<ProductDraft>(emptyProduct);
   const [savingProduct, setSavingProduct] = useState(false);
@@ -172,6 +212,22 @@ const Home: React.FC = () => {
 
   const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const loadHomeContent = async () => {
+    setLoadingHomeContent(true);
+    setHomeContentError('');
+    try {
+      const response = await apiGet<unknown>('/admin/home-content');
+      setHomeContent(normalizeHomeContent(response));
+    } catch (error) {
+      console.error('Could not load dashboard home content:', error);
+      setHomeContentError(
+        error instanceof Error ? error.message : 'Could not load banners and latest news.'
+      );
+    } finally {
+      setLoadingHomeContent(false);
+    }
+  };
+
   const firstName = user?.name?.split(' ')[0] ?? 'there';
   const initial = (user?.name || user?.email || '?').charAt(0).toUpperCase();
 
@@ -200,13 +256,23 @@ const Home: React.FC = () => {
     ?? promptPlan[0]
     ?? null;
 
+  const adSlides = homeContent.filter((item) => item.contentType === 'banner');
+  const latestNews = homeContent.filter((item) => item.contentType === 'news');
+  const activeAdSlideItem = adSlides[activeAdSlide] ?? null;
+
   useEffect(() => {
-    if (inspirationHidden) return undefined;
+    if (inspirationHidden || adSlides.length < 2 || !activeAdSlideItem) return undefined;
     const timer = window.setTimeout(() => {
       setActiveAdSlide((current) => (current + 1) % adSlides.length);
-    }, adSlides[activeAdSlide].type === 'video' ? 12000 : 6000);
+    }, activeAdSlideItem.mediaType === 'video' ? 12000 : 6000);
     return () => window.clearTimeout(timer);
-  }, [activeAdSlide, inspirationHidden]);
+  }, [activeAdSlide, activeAdSlideItem, adSlides.length, inspirationHidden]);
+
+  useEffect(() => {
+    if (activeAdSlide >= adSlides.length) {
+      setActiveAdSlide(0);
+    }
+  }, [activeAdSlide, adSlides.length]);
 
   useEffect(() => {
     if (!user?.id) {
@@ -383,6 +449,7 @@ const Home: React.FC = () => {
     void refresh();
     void loadPlan();
     void loadSubscriptionReminder();
+    void loadHomeContent();
   });
 
   const handleLogout = () => {
@@ -630,72 +697,118 @@ const Home: React.FC = () => {
                 <IonIcon icon={closeOutline} />
               </button>
             </div>
-            <div className="ad-news-ticker" aria-label="Latest news">
-              <span className="ad-news-label">NEW</span>
-              <div className="ad-news-window">
-                <div className="ad-news-track">
-                  <span>Create image and video ads for your next campaign</span>
-                  <span aria-hidden="true">Create image and video ads for your next campaign</span>
+            {latestNews.length > 0 && (
+              <div className="ad-news-ticker" aria-label="Latest news">
+                <span className="ad-news-label">LATEST</span>
+                <div className="ad-news-window">
+                  <div className="ad-news-track">
+                    {latestNews.map((news) => (
+                      <span className="ad-news-item" key={news.id}>
+                        {news.newsUrl && /^https?:\/\//i.test(news.newsUrl) ? (
+                          <a href={news.newsUrl} target="_blank" rel="noopener noreferrer">
+                            {news.description || news.title}
+                          </a>
+                        ) : (
+                          news.description || news.title
+                        )}
+                      </span>
+                    ))}
+                    {latestNews.map((news) => (
+                      <span className="ad-news-item" key={`repeat-${news.id}`} aria-hidden="true">
+                        {news.description || news.title}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               </div>
-            </div>
-            <section className="ad-carousel" aria-label="Ad examples" aria-roledescription="carousel">
-              <div className={`ad-carousel-media${adSlides[activeAdSlide].type === 'video' ? ' ad-carousel-video' : ''}`}>
-                {adSlides[activeAdSlide].type === 'video' ? (
-                  <video
-                    key={adSlides[activeAdSlide].media}
-                    className="ad-carousel-creative"
-                    src={adSlides[activeAdSlide].media}
-                    poster={adSlides[activeAdSlide].poster}
-                    autoPlay
-                    controls
-                    muted
-                    loop
-                    playsInline
-                    preload="metadata"
-                    aria-label="Example video advertisement"
-                  />
-                ) : (
-                  <img
-                    className="ad-carousel-creative"
-                    src={adSlides[activeAdSlide].media}
-                    alt={adSlides[activeAdSlide].alt}
-                  />
-                )}
-                <span className="ad-carousel-type">{adSlides[activeAdSlide].label}</span>
-                <div className="ad-carousel-copy">
-                  <h2>{adSlides[activeAdSlide].title}</h2>
-                  <p>{adSlides[activeAdSlide].description}</p>
-                  <button type="button" onClick={() => ionRouter.push('/uploadnew', 'forward')}>
-                    Create an ad <IonIcon icon={arrowForwardOutline} />
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  className="ad-carousel-arrow ad-carousel-next"
-                  aria-label="Next ad"
-                  onClick={() => setActiveAdSlide((current) => (current + 1) % adSlides.length)}
-                >
-                  <IonIcon icon={chevronForwardOutline} />
-                </button>
+            )}
+            {homeContentError ? (
+              <p className="home-content-error" role="alert">
+                Could not load banners and latest news: {homeContentError}
+              </p>
+            ) : loadingHomeContent ? (
+              <div className="home-content-loading" role="status">
+                <IonSpinner name="crescent" />
+                <span>Loading banners and news...</span>
               </div>
-              <div className="ad-carousel-footer">
-                <span>Ad examples</span>
-                <div className="ad-carousel-dots" aria-label="Choose an ad">
-                  {adSlides.map((slide, index) => (
-                    <button
-                      key={slide.title}
-                      type="button"
-                      className={index === activeAdSlide ? 'active' : ''}
-                      aria-label={`Show ${slide.label.toLowerCase()} ${index + 1} of ${adSlides.length}`}
-                      aria-current={index === activeAdSlide ? 'true' : undefined}
-                      onClick={() => setActiveAdSlide(index)}
+            ) : activeAdSlideItem ? (
+              <section className="ad-carousel" aria-label="Featured content" aria-roledescription="carousel">
+                <div className={`ad-carousel-media${activeAdSlideItem.mediaType === 'video' ? ' ad-carousel-video' : ''}`}>
+                  {activeAdSlideItem.mediaType === 'video' && activeAdSlideItem.mediaUrl ? (
+                    <video
+                      key={activeAdSlideItem.mediaUrl}
+                      className="ad-carousel-creative"
+                      src={activeAdSlideItem.mediaUrl}
+                      autoPlay
+                      controls
+                      muted
+                      loop
+                      playsInline
+                      preload="metadata"
+                      aria-label={activeAdSlideItem.title}
                     />
-                  ))}
+                  ) : activeAdSlideItem.mediaType === 'image' && activeAdSlideItem.mediaUrl ? (
+                    <img
+                      className="ad-carousel-creative"
+                      src={activeAdSlideItem.mediaUrl}
+                      alt={activeAdSlideItem.title}
+                    />
+                  ) : null}
+                  <span className="ad-carousel-type">
+                    {activeAdSlideItem.mediaType === 'video'
+                      ? 'VIDEO'
+                      : activeAdSlideItem.mediaType === 'image'
+                        ? 'IMAGE'
+                        : 'FEATURE'}
+                  </span>
+                  <div className="ad-carousel-copy">
+                    <h2>{activeAdSlideItem.title}</h2>
+                    {activeAdSlideItem.description && <p>{activeAdSlideItem.description}</p>}
+                    {activeAdSlideItem.buttonText
+                      && activeAdSlideItem.buttonUrl
+                      && /^https?:\/\//i.test(activeAdSlideItem.buttonUrl) && (
+                        <a
+                          href={activeAdSlideItem.buttonUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          {activeAdSlideItem.buttonText} <IonIcon icon={arrowForwardOutline} />
+                        </a>
+                      )}
+                  </div>
+                  {adSlides.length > 1 && (
+                    <button
+                      type="button"
+                      className="ad-carousel-arrow ad-carousel-next"
+                      aria-label="Next banner"
+                      onClick={() => setActiveAdSlide((current) => (current + 1) % adSlides.length)}
+                    >
+                      <IonIcon icon={chevronForwardOutline} />
+                    </button>
+                  )}
                 </div>
-                <span>{String(activeAdSlide + 1).padStart(2, '0')} / {String(adSlides.length).padStart(2, '0')}</span>
-              </div>
-            </section>
+                <div className="ad-carousel-footer">
+                  <span>Featured content</span>
+                  {adSlides.length > 1 && (
+                    <div className="ad-carousel-dots" aria-label="Choose a banner">
+                      {adSlides.map((slide, index) => (
+                        <button
+                          key={slide.id}
+                          type="button"
+                          className={index === activeAdSlide ? 'active' : ''}
+                          aria-label={`Show banner ${index + 1} of ${adSlides.length}`}
+                          aria-current={index === activeAdSlide ? 'true' : undefined}
+                          onClick={() => setActiveAdSlide(index)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  <span>{String(activeAdSlide + 1).padStart(2, '0')} / {String(adSlides.length).padStart(2, '0')}</span>
+                </div>
+              </section>
+            ) : (
+              <p className="home-content-empty">No active banners are available.</p>
+            )}
           </section>
           )}
 
