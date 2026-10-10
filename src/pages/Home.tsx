@@ -41,6 +41,9 @@ import {
   cameraOutline,
   chatbubblesOutline,
   sparklesOutline,
+  closeOutline,
+  chevronDownOutline,
+  chevronUpOutline,
 } from 'ionicons/icons';
 
 import { useAuth } from '../context/AuthContext';
@@ -50,6 +53,7 @@ import './Home.css';
 import { useSocialConnections } from '../hooks/useSocialConnections';
 import { useLogoTheme } from '../hooks/useLogoTheme';
 import BottomTabBar from '../components/BottomTabBar';
+import DashboardAnalyticsCharts from '../components/DashboardAnalyticsCharts';
 import { clearBusinessCategory, saveBusinessCategory } from '../utils/businessCategory';
 import { apiGet, apiPost } from '../api';
 
@@ -88,6 +92,7 @@ const emptyProduct = (): ProductDraft => ({
   currency: 'INR',
   image: null,
 });
+const INSPIRATION_DISMISSAL_MS = 30 * 60 * 1000;
 
 const adSlides = [
   {
@@ -125,6 +130,16 @@ const Home: React.FC = () => {
   const [savingProduct, setSavingProduct] = useState(false);
   const [productFormError, setProductFormError] = useState('');
   const [productToast, setProductToast] = useState('');
+  const [promptPlannerCollapsed, setPromptPlannerCollapsed] = useState(false);
+  const [inspirationHidden, setInspirationHidden] = useState(() => {
+    if (!user?.id) return false;
+    const dismissedAt = Number(localStorage.getItem(`dashboard-inspiration-dismissed:${user.id}`));
+    return Number.isFinite(dismissedAt)
+      && dismissedAt > 0
+      && Date.now() - dismissedAt < INSPIRATION_DISMISSAL_MS;
+  });
+  const [greetingVisible, setGreetingVisible] = useState(false);
+  const greetingUserId = useRef<number | null>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
@@ -152,6 +167,7 @@ const Home: React.FC = () => {
 
   const [planStartDate, setPlanStartDate] = useState<string | null>(null);
   const [subscriptionReminder, setSubscriptionReminder] = useState<SubscriptionReminder>(null);
+  const [subscriptionReminderDismissed, setSubscriptionReminderDismissed] = useState(false);
   const [currentTime, setCurrentTime] = useState(Date.now());
 
   const watchdogRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -185,11 +201,36 @@ const Home: React.FC = () => {
     ?? null;
 
   useEffect(() => {
+    if (inspirationHidden) return undefined;
     const timer = window.setTimeout(() => {
       setActiveAdSlide((current) => (current + 1) % adSlides.length);
     }, adSlides[activeAdSlide].type === 'video' ? 12000 : 6000);
     return () => window.clearTimeout(timer);
-  }, [activeAdSlide]);
+  }, [activeAdSlide, inspirationHidden]);
+
+  useEffect(() => {
+    if (!user?.id) {
+      setInspirationHidden(false);
+      return undefined;
+    }
+
+    const dismissalKey = `dashboard-inspiration-dismissed:${user.id}`;
+    const dismissedAt = Number(localStorage.getItem(dismissalKey));
+    const remainingTime = dismissedAt + INSPIRATION_DISMISSAL_MS - Date.now();
+
+    if (!Number.isFinite(dismissedAt) || dismissedAt <= 0 || remainingTime <= 0) {
+      localStorage.removeItem(dismissalKey);
+      setInspirationHidden(false);
+      return undefined;
+    }
+
+    setInspirationHidden(true);
+    const timer = window.setTimeout(() => {
+      localStorage.removeItem(dismissalKey);
+      setInspirationHidden(false);
+    }, remainingTime);
+    return () => window.clearTimeout(timer);
+  }, [user?.id, inspirationHidden]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setCurrentTime(Date.now()), 60_000);
@@ -198,6 +239,22 @@ const Home: React.FC = () => {
       if (watchdogRef.current) clearTimeout(watchdogRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!user?.id) return undefined;
+
+    const greetingKey = `dashboard-greeting-seen:${user.id}`;
+    if (sessionStorage.getItem(greetingKey) && greetingUserId.current !== user.id) {
+      setGreetingVisible(false);
+      return undefined;
+    }
+
+    greetingUserId.current = user.id;
+    sessionStorage.setItem(greetingKey, 'true');
+    setGreetingVisible(true);
+    const timer = window.setTimeout(() => setGreetingVisible(false), 5000);
+    return () => window.clearTimeout(timer);
+  }, [user?.id]);
 
   // -----------------------------------------------------------------------
   // Load the user's existing saved plan from the DB
@@ -333,6 +390,7 @@ const Home: React.FC = () => {
 
     if (user?.id) {
       clearBusinessCategory(user.id);
+      sessionStorage.removeItem(`dashboard-greeting-seen:${user.id}`);
     }
 
     logout();
@@ -536,82 +594,110 @@ const Home: React.FC = () => {
 
       <IonContent fullscreen className="home-content">
         <div className="home-container">
-          <div className="ad-news-ticker" aria-label="Latest news">
-            <span className="ad-news-label">LATEST</span>
-            <div className="ad-news-window">
-              <div className="ad-news-track">
-                <span>New: create image and video ads for your next campaign</span>
-                <span aria-hidden="true">New: create image and video ads for your next campaign</span>
-              </div>
-            </div>
-          </div>
-          <section className="ad-carousel" aria-label="Ad examples" aria-roledescription="carousel">
-            <div className={`ad-carousel-media${adSlides[activeAdSlide].type === 'video' ? ' ad-carousel-video' : ''}`}>
-              {adSlides[activeAdSlide].type === 'video' ? (
-                <video
-                  key={adSlides[activeAdSlide].media}
-                  className="ad-carousel-creative"
-                  src={adSlides[activeAdSlide].media}
-                  poster={adSlides[activeAdSlide].poster}
-                  autoPlay
-                  controls
-                  muted
-                  loop
-                  playsInline
-                  preload="metadata"
-                  aria-label="Example video advertisement"
-                />
-              ) : (
-                <img
-                  className="ad-carousel-creative"
-                  src={adSlides[activeAdSlide].media}
-                  alt={adSlides[activeAdSlide].alt}
-                />
-              )}
-              <span className="ad-carousel-type">{adSlides[activeAdSlide].label}</span>
-              <div className="ad-carousel-copy">
-                <h2>{adSlides[activeAdSlide].title}</h2>
-                <p>{adSlides[activeAdSlide].description}</p>
-                <button type="button" onClick={() => ionRouter.push('/uploadnew', 'forward')}>
-                  Create an ad <IonIcon icon={arrowForwardOutline} />
-                </button>
+          {/* Greeting */}
+          {greetingVisible && (
+            <section className="greeting" aria-live="polite">
+              <p className="greeting-eyebrow">Welcome back,</p>
+              <h1>{firstName}</h1>
+              <span className="greeting-badge">
+                <IonIcon icon={shieldCheckmarkOutline} />
+                {badgeText}
+              </span>
+            </section>
+          )}
+
+          {!inspirationHidden && (
+          <section className="dashboard-inspiration">
+            <div className="dashboard-inspiration-heading">
+              <div>
+                <p className="dashboard-kicker">LATEST</p>
+                <h2>Creative inspiration</h2>
               </div>
               <button
                 type="button"
-                className="ad-carousel-arrow ad-carousel-next"
-                aria-label="Next ad"
-                onClick={() => setActiveAdSlide((current) => (current + 1) % adSlides.length)}
+                className="dashboard-inspiration-dismiss"
+                aria-label="Close creative inspiration for 30 minutes"
+                onClick={() => {
+                  if (user?.id) {
+                    localStorage.setItem(
+                      `dashboard-inspiration-dismissed:${user.id}`,
+                      String(Date.now()),
+                    );
+                  }
+                  setInspirationHidden(true);
+                }}
               >
-                <IonIcon icon={chevronForwardOutline} />
+                <IonIcon icon={closeOutline} />
               </button>
             </div>
-            <div className="ad-carousel-footer">
-              <span>Creative inspiration</span>
-              <div className="ad-carousel-dots" aria-label="Choose an ad">
-                {adSlides.map((slide, index) => (
-                  <button
-                    key={slide.title}
-                    type="button"
-                    className={index === activeAdSlide ? 'active' : ''}
-                    aria-label={`Show ${slide.label.toLowerCase()} ${index + 1} of ${adSlides.length}`}
-                    aria-current={index === activeAdSlide ? 'true' : undefined}
-                    onClick={() => setActiveAdSlide(index)}
-                  />
-                ))}
+            <div className="ad-news-ticker" aria-label="Latest news">
+              <span className="ad-news-label">NEW</span>
+              <div className="ad-news-window">
+                <div className="ad-news-track">
+                  <span>Create image and video ads for your next campaign</span>
+                  <span aria-hidden="true">Create image and video ads for your next campaign</span>
+                </div>
               </div>
-              <span>{String(activeAdSlide + 1).padStart(2, '0')} / {String(adSlides.length).padStart(2, '0')}</span>
             </div>
+            <section className="ad-carousel" aria-label="Ad examples" aria-roledescription="carousel">
+              <div className={`ad-carousel-media${adSlides[activeAdSlide].type === 'video' ? ' ad-carousel-video' : ''}`}>
+                {adSlides[activeAdSlide].type === 'video' ? (
+                  <video
+                    key={adSlides[activeAdSlide].media}
+                    className="ad-carousel-creative"
+                    src={adSlides[activeAdSlide].media}
+                    poster={adSlides[activeAdSlide].poster}
+                    autoPlay
+                    controls
+                    muted
+                    loop
+                    playsInline
+                    preload="metadata"
+                    aria-label="Example video advertisement"
+                  />
+                ) : (
+                  <img
+                    className="ad-carousel-creative"
+                    src={adSlides[activeAdSlide].media}
+                    alt={adSlides[activeAdSlide].alt}
+                  />
+                )}
+                <span className="ad-carousel-type">{adSlides[activeAdSlide].label}</span>
+                <div className="ad-carousel-copy">
+                  <h2>{adSlides[activeAdSlide].title}</h2>
+                  <p>{adSlides[activeAdSlide].description}</p>
+                  <button type="button" onClick={() => ionRouter.push('/uploadnew', 'forward')}>
+                    Create an ad <IonIcon icon={arrowForwardOutline} />
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="ad-carousel-arrow ad-carousel-next"
+                  aria-label="Next ad"
+                  onClick={() => setActiveAdSlide((current) => (current + 1) % adSlides.length)}
+                >
+                  <IonIcon icon={chevronForwardOutline} />
+                </button>
+              </div>
+              <div className="ad-carousel-footer">
+                <span>Ad examples</span>
+                <div className="ad-carousel-dots" aria-label="Choose an ad">
+                  {adSlides.map((slide, index) => (
+                    <button
+                      key={slide.title}
+                      type="button"
+                      className={index === activeAdSlide ? 'active' : ''}
+                      aria-label={`Show ${slide.label.toLowerCase()} ${index + 1} of ${adSlides.length}`}
+                      aria-current={index === activeAdSlide ? 'true' : undefined}
+                      onClick={() => setActiveAdSlide(index)}
+                    />
+                  ))}
+                </div>
+                <span>{String(activeAdSlide + 1).padStart(2, '0')} / {String(adSlides.length).padStart(2, '0')}</span>
+              </div>
+            </section>
           </section>
-
-          {/* Greeting */}
-          <section className="greeting">
-            <p className="greeting-eyebrow">Welcome back,</p>
-            <h1>{firstName}</h1>
-            <span className="greeting-badge">
-              <IonIcon icon={shieldCheckmarkOutline} />
-              {badgeText}
-            </span>
-          </section>
+          )}
 
           <section className="dashboard-overview" aria-label="Workspace overview">
             <div className="dashboard-overview-heading">
@@ -631,7 +717,7 @@ const Home: React.FC = () => {
             </div>
           </section>
 
-          {subscriptionReminder && (
+          {subscriptionReminder && !subscriptionReminderDismissed && (
             <section className="subscription-expiry-alert" role="status">
               <div>
                 <strong>
@@ -647,6 +733,14 @@ const Home: React.FC = () => {
               <IonButton size="small" onClick={() => ionRouter.push('/subscription', 'forward')}>
                 Upgrade plan
               </IonButton>
+              <button
+                type="button"
+                className="subscription-expiry-dismiss"
+                aria-label="Dismiss plan upgrade reminder"
+                onClick={() => setSubscriptionReminderDismissed(true)}
+              >
+                <IonIcon icon={closeOutline} />
+              </button>
             </section>
           )}
 
@@ -753,7 +847,7 @@ const Home: React.FC = () => {
           <div id="prompt-planner-section">
             <IonCard style={{ margin: '0 0 0', borderRadius: 12, boxShadow: '0 2px 12px rgba(15, 27, 45, 0.06)' }}>
               <IonCardContent>
-                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'flex-start' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, alignItems: 'center' }}>
                   <div>
                     <p style={{ margin: 0, color: '#0F6FEC', fontSize: 12, fontWeight: 700 }}>AI PROMPT PLANNER</p>
                     <h3 style={{ margin: '5px 0 6px', color: '#0F1B2D', fontSize: 19 }}>Generate 30 days of ideas</h3>
@@ -761,9 +855,20 @@ const Home: React.FC = () => {
                       Unique daily prompts based on {businessCategory || 'your business category'}.
                     </p>
                   </div>
-                  <IonIcon icon={timeOutline} style={{ color: '#0F6FEC', fontSize: 24 }} />
+                  <button
+                    type="button"
+                    className="prompt-planner-toggle"
+                    aria-expanded={!promptPlannerCollapsed}
+                    aria-controls="prompt-planner-content"
+                    aria-label={`${promptPlannerCollapsed ? 'Expand' : 'Collapse'} AI prompt planner`}
+                    onClick={() => setPromptPlannerCollapsed((collapsed) => !collapsed)}
+                  >
+                    <IonIcon icon={promptPlannerCollapsed ? chevronDownOutline : chevronUpOutline} />
+                  </button>
                 </div>
 
+                {!promptPlannerCollapsed && (
+                  <div id="prompt-planner-content">
                 <IonButton
                   expand="block"
                   color={generatingPlan ? 'medium' : 'primary'}
@@ -868,9 +973,13 @@ const Home: React.FC = () => {
                     })}
                   </div>
                 )}
+                  </div>
+                )}
               </IonCardContent>
             </IonCard>
           </div>
+
+          <DashboardAnalyticsCharts />
 
           {/* Recent campaigns, styled as a File Overview card */}
           <section className="overview-card">

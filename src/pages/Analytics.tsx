@@ -654,11 +654,13 @@ const Analytics: React.FC = () => {
                                       View post
                                     </a>
                                   )}
-                                  <IonButton size="small" fill="outline" onClick={() => void togglePostInsights(post)}>
-                                    {expanded ? 'Hide insights' : 'View insights'}
-                                  </IonButton>
+                                  {post.platform !== 'youtube' && (
+                                    <IonButton size="small" fill="outline" onClick={() => void togglePostInsights(post)}>
+                                      {expanded ? 'Hide insights' : 'View insights'}
+                                    </IonButton>
+                                  )}
                                 </div>
-                                {expanded && (
+                                {expanded && post.platform !== 'youtube' && (
                                   <div className="analytics-post-insights">
                                     {insight?.loading && (
                                       <div className="analytics-posts-loading" role="status">

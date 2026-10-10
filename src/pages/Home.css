@@ -971,13 +971,74 @@ ion-modal.connect-sheet ion-content.cs-content {
   flex: none;
 }
 
+.dashboard-inspiration {
+  margin: 0 0 18px;
+  padding: 11px;
+  border: 1px solid #e2eaf2;
+  border-radius: 16px;
+  background: linear-gradient(145deg, #ffffff, #f9fbfe);
+  box-shadow: 0 5px 18px rgba(25, 55, 88, 0.045);
+}
+
+.dashboard-inspiration-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0 3px 10px;
+}
+
+.dashboard-inspiration-heading .dashboard-kicker {
+  margin-bottom: 3px;
+}
+
+.dashboard-inspiration-heading h2 {
+  margin: 0;
+  color: var(--dashboard-ink);
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.dashboard-inspiration-dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #f1f6fb;
+  color: #59748e;
+  cursor: pointer;
+}
+
+.dashboard-inspiration-dismiss ion-icon {
+  font-size: 17px;
+}
+
+.dashboard-inspiration-dismiss:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.dashboard-inspiration .ad-news-ticker {
+  margin-bottom: 8px;
+}
+
+.dashboard-inspiration .ad-carousel {
+  margin-bottom: 0;
+  border-radius: 12px;
+  box-shadow: none;
+}
+
 .dashboard-overview {
   margin: 0 0 24px;
   padding: 17px 16px 15px;
-  border: 1px solid #e1e9f1;
+  border: 1px solid #dce8f2;
   border-radius: 16px;
-  background: #ffffff;
-  box-shadow: 0 5px 18px rgba(25, 55, 88, 0.045);
+  background: linear-gradient(135deg, #ffffff 0%, #f5faff 100%);
+  box-shadow: 0 7px 22px rgba(25, 55, 88, 0.06);
 }
 
 .dashboard-overview-heading,
@@ -1026,8 +1087,8 @@ ion-modal.connect-sheet ion-content.cs-content {
 .dashboard-metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  margin-top: 15px;
-  padding-top: 13px;
+  margin-top: 8%;
+  padding-top: 8px;
   border-top: 1px solid #edf1f5;
 }
 
@@ -1079,15 +1140,15 @@ ion-modal.connect-sheet ion-content.cs-content {
 
 .quick-card {
   position: relative;
-  align-items: flex-start;
+  align-items: center;
   min-width: 0;
-  min-height: 150px;
-  padding: 14px;
+  min-height: 128px;
+  padding: 12px 12px 34px;
   border: 1px solid #e2eaf2;
   border-radius: 15px;
   background: #ffffff;
   box-shadow: 0 4px 14px rgba(25, 55, 88, 0.045);
-  text-align: left;
+  text-align: center;
   transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
 }
 
@@ -1097,10 +1158,10 @@ ion-modal.connect-sheet ion-content.cs-content {
 }
 
 .quick-icon {
-  width: 39px;
-  height: 39px;
-  border-radius: 11px;
-  font-size: 19px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  font-size: 18px;
 }
 
 .quick-icon-green,
@@ -1116,26 +1177,30 @@ ion-modal.connect-sheet ion-content.cs-content {
 }
 
 .quick-card h4 {
-  margin: 9px 0 0;
+  margin: 7px 0 0;
   color: var(--dashboard-ink);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 750;
   line-height: 1.25;
 }
 
 .quick-card p {
-  min-height: 29px;
-  margin: 4px 0 0;
+  min-height: 28px;
+  margin: 3px 0 0;
   color: var(--dashboard-muted);
-  font-size: 10px;
+  font-size: 9.5px;
   line-height: 1.45;
 }
 
 .quick-arrow {
-  align-self: flex-end;
+  position: absolute;
+  right: 10px;
+  bottom: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   width: 25px;
   height: 25px;
-  margin-top: auto;
   border-radius: 50%;
   background: #f1f6fb;
   color: #59748e;
@@ -1219,6 +1284,30 @@ ion-modal.connect-sheet ion-content.cs-content {
   box-shadow: 0 4px 14px rgba(25, 55, 88, 0.045) !important;
 }
 
+.prompt-planner-toggle {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid #dce7f1;
+  border-radius: 50%;
+  background: #f5f9fd;
+  color: #52708a;
+  cursor: pointer;
+}
+
+.prompt-planner-toggle ion-icon {
+  font-size: 18px;
+}
+
+.prompt-planner-toggle:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
 .overview-card {
   margin-top: 18px;
   padding: 16px;
@@ -1237,12 +1326,13 @@ ion-modal.connect-sheet ion-content.cs-content {
 }
 
 .subscription-expiry-alert {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   margin: 14px 0;
-  padding: 14px 16px;
+  padding: 14px 46px 14px 16px;
   border: 1px solid #f3d08b;
   border-radius: 14px;
   background: #fff9e9;
@@ -1262,6 +1352,32 @@ ion-modal.connect-sheet ion-content.cs-content {
 .subscription-expiry-alert ion-button {
   flex: none;
   --border-radius: 10px;
+}
+
+.subscription-expiry-dismiss {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #806a3d;
+  cursor: pointer;
+}
+
+.subscription-expiry-dismiss ion-icon {
+  font-size: 18px;
+}
+
+.subscription-expiry-dismiss:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
 
 .empty-card {
@@ -1319,12 +1435,12 @@ ion-modal.connect-sheet ion-content.cs-content {
   }
 
   .quick-card {
-    min-height: 164px;
-    padding: 17px;
+    min-height: 138px;
+    padding: 13px 13px 34px;
   }
 
   .quick-card p {
-    font-size: 11px;
+    font-size: 10px;
   }
 
   .whatsapp-shortcuts strong {
@@ -1363,8 +1479,8 @@ ion-modal.connect-sheet ion-content.cs-content {
   }
 
   .quick-card {
-    min-height: 146px;
-    padding: 12px;
+    min-height: 126px;
+    padding: 11px 10px 32px;
   }
 
   .quick-card h4 {
