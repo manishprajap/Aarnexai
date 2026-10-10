@@ -906,14 +906,14 @@ const Home: React.FC = () => {
                       alt={activeAdSlideItem.title}
                     />
                   ) : null}
-                  <span className="ad-carousel-type">
-                    {activeAdSlideItem.mediaType === 'video'
-                      ? 'VIDEO'
-                      : activeAdSlideItem.mediaType === 'image'
-                        ? 'IMAGE'
-                        : 'FEATURE'}
-                  </span>
                   <div className="ad-carousel-copy">
+                    <span className="ad-carousel-type">
+                      {activeAdSlideItem.mediaType === 'video'
+                        ? 'VIDEO'
+                        : activeAdSlideItem.mediaType === 'image'
+                          ? 'IMAGE'
+                          : 'FEATURE'}
+                    </span>
                     <h2>{activeAdSlideItem.title}</h2>
                     {activeAdSlideItem.description && <p>{activeAdSlideItem.description}</p>}
                     {activeAdSlideItem.buttonText

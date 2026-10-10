@@ -1924,19 +1924,18 @@ ion-modal.connect-sheet ion-content.cs-content {
 
 .ad-carousel-media {
   position: relative;
-  min-height: 150px;
-  aspect-ratio: 16 / 7;
+  min-height: 220px;
+  aspect-ratio: 16 / 10;
   overflow: hidden;
-  background: #102321;
+  background: #172b29;
   color: #ffffff;
 }
 
 .ad-carousel-media::after {
   position: absolute;
   z-index: 1;
-  inset: 0;
-  background: linear-gradient(90deg, rgba(5, 24, 22, 0.78), rgba(5, 24, 22, 0.12) 85%),
-    linear-gradient(0deg, rgba(5, 24, 22, 0.22), transparent 55%);
+  inset: 35% 0 0;
+  background: linear-gradient(180deg, transparent, rgba(5, 20, 18, 0.88));
   content: '';
   pointer-events: none;
 }
@@ -1945,8 +1944,8 @@ ion-modal.connect-sheet ion-content.cs-content {
   display: block;
   width: 100%;
   height: 100%;
-  min-height: 150px;
-  object-fit: cover;
+  min-height: 220px;
+  object-fit: contain;
 }
 
 .ad-news-ticker {
@@ -2039,14 +2038,13 @@ ion-modal.connect-sheet ion-content.cs-content {
 }
 
 .ad-carousel-type {
-  position: absolute;
-  z-index: 2;
-  top: 16px;
-  left: 16px;
-  padding: 6px 9px;
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 4px 7px;
   border-radius: 999px;
-  background: rgba(9, 31, 28, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  background: rgba(12, 32, 29, 0.58);
   color: #ffffff;
   font-size: 9px;
   font-weight: 800;
@@ -2056,27 +2054,38 @@ ion-modal.connect-sheet ion-content.cs-content {
 .ad-carousel-copy {
   position: absolute;
   z-index: 2;
-  right: 56px;
-  bottom: 14px;
-  left: 16px;
-  max-width: 340px;
-  pointer-events: none;
+  right: 54px;
+  bottom: 0;
+  left: 14px;
+  display: grid;
+  justify-items: start;
+  gap: 5px;
+  padding: 36px 0 12px;
 }
 
 .ad-carousel-copy h2 {
   margin: 0;
   color: #ffffff;
-  font-size: clamp(19px, 5vw, 26px);
+  font-size: clamp(15px, 4vw, 20px);
   font-weight: 800;
-  line-height: 1.12;
-  letter-spacing: -0.03em;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 .ad-carousel-copy p {
-  margin: 7px 0 12px;
-  color: rgba(255, 255, 255, 0.88);
-  font-size: 12px;
-  line-height: 1.4;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 .ad-carousel-copy button,
@@ -2091,10 +2100,11 @@ ion-modal.connect-sheet ion-content.cs-content {
   background: #ffffff;
   color: #123c35;
   font: inherit;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
-  pointer-events: auto;
   text-decoration: none;
+  min-height: 30px;
+  padding: 0 10px;
 }
 
 .ad-carousel-copy button ion-icon,
@@ -2121,17 +2131,6 @@ ion-modal.connect-sheet ion-content.cs-content {
 
 .ad-carousel-next {
   right: 10px;
-}
-
-.ad-carousel-video::after {
-  background: linear-gradient(90deg, rgba(5, 24, 22, 0.72), rgba(5, 24, 22, 0.14) 90%);
-}
-
-.ad-carousel-video .ad-carousel-copy {
-  top: 18px;
-  right: 54px;
-  bottom: auto;
-  pointer-events: none;
 }
 
 .ad-carousel-video .ad-carousel-arrow {
@@ -2189,23 +2188,13 @@ ion-modal.connect-sheet ion-content.cs-content {
 
   .ad-carousel-media,
   .ad-carousel-creative {
-    min-height: 190px;
-    max-height: 220px;
+    min-height: 240px;
+    max-height: 320px;
   }
 
   .ad-carousel-copy {
-    bottom: 26px;
-    left: 24px;
-  }
-
-  .ad-carousel-type {
-    top: 22px;
-    left: 24px;
-  }
-
-  .ad-carousel-video .ad-carousel-copy {
-    top: 72px;
-    left: 24px;
+    left: 20px;
+    padding-bottom: 16px;
   }
 
   .ad-carousel-footer {
