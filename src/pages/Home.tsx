@@ -18,8 +18,6 @@ import {
   IonCard,
   IonCardContent,
   IonModal,
-  IonSelect,
-  IonSelectOption,
   useIonViewWillEnter,
 } from '@ionic/react';
 
@@ -44,6 +42,8 @@ import {
   closeOutline,
   chevronDownOutline,
   chevronUpOutline,
+  chevronBackOutline,
+  calendarOutline,
 } from 'ionicons/icons';
 
 import { useAuth } from '../context/AuthContext';
@@ -55,7 +55,7 @@ import { useLogoTheme } from '../hooks/useLogoTheme';
 import BottomTabBar from '../components/BottomTabBar';
 import DashboardAnalyticsCharts from '../components/DashboardAnalyticsCharts';
 import { clearBusinessCategory, saveBusinessCategory } from '../utils/businessCategory';
-import { apiGet, apiPost } from '../api';
+import { ApiError, apiGet, apiPost } from '../api';
 
 import {
   fetchPromptPlan,
@@ -75,6 +75,31 @@ type PromptPlanItem = {
   day: number;
   theme?: string | null;
   prompt: string;
+};
+
+type MarketingCalendarDay = {
+  day: number;
+  date: string;
+  theme: string | null;
+  prompt: string | null;
+  caption: string | null;
+  hashtags: string | null;
+  cta: string | null;
+  imagePrompt: string | null;
+  status: string;
+  banner: {
+    id: number;
+    imageUrl: string;
+    caption: string | null;
+    posted: boolean;
+  } | null;
+};
+
+type MarketingCalendarResponse = {
+  success: boolean;
+  plan: { startDate: string; endDate: string } | null;
+  days: MarketingCalendarDay[];
+  error?: string;
 };
 
 type SubscriptionReminder = {
@@ -106,6 +131,20 @@ const emptyProduct = (): ProductDraft => ({
   image: null,
 });
 const INSPIRATION_DISMISSAL_MS = 30 * 60 * 1000;
+
+const getLocalDateKey = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const getLocalDateKey = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -171,6 +210,14 @@ const Home: React.FC = () => {
   const [productFormError, setProductFormError] = useState('');
   const [productToast, setProductToast] = useState('');
   const [promptPlannerCollapsed, setPromptPlannerCollapsed] = useState(false);
+  const [calendarDays, setCalendarDays] = useState<MarketingCalendarDay[]>([]);
+  const [calendarLoading, setCalendarLoading] = useState(true);
+  const [calendarError, setCalendarError] = useState('');
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+  const [calendarSelectedDate, setCalendarSelectedDate] = useState(() => getLocalDateKey(new Date()));
+  const [calendarModalOpen, setCalendarModalOpen] = useState(false);
+  const [generatingCalendarDay, setGeneratingCalendarDay] = useState<number | null>(null);
+  const [calendarActionError, setCalendarActionError] = useState('');
   const [inspirationHidden, setInspirationHidden] = useState(() => {
     if (!user?.id) return false;
     const dismissedAt = Number(localStorage.getItem(`dashboard-inspiration-dismissed:${user.id}`));
@@ -196,13 +243,10 @@ const Home: React.FC = () => {
   } = useSocialConnections();
 
   const [promptPlan, setPromptPlan] = useState<PromptPlanItem[]>([]);
-  const [todayPrompt, setTodayPrompt] = useState<PromptPlanItem | null>(null);
-  const [selectedPromptDay, setSelectedPromptDay] = useState<number | null>(null);
   const [loadingPlan, setLoadingPlan] = useState(true);
   const [generatingPlan, setGeneratingPlan] = useState(false);
   const [promptMessage, setPromptMessage] = useState('');
   const [planToastOpen, setPlanToastOpen] = useState(false);
-  const listRef = useRef<HTMLDivElement>(null);
   const [promptMessageColor, setPromptMessageColor] = useState<'primary' | 'danger'>('primary');
 
   const [planStartDate, setPlanStartDate] = useState<string | null>(null);
@@ -251,10 +295,25 @@ const Home: React.FC = () => {
   );
   const isRegenerateLocked = regenerationState.locked;
   const daysUntilUnlock = regenerationState.daysUntilUnlock;
-  const selectedPrompt = promptPlan.find((item) => item.day === selectedPromptDay)
-    ?? todayPrompt
-    ?? promptPlan[0]
-    ?? null;
+  const selectedCalendarDay = calendarDays.find((day) => day.date === calendarSelectedDate) ?? null;
+  const calendarFirstWeekday = new Date(
+    calendarMonth.getFullYear(),
+    calendarMonth.getMonth(),
+    1,
+  ).getDay();
+  const calendarMonthDayCount = new Date(
+    calendarMonth.getFullYear(),
+    calendarMonth.getMonth() + 1,
+    0,
+  ).getDate();
+  const calendarCellCount = Math.ceil((calendarFirstWeekday + calendarMonthDayCount) / 7) * 7;
+  const calendarCellDates = Array.from({ length: calendarCellCount }, (_, index) => {
+    const dayNumber = index - calendarFirstWeekday + 1;
+    return dayNumber < 1 || dayNumber > calendarMonthDayCount
+      ? null
+      : getLocalDateKey(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), dayNumber));
+  });
+  const todayDateKey = getLocalDateKey(new Date());
 
   const adSlides = homeContent.filter((item) => item.contentType === 'banner');
   const latestNews = homeContent.filter((item) => item.contentType === 'news');
@@ -337,14 +396,7 @@ const Home: React.FC = () => {
       const data = await fetchPromptPlan();
       const items = Array.isArray(data?.items) ? data.items : [];
       setPromptPlan(items);
-      setTodayPrompt(data?.today ?? null);
       setPlanStartDate(data?.startDate ?? null);
-      setSelectedPromptDay((currentDay) => {
-        const preferredDay = data?.today?.day ?? currentDay;
-        return items.some((item) => item.day === preferredDay)
-          ? preferredDay
-          : items[0]?.day ?? null;
-      });
     } catch (err: any) {
       console.error('Could not load prompt plan:', err);
       setPromptMessageColor('danger');
@@ -368,8 +420,76 @@ const Home: React.FC = () => {
     }
   };
 
+  const loadMarketingCalendar = async () => {
+    if (!user?.id) {
+      setCalendarDays([]);
+      setCalendarLoading(false);
+      return;
+    }
+
+    setCalendarLoading(true);
+    setCalendarError('');
+    try {
+      const response = await apiGet<MarketingCalendarResponse>('/marketing-calendar');
+      if (!response?.success || !Array.isArray(response.days)) {
+        throw new Error(response?.error || 'Marketing calendar response is incomplete.');
+      }
+      setCalendarDays(response.days);
+      const today = getLocalDateKey(new Date());
+      if (response.days.some((day) => day.date === today)) setCalendarSelectedDate(today);
+    } catch (error: unknown) {
+      console.error('Could not load marketing calendar:', error);
+      setCalendarError(error instanceof Error ? error.message : 'Could not load the marketing calendar.');
+    } finally {
+      setCalendarLoading(false);
+    }
+  };
+
+  const handleGenerateCalendarBanner = async (day: MarketingCalendarDay) => {
+    if (generatingCalendarDay !== null) return;
+    setGeneratingCalendarDay(day.day);
+    setCalendarActionError('');
+    try {
+      const response = await apiPost<{
+        success: boolean;
+        banner?: { id: number; imageUrl: string };
+        error?: string;
+      }>('/marketing-calendar', { day: day.day });
+      const banner = response?.banner;
+      if (!response?.success || !banner?.id || !banner.imageUrl) {
+        throw new Error(response?.error || 'Banner generation returned no image.');
+      }
+
+      setCalendarDays((currentDays) => currentDays.map((item) =>
+        item.day === day.day
+          ? {
+              ...item,
+              status: 'GENERATED',
+              banner: {
+                id: banner.id,
+                imageUrl: banner.imageUrl,
+                caption: item.caption,
+                posted: false,
+              },
+            }
+          : item
+      ));
+    } catch (error: unknown) {
+      console.error('Could not generate calendar banner:', error);
+      if (error instanceof ApiError && error.data?.code === 'SUBSCRIPTION_REQUIRED') {
+        setCalendarModalOpen(false);
+        ionRouter.push('/subscription', 'forward');
+        return;
+      }
+      setCalendarActionError(error instanceof Error ? error.message : 'Could not generate this banner.');
+    } finally {
+      setGeneratingCalendarDay(null);
+    }
+  };
+
   useEffect(() => {
     void loadPlan();
+    void loadMarketingCalendar();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
@@ -412,16 +532,13 @@ const Home: React.FC = () => {
       }
 
       setPromptPlan(items);
-      setTodayPrompt(res?.today ?? items[0] ?? null);
-      setSelectedPromptDay(res?.today?.day ?? items[0]?.day ?? null);
       setPlanStartDate(res?.startDate ?? new Date().toISOString().slice(0, 10));
+      await loadMarketingCalendar();
       setCurrentTime(Date.now());
       setPromptMessageColor('primary');
       setPromptMessage('Success! Your 30-day prompt plan is ready.');
       setPlanToastOpen(true);
 
-      // bring the freshly generated list into view
-      setTimeout(() => listRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 200);
     } catch (err: any) {
       setPromptMessageColor('danger');
       setPromptMessage(err?.message || err?.error || 'Could not generate your 30-day plan. Please try again.');
@@ -448,6 +565,7 @@ const Home: React.FC = () => {
   useIonViewWillEnter(() => {
     void refresh();
     void loadPlan();
+    void loadMarketingCalendar();
     void loadSubscriptionReminder();
     void loadHomeContent();
   });
@@ -1040,52 +1158,164 @@ const Home: React.FC = () => {
                   </p>
                 )}
 
-                {promptPlan.length > 0 && (
-                  <IonSelect
-                    aria-label="Choose a saved daily prompt"
-                    interface="alert"
-                    placeholder="Select a saved prompt"
-                    value={selectedPrompt?.day ?? ''}
-                    onIonChange={(event) => setSelectedPromptDay(Number(event.detail.value))}
-                    style={{ marginTop: 12 }}
-                  >
-                    {promptPlan.map((item) => (
-                      <IonSelectOption key={item.day} value={item.day}>
-                        {`Day ${item.day}${item.theme ? ` · ${item.theme}` : ''}`}
-                      </IonSelectOption>
-                    ))}
-                  </IonSelect>
-                )}
-
-                {selectedPrompt && (
-                  <div style={{ marginTop: 14, padding: 12, borderRadius: 12, background: '#F8FAFD' }}>
-                    <strong style={{ color: '#0F1B2D', fontSize: 13 }}>
-                      {selectedPrompt.day === todayPrompt?.day ? 'Today · ' : ''}
-                      Day {selectedPrompt.day}
-                      {selectedPrompt.theme ? ` · ${selectedPrompt.theme}` : ''}
-                    </strong>
-                    <p style={{ margin: '6px 0 0', color: '#526176', fontSize: 13, lineHeight: 1.45 }}>{fillPromptTemplate(selectedPrompt.prompt, { category: businessCategory })}</p>
+                <section className="marketing-calendar" aria-label="30-day marketing calendar">
+                  <div className="marketing-calendar-heading">
+                    <div>
+                      <strong><IonIcon icon={calendarOutline} /> Campaign calendar</strong>
+                      <span>Choose a date to view its banner and content.</span>
+                    </div>
+                    <div className="marketing-calendar-month">
+                      <button
+                        type="button"
+                        aria-label="Previous month"
+                        onClick={() => setCalendarMonth((month) => new Date(month.getFullYear(), month.getMonth() - 1, 1))}
+                      >
+                        <IonIcon icon={chevronBackOutline} />
+                      </button>
+                      <strong>{calendarMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}</strong>
+                      <button
+                        type="button"
+                        aria-label="Next month"
+                        onClick={() => setCalendarMonth((month) => new Date(month.getFullYear(), month.getMonth() + 1, 1))}
+                      >
+                        <IonIcon icon={chevronForwardOutline} />
+                      </button>
+                    </div>
                   </div>
-                )}
 
-                {promptPlan.length > 0 && (
-                  <div ref={listRef} className="prompt-day-list" aria-label="Saved prompts by day">
-                    {promptPlan.map((item) => {
-                      const isToday = item.day === todayPrompt?.day;
+                  {calendarLoading ? (
+                    <div className="calendar-loading"><IonSpinner name="dots" /> Loading calendar…</div>
+                  ) : calendarError ? (
+                    <p className="calendar-error" role="alert">{calendarError}</p>
+                  ) : calendarDays.length === 0 ? (
+                    <p className="calendar-empty">Generate your 30-day plan to see scheduled content here.</p>
+                  ) : (
+                    <>
+                      <div className="marketing-calendar-weekdays" aria-hidden="true">
+                        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((weekday) => (
+                          <span key={weekday}>{weekday}</span>
+                        ))}
+                      </div>
+                      <div className="marketing-calendar-grid">
+                        {calendarCellDates.map((date, index) => {
+                          if (!date) return <span key={`empty-${index}`} className="calendar-empty-cell" />;
+                          const day = calendarDays.find((item) => item.date === date);
+                          const isToday = date === todayDateKey;
+                          return (
+                            <button
+                              key={date}
+                              type="button"
+                              className={[
+                                'marketing-calendar-date',
+                                isToday ? 'is-today' : '',
+                                day ? 'has-plan' : '',
+                                day?.banner ? 'has-banner' : '',
+                              ].filter(Boolean).join(' ')}
+                              aria-label={`${new Date(`${date}T00:00:00`).toLocaleDateString()}${isToday ? ', today' : ''}${day ? ', campaign planned' : ''}${day?.banner?.posted ? ', posted' : ''}`}
+                              onClick={() => {
+                                setCalendarSelectedDate(date);
+                                setCalendarActionError('');
+                                setCalendarModalOpen(true);
+                                void loadMarketingCalendar();
+                              }}
+                            >
+                              <span>{Number(date.slice(-2))}</span>
+                              {day && <i aria-hidden="true" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="marketing-calendar-legend">
+                        <span><i className="legend-today" /> Today</span>
+                        <span><i className="legend-plan" /> Planned content</span>
+                      </div>
+                    </>
+                  )}
+                </section>
 
-                      return (
-                        <article key={item.day} className={`prompt-day-item${isToday ? ' is-today' : ''}`}>
-                          <div className="prompt-day-heading">
-                            <strong>Day {item.day}</strong>
-                            {isToday && <span>Today</span>}
+                <IonModal
+                  className="marketing-calendar-modal"
+                  isOpen={calendarModalOpen}
+                  onDidDismiss={() => setCalendarModalOpen(false)}
+                >
+                  <IonContent>
+                    <div className="calendar-modal-content">
+                      <header className="calendar-modal-heading">
+                        <div>
+                          <p>CAMPAIGN DAY {selectedCalendarDay?.day ?? ''}</p>
+                          <h2>{new Date(`${calendarSelectedDate}T00:00:00`).toLocaleDateString(undefined, {
+                            weekday: 'long',
+                            month: 'long',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })}</h2>
+                        </div>
+                        <button type="button" aria-label="Close calendar details" onClick={() => setCalendarModalOpen(false)}>
+                          <IonIcon icon={closeOutline} />
+                        </button>
+                      </header>
+
+                      {!selectedCalendarDay ? (
+                        <div className="calendar-no-day">No campaign is scheduled for this date.</div>
+                      ) : (
+                        <>
+                          <div className={`calendar-banner-preview${selectedCalendarDay.banner ? '' : ' is-blurred'}`}>
+                            {selectedCalendarDay.banner?.imageUrl ? (
+                              <img src={selectedCalendarDay.banner.imageUrl} alt={`${selectedCalendarDay.theme || 'Campaign'} banner`} />
+                            ) : calendarDays.find((item) => item.banner?.imageUrl)?.banner?.imageUrl ? (
+                              <img
+                                src={calendarDays.find((item) => item.banner?.imageUrl)?.banner?.imageUrl}
+                                alt=""
+                              />
+                            ) : (
+                              <div className="calendar-banner-placeholder"><IonIcon icon={imageOutline} /></div>
+                            )}
+                            {!selectedCalendarDay.banner && (
+                              <div className="calendar-generate-overlay">
+                                <IonButton
+                                  onClick={() => void handleGenerateCalendarBanner(selectedCalendarDay)}
+                                  disabled={generatingCalendarDay !== null}
+                                >
+                                  {generatingCalendarDay === selectedCalendarDay.day
+                                    ? <><IonSpinner name="crescent" /> Generating…</>
+                                    : 'Generate banner'}
+                                </IonButton>
+                              </div>
+                            )}
                           </div>
-                          {item.theme && <h4>{item.theme}</h4>}
-                          <p>{fillPromptTemplate(item.prompt, { category: businessCategory })}</p>
-                        </article>
-                      );
-                    })}
-                  </div>
-                )}
+
+                          {calendarActionError && <p className="calendar-error" role="alert">{calendarActionError}</p>}
+
+                          <div className="calendar-day-details">
+                            {selectedCalendarDay.theme && <h3>{selectedCalendarDay.theme}</h3>}
+                            {selectedCalendarDay.prompt && (
+                              <p><strong>Prompt</strong>{fillPromptTemplate(selectedCalendarDay.prompt, { category: businessCategory })}</p>
+                            )}
+                            {selectedCalendarDay.caption && <p><strong>Description</strong>{selectedCalendarDay.caption}</p>}
+                            {selectedCalendarDay.hashtags && <p><strong>Hashtags</strong>{selectedCalendarDay.hashtags}</p>}
+                            {selectedCalendarDay.cta && <p><strong>Call to action</strong>{selectedCalendarDay.cta}</p>}
+                          </div>
+
+                          {selectedCalendarDay.banner && (
+                            selectedCalendarDay.banner.posted ? (
+                              <div className="calendar-posted-status"><IonIcon icon={checkmarkCircleOutline} /> Posted</div>
+                            ) : (
+                              <IonButton
+                                expand="block"
+                                onClick={() => {
+                                  setCalendarModalOpen(false);
+                                  ionRouter.push('/posters', 'forward');
+                                }}
+                              >
+                                Post now
+                              </IonButton>
+                            )
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </IonContent>
+                </IonModal>
                   </div>
                 )}
               </IonCardContent>
