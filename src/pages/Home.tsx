@@ -289,6 +289,11 @@ const Home: React.FC = () => {
   const isRegenerateLocked = regenerationState.locked;
   const daysUntilUnlock = regenerationState.daysUntilUnlock;
   const selectedCalendarDay = calendarDays.find((day) => day.date === calendarSelectedDate) ?? null;
+  const selectedPublishedImage = selectedCalendarDay?.publishedBanners?.find((banner) => banner.imageUrl)?.imageUrl;
+  const calendarBannerImage = selectedPublishedImage
+    || selectedCalendarDay?.banner?.imageUrl
+    || calendarAnalytics.find((banner) => banner.imageUrl)?.imageUrl
+    || '';
   const calendarFirstWeekday = new Date(
     calendarMonth.getFullYear(),
     calendarMonth.getMonth(),
@@ -1287,13 +1292,8 @@ const Home: React.FC = () => {
                       ) : (
                         <>
                           <div className={`calendar-banner-preview${selectedCalendarDay.banner ? '' : ' is-blurred'}`}>
-                            {selectedCalendarDay.banner?.imageUrl ? (
-                              <img src={selectedCalendarDay.banner.imageUrl} alt={`${selectedCalendarDay.theme || 'Campaign'} banner`} />
-                            ) : calendarDays.find((item) => item.banner?.imageUrl)?.banner?.imageUrl ? (
-                              <img
-                                src={calendarDays.find((item) => item.banner?.imageUrl)?.banner?.imageUrl}
-                                alt=""
-                              />
+                            {calendarBannerImage ? (
+                              <img src={calendarBannerImage} alt={`${selectedCalendarDay.theme || 'Campaign'} banner`} />
                             ) : (
                               <div className="calendar-banner-placeholder"><IonIcon icon={imageOutline} /></div>
                             )}
