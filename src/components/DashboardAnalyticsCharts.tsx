@@ -316,7 +316,7 @@ const DashboardAnalyticsCharts = () => {
             ))}
           </div>
 
-          {location && (
+          {/* {location && (
             <div className="dashboard-chart-location">
               <IonIcon icon={locationOutline} aria-hidden="true" />
               <span>{location}</span>
@@ -328,7 +328,7 @@ const DashboardAnalyticsCharts = () => {
                 Maps
               </a>
             </div>
-          )}
+          )} */}
         </article>
       )}
     </section>

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   IonPage,
   IonContent,
@@ -25,7 +25,7 @@ import {
   chevronBackOutline,
 } from 'ionicons/icons';
 import { useNavigate } from 'react-router-dom';
-import { apiPost, apiPut } from '../api';
+import { apiGet, apiPost, apiPut } from '../api';
 import { useAuth } from '../context/AuthContext';
 import './Profile.css';
 
@@ -38,6 +38,39 @@ const Profile: React.FC = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [businessDetails, setBusinessDetails] = useState({
+    category: user?.category ?? '',
+    city: user?.city ?? '',
+    website: user?.website ?? '',
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadBusinessDetails = async () => {
+      try {
+        const response = await apiGet<{ user?: {
+          category?: string | null;
+          city?: string | null;
+          website?: string | null;
+        } }>('/auth/me');
+        if (cancelled || !response.user) return;
+
+        setBusinessDetails({
+          category: response.user.category ?? '',
+          city: response.user.city ?? '',
+          website: response.user.website ?? '',
+        });
+      } catch (error) {
+        console.error('Could not load saved business setup for profile:', error);
+      }
+    };
+
+    void loadBusinessDetails();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const [name, setName] = useState(user?.name || '');
   const [email, setEmail] = useState(user?.email || '');
@@ -217,15 +250,15 @@ const Profile: React.FC = () => {
             <div className="profile-detail-grid">
               <div className="detail-item">
                 <span className="detail-label"><IonIcon icon={businessOutline} /> Category</span>
-                <strong>{displayValue(user?.category)}</strong>
+                <strong>{displayValue(businessDetails.category)}</strong>
               </div>
               <div className="detail-item">
                 <span className="detail-label"><IonIcon icon={locationOutline} /> City</span>
-                <strong>{displayValue(user?.city)}</strong>
+                <strong>{displayValue(businessDetails.city)}</strong>
               </div>
               <div className="detail-item detail-item-wide">
                 <span className="detail-label"><IonIcon icon={globeOutline} /> Website</span>
-                <strong>{displayValue(user?.website)}</strong>
+                <strong>{displayValue(businessDetails.website)}</strong>
               </div>
             </div>
 

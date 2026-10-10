@@ -1420,11 +1420,24 @@ ion-modal.connect-sheet ion-content.cs-content {
   font-weight: 700;
 }
 
+.marketing-calendar-date.is-posted {
+  border-color: #35a76f;
+  background: #dff5e8;
+  color: #176b3b;
+  font-weight: 800;
+}
+
 .marketing-calendar-date.is-today {
   border-color: #0f6fec;
   background: #0f6fec;
   color: #fff;
   font-weight: 800;
+}
+
+.marketing-calendar-date.is-today.is-posted {
+  border-color: #0f6fec;
+  background: #dff5e8;
+  color: #176b3b;
 }
 
 .marketing-calendar-date i,
@@ -1442,6 +1455,14 @@ ion-modal.connect-sheet ion-content.cs-content {
 
 .marketing-calendar-date.is-today i {
   background: #fff;
+}
+
+.marketing-calendar-date.is-posted i {
+  background: #176b3b;
+}
+
+.marketing-calendar-date.is-today.is-posted i {
+  background: #176b3b;
 }
 
 .marketing-calendar-date:focus-visible,
@@ -1472,6 +1493,14 @@ ion-modal.connect-sheet ion-content.cs-content {
 
 .marketing-calendar-legend .legend-plan {
   background: #24a36a;
+}
+
+.marketing-calendar-legend .legend-posted {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  background: #dff5e8;
+  box-shadow: inset 0 0 0 1px #35a76f;
 }
 
 .calendar-loading,
@@ -1677,10 +1706,22 @@ ion-modal.connect-sheet ion-content.cs-content {
   text-transform: capitalize;
 }
 
-.calendar-platform-post-heading > a {
+.calendar-platform-post-heading > span {
+  color: #748398;
+  font-size: 10px;
+}
+
+.calendar-platform-post-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.calendar-platform-post-link {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  width: fit-content;
   color: #0f6fec;
   font-size: 11px;
   font-weight: 700;

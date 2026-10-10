@@ -116,6 +116,13 @@ type CalendarPostAnalytics = {
   }>;
 };
 
+type CalendarPlatformGroup = {
+  platform: string;
+  publications: CalendarPostAnalytics['publications'];
+  metrics: Record<string, number>;
+  notes: string[];
+};
+
 type MarketingCalendarResponse = {
   success: boolean;
   plan: { startDate: string; endDate: string } | null;
@@ -152,6 +159,36 @@ const emptyProduct = (): ProductDraft => ({
   image: null,
 });
 const INSPIRATION_DISMISSAL_MS = 30 * 60 * 1000;
+
+function groupCalendarPublications(
+  publications: CalendarPostAnalytics['publications'],
+): CalendarPlatformGroup[] {
+  const groups = new Map<string, CalendarPlatformGroup>();
+
+  for (const publication of publications) {
+    const platform = publication.platform.toLowerCase();
+    let group = groups.get(platform);
+    if (!group) {
+      group = { platform, publications: [], metrics: {}, notes: [] };
+      groups.set(platform, group);
+    }
+
+    group.publications.push(publication);
+    for (const [key, value] of Object.entries(publication.metrics ?? {})) {
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        group.metrics[key] = (group.metrics[key] ?? 0) + value;
+      } else if (
+        typeof value === 'string'
+        && value.trim()
+        && !group.notes.includes(value.trim())
+      ) {
+        group.notes.push(value.trim());
+      }
+    }
+  }
+
+  return Array.from(groups.values());
+}
 
 const getLocalDateKey = (date: Date): string => {
   const year = date.getFullYear();
@@ -1242,6 +1279,7 @@ const Home: React.FC = () => {
                                 isToday ? 'is-today' : '',
                                 day ? 'has-plan' : '',
                                 day?.banner ? 'has-banner' : '',
+                                day?.banner?.posted ? 'is-posted' : '',
                               ].filter(Boolean).join(' ')}
                               aria-label={`${new Date(`${date}T00:00:00`).toLocaleDateString()}${isToday ? ', today' : ''}${day ? ', campaign planned' : ''}${day?.banner?.posted ? ', posted' : ''}`}
                               onClick={() => {
@@ -1260,6 +1298,7 @@ const Home: React.FC = () => {
                       <div className="marketing-calendar-legend">
                         <span><i className="legend-today" /> Today</span>
                         <span><i className="legend-plan" /> Planned content</span>
+                        <span><i className="legend-posted" /> Posted</span>
                       </div>
                     </>
                   )}
@@ -1340,25 +1379,27 @@ const Home: React.FC = () => {
                                   {calendarAnalytics.length > 1 && banner.imageUrl && (
                                     <img src={banner.imageUrl} alt={banner.theme || banner.caption || 'Published banner'} />
                                   )}
-                                  {banner.publications.map((publication) => {
-                                    const metricEntries = Object.entries(publication.metrics ?? {})
-                                      .filter(([, value]) => typeof value === 'number' && Number.isFinite(value));
-                                    const notes = Object.entries(publication.metrics ?? {})
-                                      .filter(([, value]) => typeof value === 'string' && value.trim())
-                                      .map(([key, value]) => `${key.replaceAll('_', ' ')}: ${value}`);
+                                  {groupCalendarPublications(banner.publications).map((group) => {
+                                    const metricEntries = Object.entries(group.metrics);
+                                    const latestPublication = group.publications.reduce(
+                                      (latest, publication) => (
+                                        !latest || Date.parse(publication.publishedAt) > Date.parse(latest.publishedAt)
+                                          ? publication
+                                          : latest
+                                      ),
+                                      group.publications[0],
+                                    );
                                     return (
-                                      <article className="calendar-platform-post" key={`${banner.bannerId}-${publication.id}`}>
+                                      <article className="calendar-platform-post" key={`${banner.bannerId}-${group.platform}`}>
                                         <div className="calendar-platform-post-heading">
-                                          <strong>{publication.platform.replaceAll('_', ' ')}</strong>
-                                          {publication.permalink && /^https?:\/\//i.test(publication.permalink) && (
-                                            <a href={publication.permalink} target="_blank" rel="noopener noreferrer">
-                                              Learn more <IonIcon icon={arrowForwardOutline} />
-                                            </a>
-                                          )}
+                                          <strong>{group.platform.replaceAll('_', ' ')}</strong>
+                                          <span>{group.publications.length} {group.publications.length === 1 ? 'post' : 'posts'}</span>
                                         </div>
-                                        <time dateTime={publication.publishedAt}>
-                                          {new Date(publication.publishedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-                                        </time>
+                                        {latestPublication?.publishedAt && (
+                                          <time dateTime={latestPublication.publishedAt}>
+                                            Latest · {new Date(latestPublication.publishedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                                          </time>
+                                        )}
                                         {metricEntries.length > 0 && (
                                           <div className="calendar-platform-metrics">
                                             {metricEntries.map(([label, value]) => (
@@ -1369,7 +1410,23 @@ const Home: React.FC = () => {
                                             ))}
                                           </div>
                                         )}
-                                        {notes.map((note) => <p className="calendar-platform-note" key={note}>{note}</p>)}
+                                        {group.notes.map((note) => <p className="calendar-platform-note" key={note}>{note}</p>)}
+                                        <div className="calendar-platform-post-links">
+                                          {group.publications.map((publication, index) => (
+                                            publication.permalink && /^https?:\/\//i.test(publication.permalink) ? (
+                                              <a
+                                                className="calendar-platform-post-link"
+                                                href={publication.permalink}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                key={publication.id}
+                                              >
+                                                {group.publications.length > 1 ? `Open post ${index + 1}` : 'Learn more'}
+                                                <IonIcon icon={arrowForwardOutline} />
+                                              </a>
+                                            ) : null
+                                          ))}
+                                        </div>
                                       </article>
                                     );
                                   })}
@@ -1407,7 +1464,7 @@ const Home: React.FC = () => {
           <DashboardAnalyticsCharts />
 
           {/* Recent campaigns, styled as a File Overview card */}
-          <section className="overview-card">
+          {/* <section className="overview-card">
             <div className="overview-head">
               <h3>
                 <IonIcon icon={cloudUploadOutline} />
@@ -1429,7 +1486,7 @@ const Home: React.FC = () => {
               </div>
               <IonIcon icon={arrowForwardOutline} className="empty-arrow" />
             </button>
-          </section>
+          </section> */}
         </div>
       </IonContent>
 
