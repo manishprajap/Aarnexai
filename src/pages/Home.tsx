@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { useIonRouter } from '@ionic/react';
 import {
   IonContent,
@@ -15,6 +15,7 @@ import {
   IonToast,
   IonCard,
   IonCardContent,
+  IonModal,
   IonSelect,
   IonSelectOption,
   useIonViewWillEnter,
@@ -34,6 +35,7 @@ import {
   shieldCheckmarkOutline,
   statsChartOutline,
   cubeOutline,
+  imageOutline,
   chatbubblesOutline,
   sparklesOutline,
   closeOutline,
@@ -58,6 +60,13 @@ import {
   generatePromptPlan,
   getPromptPlanRegenerationState,
 } from '../utils/promptPlan';
+import {
+  createCatalogProduct,
+  createWhatsAppCatalog,
+  getWhatsAppCatalog,
+  ProductAvailability,
+  ProductInput,
+} from '../services/whatsappCommerce';
 
 type PromptPlanItem = {
   day: number;
@@ -72,6 +81,20 @@ type SubscriptionReminder = {
 } | null;
 
 const GENERATE_WATCHDOG_MS = 95_000;
+
+const emptyCatalogProduct = (): ProductInput => ({
+  catalogId: '',
+  name: '',
+  description: '',
+  price: '',
+  currency: 'INR',
+  sku: '',
+  availability: 'in_stock',
+  categoryId: '',
+  businessCategoryId: '',
+  businessCategory: '',
+  image: null,
+});
 const INSPIRATION_DISMISSAL_MS = 30 * 60 * 1000;
 
 const adSlides = [
@@ -105,6 +128,11 @@ const Home: React.FC = () => {
   const ionRouter = useIonRouter();
   const { user, logout } = useAuth() as any;
   const [activeAdSlide, setActiveAdSlide] = useState(0);
+  const [productModalOpen, setProductModalOpen] = useState(false);
+  const [productDraft, setProductDraft] = useState<ProductInput>(emptyCatalogProduct);
+  const [savingProduct, setSavingProduct] = useState(false);
+  const [productFormError, setProductFormError] = useState('');
+  const [productToast, setProductToast] = useState('');
   const [promptPlannerCollapsed, setPromptPlannerCollapsed] = useState(false);
   const [inspirationHidden, setInspirationHidden] = useState(() => {
     if (!user?.id) return false;
@@ -372,6 +400,64 @@ const Home: React.FC = () => {
 
   const goToProductDetails = () => {
     ionRouter.push('/product-details', 'forward');
+  };
+
+  const openProductForm = () => {
+    setProductDraft(emptyCatalogProduct());
+    setProductFormError('');
+    setProductModalOpen(true);
+  };
+
+  const saveProduct = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!productDraft.image) {
+      setProductFormError('Choose an image for your product or service.');
+      return;
+    }
+
+    const price = Number(productDraft.price);
+    if (!Number.isFinite(price) || price < 0) {
+      setProductFormError('Enter a valid price.');
+      return;
+    }
+
+    setSavingProduct(true);
+    setProductFormError('');
+    try {
+      let catalog = await getWhatsAppCatalog();
+      const categoryId = businessCategoryId ? String(businessCategoryId) : '';
+      if (!catalog) {
+        catalog = await createWhatsAppCatalog(
+          `${businessCategory || firstName + "'s"} Catalog`,
+          categoryId,
+          businessCategory
+        );
+      }
+      if (!catalog?.id) {
+        throw new Error('The catalog could not be prepared. Please try again.');
+      }
+
+      const result = await createCatalogProduct({
+        ...productDraft,
+        catalogId: String(catalog.id),
+        businessCategoryId: categoryId,
+        businessCategory,
+        price: String(price),
+      });
+      if (result?.success === false) {
+        throw new Error(result.message || 'Could not save this product or service.');
+      }
+
+      setProductModalOpen(false);
+      setProductDraft(emptyCatalogProduct());
+      setProductToast('Product or service added to your catalog.');
+    } catch (error) {
+      setProductFormError(
+        error instanceof Error ? error.message : 'Could not save this product or service. Please try again.'
+      );
+    } finally {
+      setSavingProduct(false);
+    }
   };
 
   const goToProfile = () => {
@@ -668,6 +754,17 @@ const Home: React.FC = () => {
                 <IonIcon icon={arrowForwardOutline} />
               </span>
             </button>
+
+            <button type="button" className="quick-card" onClick={openProductForm}>
+              <span className="quick-icon quick-icon-green">
+                <IonIcon icon={cubeOutline} />
+              </span>
+              <h4>Add Products &amp; Services</h4>
+              <p>Add an item to your business catalog</p>
+              <span className="quick-arrow quick-arrow-green">
+                <IonIcon icon={arrowForwardOutline} />
+              </span>
+            </button>
           </section>
 
           {/* Secondary links */}
@@ -865,7 +962,142 @@ const Home: React.FC = () => {
       {/* Bottom tabs */}
       <BottomTabBar />
 
+      <IonModal
+        isOpen={productModalOpen}
+        onDidDismiss={() => setProductModalOpen(false)}
+        className="home-product-modal"
+      >
+        <div className="home-product-modal-content">
+          <header className="home-product-modal-header">
+            <div>
+              <p className="dashboard-kicker">YOUR CATALOG</p>
+              <h2>Add a product or service</h2>
+            </div>
+            <button
+              type="button"
+              className="home-product-close"
+              onClick={() => setProductModalOpen(false)}
+              aria-label="Close form"
+            >
+              ×
+            </button>
+          </header>
+
+          <form id="home-product-form" className="home-product-form" onSubmit={(event) => void saveProduct(event)}>
+            <label className="home-product-image-picker">
+              {productDraft.image ? (
+                <>
+                  <IonIcon icon={imageOutline} />
+                  <span>{productDraft.image.name}</span>
+                  <small>Image selected</small>
+                </>
+              ) : (
+                <>
+                  <IonIcon icon={imageOutline} />
+                  <span>Add product or service image</span>
+                  <small>JPG, PNG or WEBP</small>
+                </>
+              )}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                aria-label="Product or service image"
+                onChange={(event) => setProductDraft((draft) => ({
+                  ...draft,
+                  image: event.target.files?.[0] ?? null,
+                }))}
+              />
+            </label>
+
+            <label>
+              Product or service name
+              <input
+                required
+                maxLength={150}
+                value={productDraft.name}
+                onChange={(event) => setProductDraft((draft) => ({ ...draft, name: event.target.value }))}
+                placeholder="e.g. Consultation or item name"
+              />
+            </label>
+            <label>
+              Description
+              <textarea
+                rows={3}
+                maxLength={1000}
+                value={productDraft.description}
+                onChange={(event) => setProductDraft((draft) => ({ ...draft, description: event.target.value }))}
+                placeholder="Describe what you offer"
+              />
+            </label>
+            <div className="home-product-form-grid">
+              <label>
+                Price
+                <input
+                  required
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={productDraft.price}
+                  onChange={(event) => setProductDraft((draft) => ({ ...draft, price: event.target.value }))}
+                  placeholder="0.00"
+                />
+              </label>
+              <label>
+                Currency
+                <select
+                  value={productDraft.currency}
+                  onChange={(event) => setProductDraft((draft) => ({ ...draft, currency: event.target.value }))}
+                >
+                  <option value="INR">INR</option>
+                  <option value="USD">USD</option>
+                  <option value="GBP">GBP</option>
+                  <option value="EUR">EUR</option>
+                </select>
+              </label>
+            </div>
+            <label>
+              SKU <span className="home-product-optional">(optional)</span>
+              <input
+                maxLength={80}
+                value={productDraft.sku}
+                onChange={(event) => setProductDraft((draft) => ({ ...draft, sku: event.target.value }))}
+                placeholder="Optional SKU"
+              />
+            </label>
+            <label>
+              Availability
+              <select
+                value={productDraft.availability}
+                onChange={(event) => setProductDraft((draft) => ({
+                  ...draft,
+                  availability: event.target.value as ProductAvailability,
+                }))}
+              >
+                <option value="in_stock">In stock</option>
+                <option value="out_of_stock">Out of stock</option>
+                <option value="preorder">Pre-order</option>
+              </select>
+            </label>
+            {productFormError && <p className="home-product-form-error" role="alert">{productFormError}</p>}
+          </form>
+          <footer className="home-product-savebar">
+            <button form="home-product-form" type="submit" disabled={savingProduct}>
+              {savingProduct ? <IonSpinner name="crescent" /> : null}
+              {savingProduct ? 'Saving...' : 'Save to catalog'}
+            </button>
+          </footer>
+        </div>
+      </IonModal>
+
       {/* Feedback */}
+      <IonToast
+        isOpen={Boolean(productToast)}
+        message={productToast}
+        duration={3000}
+        position="top"
+        color="success"
+        onDidDismiss={() => setProductToast('')}
+      />
       <IonToast
         isOpen={Boolean(success)}
         message={success ?? ''}
