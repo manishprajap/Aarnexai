@@ -362,8 +362,6 @@ const Home: React.FC = () => {
         throw new Error(response?.error || 'Marketing calendar response is incomplete.');
       }
       setCalendarDays(response.days);
-      const today = getLocalDateKey(new Date());
-      if (response.days.some((day) => day.date === today)) setCalendarSelectedDate(today);
     } catch (error: unknown) {
       console.error('Could not load marketing calendar:', error);
       setCalendarError(error instanceof Error ? error.message : 'Could not load the marketing calendar.');
@@ -417,7 +415,6 @@ const Home: React.FC = () => {
   useEffect(() => {
     void loadPlan();
     void loadMarketingCalendar();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
   const handleGeneratePromptPlan = async () => {
