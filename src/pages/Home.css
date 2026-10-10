@@ -1605,6 +1605,127 @@ ion-modal.connect-sheet ion-content.cs-content {
   font-weight: 750;
 }
 
+.calendar-post-analytics {
+  display: grid;
+  gap: 10px;
+  margin: 2px 0 14px;
+}
+
+.calendar-post-analytics > h3 {
+  margin: 0;
+  color: #18324c;
+  font-size: 14px;
+}
+
+.calendar-analytics-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  color: #52677d;
+  font-size: 12px;
+}
+
+.calendar-analytics-error,
+.calendar-analytics-empty {
+  margin: 0;
+  padding: 12px;
+  border-radius: 10px;
+  background: #f5f8fb;
+  color: #63758a;
+  font-size: 12px;
+}
+
+.calendar-analytics-error {
+  color: #b42318;
+}
+
+.calendar-analytics-banner {
+  display: grid;
+  gap: 9px;
+  padding: 10px;
+  border: 1px solid #e2eaf2;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.calendar-analytics-banner > img {
+  width: 100%;
+  max-height: 180px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.calendar-platform-post {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 9px;
+  background: #f7f9fc;
+}
+
+.calendar-platform-post-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.calendar-platform-post-heading > strong {
+  color: #18324c;
+  font-size: 12px;
+  text-transform: capitalize;
+}
+
+.calendar-platform-post-heading > a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #0f6fec;
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.calendar-platform-post > time {
+  color: #748398;
+  font-size: 10px;
+}
+
+.calendar-platform-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+  gap: 7px;
+}
+
+.calendar-platform-metrics > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 7px;
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.calendar-platform-metrics strong {
+  color: #18324c;
+  font-size: 12px;
+}
+
+.calendar-platform-metrics span {
+  overflow-wrap: anywhere;
+  color: #748398;
+  font-size: 9px;
+  text-transform: capitalize;
+}
+
+.calendar-platform-note {
+  margin: 0;
+  color: #748398;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
 .calendar-no-day {
   padding: 22px 12px;
   color: #718398;

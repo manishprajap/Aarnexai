@@ -93,6 +93,27 @@ type MarketingCalendarDay = {
     caption: string | null;
     posted: boolean;
   } | null;
+  publishedBanners?: Array<{
+    id: number;
+    imageUrl: string;
+    caption: string | null;
+    theme: string | null;
+    platforms: string[];
+  }>;
+};
+
+type CalendarPostAnalytics = {
+  bannerId: number;
+  theme?: string | null;
+  caption?: string | null;
+  imageUrl?: string | null;
+  publications: Array<{
+    id: number;
+    platform: string;
+    permalink: string | null;
+    publishedAt: string;
+    metrics?: Record<string, unknown>;
+  }>;
 };
 
 type MarketingCalendarResponse = {
@@ -187,6 +208,9 @@ const Home: React.FC = () => {
   const [calendarModalOpen, setCalendarModalOpen] = useState(false);
   const [generatingCalendarDay, setGeneratingCalendarDay] = useState<number | null>(null);
   const [calendarActionError, setCalendarActionError] = useState('');
+  const [calendarAnalytics, setCalendarAnalytics] = useState<CalendarPostAnalytics[]>([]);
+  const [calendarAnalyticsLoading, setCalendarAnalyticsLoading] = useState(false);
+  const [calendarAnalyticsError, setCalendarAnalyticsError] = useState('');
   const [inspirationHidden, setInspirationHidden] = useState(() => {
     if (!user?.id) return false;
     const dismissedAt = Number(localStorage.getItem(`dashboard-inspiration-dismissed:${user.id}`));
@@ -229,7 +253,7 @@ const Home: React.FC = () => {
     setLoadingHomeContent(true);
     setHomeContentError('');
     try {
-      const response = await apiGet<unknown>('/admin/home-content');
+      const response = await apiGet<unknown>('/home-content');
       setHomeContent(normalizeHomeContent(response));
     } catch (error) {
       console.error('Could not load dashboard home content:', error);
@@ -283,6 +307,45 @@ const Home: React.FC = () => {
       : getLocalDateKey(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), dayNumber));
   });
   const todayDateKey = getLocalDateKey(new Date());
+
+  useEffect(() => {
+    if (!calendarModalOpen || !selectedCalendarDay?.banner?.posted) {
+      setCalendarAnalytics([]);
+      setCalendarAnalyticsError('');
+      setCalendarAnalyticsLoading(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setCalendarAnalytics([]);
+    setCalendarAnalyticsError('');
+    setCalendarAnalyticsLoading(true);
+    apiGet<{
+      success: boolean;
+      banners?: CalendarPostAnalytics[];
+      message?: string;
+    }>(`/banners/analytics?date=${encodeURIComponent(calendarSelectedDate)}`)
+      .then((response) => {
+        if (!response?.success || !Array.isArray(response.banners)) {
+          throw new Error(response?.message || 'Could not load post analytics.');
+        }
+        if (!cancelled) setCalendarAnalytics(response.banners);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) {
+          setCalendarAnalyticsError(
+            error instanceof Error ? error.message : 'Could not load post analytics.',
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCalendarAnalyticsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [calendarModalOpen, calendarSelectedDate, selectedCalendarDay?.banner?.posted]);
 
   const adSlides = homeContent.filter((item) => item.contentType === 'banner');
   const latestNews = homeContent.filter((item) => item.contentType === 'news');
@@ -757,7 +820,7 @@ const Home: React.FC = () => {
             </section>
           )}
 
-          {!inspirationHidden && (
+          {!inspirationHidden && (loadingHomeContent || homeContentError || homeContent.length > 0) && (
           <section className="dashboard-inspiration">
             <div className="dashboard-inspiration-heading">
               <div>
@@ -890,9 +953,7 @@ const Home: React.FC = () => {
                   <span>{String(activeAdSlide + 1).padStart(2, '0')} / {String(adSlides.length).padStart(2, '0')}</span>
                 </div>
               </section>
-            ) : (
-              <p className="home-content-empty">No active banners are available.</p>
-            )}
+            ) : null}
           </section>
           )}
 
@@ -1259,8 +1320,63 @@ const Home: React.FC = () => {
                             )}
                             {selectedCalendarDay.caption && <p><strong>Description</strong>{selectedCalendarDay.caption}</p>}
                             {selectedCalendarDay.hashtags && <p><strong>Hashtags</strong>{selectedCalendarDay.hashtags}</p>}
-                            {selectedCalendarDay.cta && <p><strong>Call to action</strong>{selectedCalendarDay.cta}</p>}
+                            {selectedCalendarDay.cta && <p><strong>Suggested call to action</strong>{selectedCalendarDay.cta}</p>}
                           </div>
+
+                          {selectedCalendarDay.banner?.posted && (
+                            <section className="calendar-post-analytics" aria-label="Published post analytics">
+                              <h3>Published on social platforms</h3>
+                              {calendarAnalyticsLoading ? (
+                                <div className="calendar-analytics-loading" role="status">
+                                  <IonSpinner name="crescent" />
+                                  <span>Loading post analytics…</span>
+                                </div>
+                              ) : calendarAnalyticsError ? (
+                                <p className="calendar-analytics-error" role="alert">{calendarAnalyticsError}</p>
+                              ) : calendarAnalytics.length === 0 ? (
+                                <p className="calendar-analytics-empty">No publication details are available for this date.</p>
+                              ) : calendarAnalytics.map((banner) => (
+                                <div className="calendar-analytics-banner" key={banner.bannerId}>
+                                  {calendarAnalytics.length > 1 && banner.imageUrl && (
+                                    <img src={banner.imageUrl} alt={banner.theme || banner.caption || 'Published banner'} />
+                                  )}
+                                  {banner.publications.map((publication) => {
+                                    const metricEntries = Object.entries(publication.metrics ?? {})
+                                      .filter(([, value]) => typeof value === 'number' && Number.isFinite(value));
+                                    const notes = Object.entries(publication.metrics ?? {})
+                                      .filter(([, value]) => typeof value === 'string' && value.trim())
+                                      .map(([key, value]) => `${key.replaceAll('_', ' ')}: ${value}`);
+                                    return (
+                                      <article className="calendar-platform-post" key={`${banner.bannerId}-${publication.id}`}>
+                                        <div className="calendar-platform-post-heading">
+                                          <strong>{publication.platform.replaceAll('_', ' ')}</strong>
+                                          {publication.permalink && /^https?:\/\//i.test(publication.permalink) && (
+                                            <a href={publication.permalink} target="_blank" rel="noopener noreferrer">
+                                              Learn more <IonIcon icon={arrowForwardOutline} />
+                                            </a>
+                                          )}
+                                        </div>
+                                        <time dateTime={publication.publishedAt}>
+                                          {new Date(publication.publishedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                                        </time>
+                                        {metricEntries.length > 0 && (
+                                          <div className="calendar-platform-metrics">
+                                            {metricEntries.map(([label, value]) => (
+                                              <div key={label}>
+                                                <strong>{new Intl.NumberFormat().format(Number(value))}</strong>
+                                                <span>{label.replaceAll('_', ' ')}</span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                        {notes.map((note) => <p className="calendar-platform-note" key={note}>{note}</p>)}
+                                      </article>
+                                    );
+                                  })}
+                                </div>
+                              ))}
+                            </section>
+                          )}
 
                           {selectedCalendarDay.banner && (
                             selectedCalendarDay.banner.posted ? (
@@ -1478,6 +1594,47 @@ const Home: React.FC = () => {
 
 export default Home;
 
-function normalizeHomeContent(response: unknown): import("react").SetStateAction<HomeContentItem[]> {
-  throw new Error('Function not implemented.');
+function normalizeHomeContent(response: unknown): HomeContentItem[] {
+  if (!response || typeof response !== 'object' || !('data' in response) || !Array.isArray(response.data)) {
+    throw new Error('The home content response is invalid.');
+  }
+
+  return response.data.flatMap((item): HomeContentItem[] => {
+    if (!item || typeof item !== 'object') return [];
+
+    const row = item as Record<string, unknown>;
+    const contentType = row.contentType ?? row.content_type;
+    const mediaType = row.mediaType ?? row.media_type;
+    const id = Number(row.id);
+    const title = row.title;
+
+    if (
+      !Number.isInteger(id)
+      || (contentType !== 'banner' && contentType !== 'news')
+      || typeof title !== 'string'
+    ) return [];
+
+    return [{
+      id,
+      contentType,
+      title,
+      description: typeof row.description === 'string' ? row.description : '',
+      mediaUrl: typeof (row.mediaUrl ?? row.media_url) === 'string'
+        ? String(row.mediaUrl ?? row.media_url)
+        : null,
+      mediaType: mediaType === 'image' || mediaType === 'video' || mediaType === 'text'
+        ? mediaType
+        : 'none',
+      buttonText: typeof (row.buttonText ?? row.button_text) === 'string'
+        ? String(row.buttonText ?? row.button_text)
+        : null,
+      buttonUrl: typeof (row.buttonUrl ?? row.button_url) === 'string'
+        ? String(row.buttonUrl ?? row.button_url)
+        : null,
+      newsUrl: typeof (row.newsUrl ?? row.news_url) === 'string'
+        ? String(row.newsUrl ?? row.news_url)
+        : null,
+      displayOrder: Number(row.displayOrder ?? row.display_order) || 0,
+    }];
+  });
 }
