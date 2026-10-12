@@ -197,6 +197,21 @@ const getLocalDateKey = (date: Date): string => {
   return `${year}-${month}-${day}`;
 };
 
+function getRandomPreviousBannerImage(
+  days: MarketingCalendarDay[],
+  selectedDate: string,
+): string {
+  const images = days
+    .filter((day) => day.date !== selectedDate)
+    .flatMap((day) => [
+      day.banner?.imageUrl,
+      ...(day.publishedBanners ?? []).map((banner) => banner.imageUrl),
+    ])
+    .filter((imageUrl): imageUrl is string => Boolean(imageUrl));
+
+  return images.length ? images[Math.floor(Math.random() * images.length)] : '';
+}
+
 const adSlides = [
   {
     type: 'image',
@@ -242,6 +257,7 @@ const Home: React.FC = () => {
   const [calendarError, setCalendarError] = useState('');
   const [calendarMonth, setCalendarMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [calendarSelectedDate, setCalendarSelectedDate] = useState(() => getLocalDateKey(new Date()));
+  const [calendarPreviewImage, setCalendarPreviewImage] = useState('');
   const [calendarModalOpen, setCalendarModalOpen] = useState(false);
   const [generatingCalendarDay, setGeneratingCalendarDay] = useState<number | null>(null);
   const [calendarActionError, setCalendarActionError] = useState('');
@@ -330,6 +346,7 @@ const Home: React.FC = () => {
   const calendarBannerImage = selectedPublishedImage
     || selectedCalendarDay?.banner?.imageUrl
     || calendarAnalytics.find((banner) => banner.imageUrl)?.imageUrl
+    || calendarPreviewImage
     || '';
   const calendarFirstWeekday = new Date(
     calendarMonth.getFullYear(),
@@ -1284,6 +1301,7 @@ const Home: React.FC = () => {
                               aria-label={`${new Date(`${date}T00:00:00`).toLocaleDateString()}${isToday ? ', today' : ''}${day ? ', campaign planned' : ''}${day?.banner?.posted ? ', posted' : ''}`}
                               onClick={() => {
                                 setCalendarSelectedDate(date);
+                                setCalendarPreviewImage(getRandomPreviousBannerImage(calendarDays, date));
                                 setCalendarActionError('');
                                 setCalendarModalOpen(true);
                                 void loadMarketingCalendar();

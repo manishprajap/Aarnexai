@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { IonIcon, IonSpinner } from '@ionic/react';
 import {
-  locationOutline,
   logoFacebook,
   logoGoogle,
   logoInstagram,
@@ -143,12 +142,6 @@ const DashboardAnalyticsCharts = () => {
       return `${PLATFORM_DETAILS[platform].color} ${start}% ${pieOffset}%`;
     })
     .join(', ');
-  const location = [
-    data?.location?.city,
-    data?.location?.state,
-    data?.location?.country,
-  ].filter((part): part is string => Boolean(part?.trim())).join(', ');
-
   const displayMode = data?.mode ?? mode;
   const displayYear = data?.year ?? year;
   const displayMonth = data?.month ?? month;
@@ -239,16 +232,16 @@ const DashboardAnalyticsCharts = () => {
       )}
 
       {data && (
-        <article className="dashboard-chart-card">
-          <div className="dashboard-chart-card-heading">
-            <div>
-              <h3>Published posts</h3>
-              <p>{periodLabel} · {numberFormat.format(totalPosts)} posts across all platforms</p>
+        <div className="dashboard-chart-grid">
+          <article className="dashboard-chart-card">
+            <div className="dashboard-chart-card-heading">
+              <div>
+                <h3>Published posts</h3>
+                <p>{periodLabel} · {numberFormat.format(totalPosts)} posts across all platforms</p>
+              </div>
             </div>
-          </div>
 
-          {totalPosts > 0 ? (
-            <div className="dashboard-chart-visuals">
+            {totalPosts > 0 ? (
               <div
                 className={`dashboard-chart-bars ${displayMode === 'month' ? 'is-daily' : 'is-monthly'}`}
                 role="img"
@@ -287,6 +280,29 @@ const DashboardAnalyticsCharts = () => {
                   );
                 })}
               </div>
+            ) : (
+              <p className="dashboard-chart-empty">No published posts in this period.</p>
+            )}
+
+            <div className="dashboard-chart-legend" aria-label="Platforms">
+              {platformTotals.map(({ platform, count }) => (
+                <span key={platform}>
+                  <i style={{ background: PLATFORM_DETAILS[platform].color }} />
+                  {PLATFORM_DETAILS[platform].label}
+                  <strong>{numberFormat.format(count)}</strong>
+                </span>
+              ))}
+            </div>
+          </article>
+
+          <article className="dashboard-chart-card dashboard-chart-platform-card">
+            <div className="dashboard-chart-card-heading">
+              <div>
+                <h3>Platform mix</h3>
+                <p>{periodLabel} · {numberFormat.format(totalPosts)} published posts</p>
+              </div>
+            </div>
+            {totalPosts > 0 ? (
               <div className="dashboard-chart-pie-wrap">
                 <div
                   className="dashboard-chart-pie"
@@ -299,37 +315,21 @@ const DashboardAnalyticsCharts = () => {
                     <span>posts</span>
                   </div>
                 </div>
-                <span>Platform mix</span>
+                <div className="dashboard-chart-legend" aria-label="Platforms">
+                  {platformTotals.map(({ platform, count }) => (
+                    <span key={platform}>
+                      <i style={{ background: PLATFORM_DETAILS[platform].color }} />
+                      {PLATFORM_DETAILS[platform].label}
+                      <strong>{numberFormat.format(count)}</strong>
+                    </span>
+                  ))}
+                </div>
               </div>
-            </div>
-          ) : (
-            <p className="dashboard-chart-empty">No published posts in this period.</p>
-          )}
-
-          <div className="dashboard-chart-legend" aria-label="Platforms">
-            {platformTotals.map(({ platform, count }) => (
-              <span key={platform}>
-                <i style={{ background: PLATFORM_DETAILS[platform].color }} />
-                {PLATFORM_DETAILS[platform].label}
-                <strong>{numberFormat.format(count)}</strong>
-              </span>
-            ))}
-          </div>
-
-          {/* {location && (
-            <div className="dashboard-chart-location">
-              <IonIcon icon={locationOutline} aria-hidden="true" />
-              <span>{location}</span>
-              <a
-                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Maps
-              </a>
-            </div>
-          )} */}
-        </article>
+            ) : (
+              <p className="dashboard-chart-empty">No published posts in this period.</p>
+            )}
+          </article>
+        </div>
       )}
     </section>
   );

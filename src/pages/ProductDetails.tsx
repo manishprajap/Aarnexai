@@ -160,6 +160,7 @@ const ProductDetailsPage: React.FC = () => {
 
 
   const heroUrl = product?.cleanImageUrl || product?.originalImageUrl || null;
+  const hasPrice = Boolean(product?.price?.trim());
 
   const formatBannerDate = (theme: string | null) => {
     if (!theme) return '';
@@ -257,7 +258,7 @@ const ProductDetailsPage: React.FC = () => {
                 <img
                   src={heroUrl}
                   alt={product.productName || 'Product'}
-                  className="h-64 w-full object-cover"
+                  className="h-64 w-full object-contain"
                 />
               ) : (
                 <div className="flex h-64 w-full items-center justify-center text-sm text-gray-400">
@@ -285,7 +286,7 @@ const ProductDetailsPage: React.FC = () => {
             <div className="px-4 pt-5">
               {/* Title + brand */}
 
-              <h2 className="m-0 text-xl font-bold text-gray-900">
+              <h2 className="m-0 break-words text-xl font-bold text-gray-900">
                 {product.productName || 'Untitled product'}
               </h2>
 
@@ -308,7 +309,7 @@ const ProductDetailsPage: React.FC = () => {
               {/* Price */}
 
               <div className="mt-4">
-                {product.price ? (
+                {hasPrice ? (
                   <span className="text-2xl font-bold text-indigo-600">
                     {product.price}
                   </span>
@@ -444,7 +445,7 @@ const ProductDetailsPage: React.FC = () => {
                     Description
                   </h3>
 
-                  <p className="m-0 text-sm leading-6 text-gray-600">
+                  <p className="m-0 whitespace-pre-wrap break-words text-sm leading-6 text-gray-600">
                     {product.description}
                   </p>
                 </div>
@@ -458,7 +459,7 @@ const ProductDetailsPage: React.FC = () => {
                     Meta Description
                   </h3>
 
-                  <p className="m-0 text-sm leading-6 text-gray-500">
+                  <p className="m-0 whitespace-pre-wrap break-words text-sm leading-6 text-gray-500">
                     {product.metaDescription}
                   </p>
                 </div>
