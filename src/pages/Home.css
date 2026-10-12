@@ -1553,12 +1553,30 @@ ion-modal.connect-sheet ion-content.cs-content {
 }
 
 .calendar-banner-preview {
+  appearance: none;
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
   position: relative;
   overflow: hidden;
   min-height: 170px;
   aspect-ratio: 16 / 10;
   border-radius: 13px;
   background: linear-gradient(135deg, #dbeafe, #e9e2f5);
+  cursor: zoom-in;
+}
+
+.calendar-banner-preview:focus-visible {
+  outline: 3px solid var(--ion-color-primary);
+  outline-offset: 3px;
+}
+
+.calendar-banner-preview:disabled {
+  cursor: default;
 }
 
 .calendar-banner-preview > img {
@@ -1583,52 +1601,55 @@ ion-modal.connect-sheet ion-content.cs-content {
   font-size: 42px;
 }
 
-.calendar-politician-photo {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-top: 12px;
-  padding: 12px;
-  border: 1px solid #dce8f5;
-  border-radius: 12px;
-  background: #f7faff;
-}
-
-.calendar-politician-photo > div {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
-}
-
-.calendar-politician-photo strong {
-  color: #18324c;
-  font-size: 12px;
-}
-
-.calendar-politician-photo span {
-  color: #6b7e92;
-  font-size: 10px;
-  overflow-wrap: anywhere;
-}
-
-.calendar-politician-photo ion-button {
-  flex: none;
-  --border-radius: 9px;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.calendar-generate-overlay {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
-}
-
-.calendar-generate-overlay ion-button {
+.calendar-generate-button {
+  margin: 12px 0 0;
   --border-radius: 12px;
   font-weight: 700;
+}
+
+.calendar-image-preview-modal {
+  --width: 100%;
+  --height: 100%;
+  --border-radius: 0;
+  --backdrop-opacity: 0.92;
+}
+
+.calendar-image-preview-modal ion-content {
+  --background: #080b10;
+}
+
+.calendar-image-preview-content {
+  position: relative;
+  display: grid;
+  width: 100%;
+  min-height: 100%;
+  place-items: center;
+  padding: 24px 12px;
+  box-sizing: border-box;
+}
+
+.calendar-image-preview-content > img {
+  display: block;
+  width: 100%;
+  max-width: 1100px;
+  max-height: calc(100dvh - 48px);
+  object-fit: contain;
+}
+
+.calendar-image-preview-close {
+  position: fixed;
+  z-index: 2;
+  top: max(16px, env(safe-area-inset-top));
+  right: 16px;
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 22px;
 }
 
 .calendar-day-details {

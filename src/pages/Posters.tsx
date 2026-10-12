@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   IonPage,
   IonHeader,
@@ -424,6 +424,7 @@ async function publishBanner(
 const Posters: React.FC = () => {
   const ionRouter = useIonRouter();
   const { hasSubscription } = useAuth();
+  const postModalRef = useRef<HTMLIonModalElement | null>(null);
   const [banners, setBanners] = useState<BannerItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -488,6 +489,14 @@ const Posters: React.FC = () => {
   const [selectedInstagramTargets, setSelectedInstagramTargets] = useState<
     string[]
   >([]);
+
+  const closePostModalAndOpenSubscription = async () => {
+    localStorage.removeItem('pending_banner_publish');
+    await postModalRef.current?.dismiss();
+    setActiveBanner(null);
+    setSelectedPlatforms([]);
+    ionRouter.push('/subscription', 'forward');
+  };
 
   useEffect(() => {
     const load = async () => {
@@ -908,8 +917,7 @@ const Posters: React.FC = () => {
             );
           } catch (error: any) {
             if (error instanceof ApiError && error.data?.code === 'SUBSCRIPTION_REQUIRED') {
-              localStorage.removeItem('pending_banner_publish');
-              ionRouter.push('/subscription', 'forward');
+              await closePostModalAndOpenSubscription();
             } else {
               setError(
                 error?.message ||
@@ -961,7 +969,7 @@ const Posters: React.FC = () => {
     }
 
     if (!hasSubscription) {
-      ionRouter.push('/subscription', 'forward');
+      await closePostModalAndOpenSubscription();
       return;
     }
 
@@ -1155,8 +1163,7 @@ const Posters: React.FC = () => {
       console.error('Connect & Post error:', error);
 
       if (error instanceof ApiError && error.data?.code === 'SUBSCRIPTION_REQUIRED') {
-        localStorage.removeItem('pending_banner_publish');
-        ionRouter.push('/subscription', 'forward');
+        await closePostModalAndOpenSubscription();
         return;
       }
       setError(error?.message || 'Failed to connect or publish banner');
@@ -1553,6 +1560,7 @@ const Posters: React.FC = () => {
             fixed-height wrapper, with the list as the only scrollable
             area, so "Post Now" in the footer is always visible. */}
         <IonModal
+          ref={postModalRef}
           isOpen={!!activeBanner}
           initialBreakpoint={0.75}
           breakpoints={[0, 0.5, 0.75, 0.95]}

@@ -24,7 +24,7 @@ import {
   sparklesOutline,
 } from 'ionicons/icons';
 
-import { apiGet, apiPost } from '../api';
+import { apiGet, apiPost, apiPut } from '../api';
 import { useAuth } from '../context/AuthContext';
 import aarnaLogo from '../assets/aarna-logo.png';
 
@@ -230,6 +230,10 @@ const Upload: React.FC = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1');
+  const [bannerLanguage, setBannerLanguage] = useState<'Hindi' | 'English'>(
+    user?.bannerLanguage === 'Hindi' ? 'Hindi' : 'English',
+  );
+  const [savingBannerLanguage, setSavingBannerLanguage] = useState(false);
 
   const [promptDescription, setPromptDescription] = useState('');
 
@@ -254,6 +258,33 @@ const Upload: React.FC = () => {
   const showMessage = (message: string) => {
     setToastMessage(message);
     setShowToast(true);
+  };
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    void apiGet('/auth/me').then((response) => {
+      if (!cancelled) {
+        setBannerLanguage(response?.user?.bannerLanguage === 'Hindi' ? 'Hindi' : 'English');
+      }
+    }).catch((error) => {
+      console.error('LOAD BANNER LANGUAGE ERROR:', error);
+    });
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  const handleBannerLanguageChange = async (language: 'Hindi' | 'English') => {
+    const previousLanguage = bannerLanguage;
+    setBannerLanguage(language);
+    setSavingBannerLanguage(true);
+    try {
+      await apiPut('/auth/profile', { bannerLanguage: language });
+    } catch (error) {
+      setBannerLanguage(previousLanguage);
+      showMessage(error instanceof Error ? error.message : 'Could not save banner language.');
+    } finally {
+      setSavingBannerLanguage(false);
+    }
   };
 
   const openSavedProducts = async () => {
@@ -483,10 +514,11 @@ const Upload: React.FC = () => {
       showMessage('AI is generating your ad...');
 
       // STEP 2 — analyze product + generate ad (product analyze API)
-      const analyzeResponse: AnalyzeResponse = await apiPost('/product/analyze', {
+      const analyzeResponse: AnalyzeResponse = await apiPost('/products/analyze', {
         productId,
         aspectRatio,
         promptDescription: promptDescription.trim(),
+        bannerLanguage,
       });
 
       if (!analyzeResponse?.success) {
@@ -836,6 +868,31 @@ const Upload: React.FC = () => {
                 </div>
               </div>
             )}
+
+            <div style={{ marginTop: 20 }}>
+              <FieldLabel text="Banner Language" />
+              <select
+                value={bannerLanguage}
+                disabled={savingBannerLanguage || generating}
+                onChange={(event) => void handleBannerLanguageChange(event.target.value === 'Hindi' ? 'Hindi' : 'English')}
+                style={{
+                  width: '100%',
+                  height: 48,
+                  borderRadius: 12,
+                  border: `1px solid ${ui.border}`,
+                  background: ui.white,
+                  padding: '0 14px',
+                  color: ui.text,
+                  fontSize: 14,
+                }}
+              >
+                <option value="Hindi">Hindi</option>
+                <option value="English">English</option>
+              </select>
+              <p style={{ margin: '8px 0 0', color: ui.muted, fontSize: 12 }}>
+                Banner text and greetings will be generated in the selected language.
+              </p>
+            </div>
 
             {/* Aspect ratio */}
             <FieldLabel text="Select Aspect Ratio" />

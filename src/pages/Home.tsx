@@ -259,9 +259,9 @@ const Home: React.FC = () => {
   const [calendarSelectedDate, setCalendarSelectedDate] = useState(() => getLocalDateKey(new Date()));
   const [calendarPreviewImage, setCalendarPreviewImage] = useState('');
   const [calendarModalOpen, setCalendarModalOpen] = useState(false);
+  const [calendarImagePreviewOpen, setCalendarImagePreviewOpen] = useState(false);
   const [generatingCalendarDay, setGeneratingCalendarDay] = useState<number | null>(null);
   const [calendarActionError, setCalendarActionError] = useState('');
-  const [politicianPortrait, setPoliticianPortrait] = useState<File | null>(null);
   const [calendarAnalytics, setCalendarAnalytics] = useState<CalendarPostAnalytics[]>([]);
   const [calendarAnalyticsLoading, setCalendarAnalyticsLoading] = useState(false);
   const [calendarAnalyticsError, setCalendarAnalyticsError] = useState('');
@@ -276,7 +276,6 @@ const Home: React.FC = () => {
   const greetingUserId = useRef<number | null>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
-  const politicianPortraitInputRef = useRef<HTMLInputElement>(null);
 
   const popoverRef = useRef<HTMLIonPopoverElement>(null);
   const themeStyle = useLogoTheme();
@@ -331,10 +330,6 @@ const Home: React.FC = () => {
   const businessCategoryId: number | null = user?.businessCategoryId ?? user?.categoryId ?? null;
   const industryName = String(user?.industry ?? '').trim();
   const businessCity = String(user?.city ?? '').trim();
-  const isPoliticalBusiness = /\bpolitic(?:s|al|ian)?\b|\belection\b|\bpublic representative\b/i.test(
-    `${industryName} ${businessCategory}`,
-  );
-
   const badgeText = businessCategory && businessCity
     ? `${businessCategory} · ${businessCity}`
     : businessCategory || businessCity || 'Your workspace is ready';
@@ -541,21 +536,14 @@ const Home: React.FC = () => {
 
   const handleGenerateCalendarBanner = async (day: MarketingCalendarDay) => {
     if (generatingCalendarDay !== null) return;
-    if (isPoliticalBusiness && !politicianPortrait) {
-      setCalendarActionError("Upload the politician's portrait before generating this banner.");
-      return;
-    }
     setGeneratingCalendarDay(day.day);
     setCalendarActionError('');
     try {
-      const requestBody = new FormData();
-      requestBody.append('day', String(day.day));
-      if (politicianPortrait) requestBody.append('portrait', politicianPortrait);
       const response = await apiPost<{
         success: boolean;
         banner?: { id: number; imageUrl: string };
         error?: string;
-      }>('/marketing-calendar', requestBody);
+      }>('/marketing-calendar', { day: day.day });
       const banner = response?.banner;
       if (!response?.success || !banner?.id || !banner.imageUrl) {
         throw new Error(response?.error || 'Banner generation returned no image.');
@@ -1319,7 +1307,6 @@ const Home: React.FC = () => {
                                 setCalendarSelectedDate(date);
                                 setCalendarPreviewImage(getRandomPreviousBannerImage(calendarDays, date));
                                 setCalendarActionError('');
-                                setPoliticianPortrait(null);
                                 setCalendarModalOpen(true);
                                 void loadMarketingCalendar();
                               }}
@@ -1365,62 +1352,32 @@ const Home: React.FC = () => {
                         <div className="calendar-no-day">No campaign is scheduled for this date.</div>
                       ) : (
                         <>
-                          <div className={`calendar-banner-preview${selectedCalendarDay.banner ? '' : ' is-blurred'}`}>
+                          <button
+                            type="button"
+                            className={`calendar-banner-preview${selectedCalendarDay.banner ? '' : ' is-blurred'}`}
+                            onClick={() => calendarBannerImage && setCalendarImagePreviewOpen(true)}
+                            disabled={!calendarBannerImage}
+                            aria-label="Open full-size campaign banner"
+                          >
                             {calendarBannerImage ? (
                               <img src={calendarBannerImage} alt={`${selectedCalendarDay.theme || 'Campaign'} banner`} />
                             ) : (
                               <div className="calendar-banner-placeholder"><IonIcon icon={imageOutline} /></div>
                             )}
-                            {(!selectedCalendarDay.banner
-                              || (isPoliticalBusiness && !selectedCalendarDay.banner.posted)) && (
-                              <div className="calendar-generate-overlay">
-                                <IonButton
-                                  onClick={() => void handleGenerateCalendarBanner(selectedCalendarDay)}
-                                  disabled={generatingCalendarDay !== null}
-                                >
-                                  {generatingCalendarDay === selectedCalendarDay.day
-                                    ? <><IonSpinner name="crescent" /> Generating…</>
-                                    : selectedCalendarDay.banner ? 'Regenerate with photo' : 'Generate banner'}
-                                </IonButton>
-                              </div>
-                            )}
-                          </div>
+                          </button>
 
-                          {isPoliticalBusiness && !selectedCalendarDay.banner?.posted && (
-                            <div className="calendar-politician-photo">
-                              <input
-                                ref={politicianPortraitInputRef}
-                                type="file"
-                                accept="image/jpeg,image/png,image/webp"
-                                hidden
-                                onChange={(event) => {
-                                  const file = event.target.files?.[0];
-                                  event.target.value = '';
-                                  if (!file) return;
-                                  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-                                    setCalendarActionError('Choose a JPG, PNG or WEBP politician portrait.');
-                                    return;
-                                  }
-                                  if (file.size > 10 * 1024 * 1024) {
-                                    setCalendarActionError('Politician portrait must be 10 MB or smaller.');
-                                    return;
-                                  }
-                                  setCalendarActionError('');
-                                  setPoliticianPortrait(file);
-                                }}
-                              />
-                              <div>
-                                <strong>Politician photo required</strong>
-                                <span>{politicianPortrait?.name || 'The uploaded portrait will appear prominently on the banner.'}</span>
-                              </div>
-                              <IonButton
-                                fill="outline"
-                                size="small"
-                                onClick={() => politicianPortraitInputRef.current?.click()}
-                              >
-                                {politicianPortrait ? 'Change photo' : 'Upload photo'}
-                              </IonButton>
-                            </div>
+                          {!selectedCalendarDay.banner
+                            && !selectedCalendarDay.publishedBanners?.some((banner) => banner.imageUrl) && (
+                            <IonButton
+                              className="calendar-generate-button"
+                              onClick={() => void handleGenerateCalendarBanner(selectedCalendarDay)}
+                              disabled={generatingCalendarDay !== null}
+                              expand="block"
+                            >
+                              {generatingCalendarDay === selectedCalendarDay.day
+                                ? <><IonSpinner name="crescent" /> Generating…</>
+                                : 'Generate banner'}
+                            </IonButton>
                           )}
 
                           {calendarActionError && <p className="calendar-error" role="alert">{calendarActionError}</p>}
@@ -1524,6 +1481,30 @@ const Home: React.FC = () => {
                             )
                           )}
                         </>
+                      )}
+                    </div>
+                  </IonContent>
+                </IonModal>
+                <IonModal
+                  className="calendar-image-preview-modal"
+                  isOpen={calendarImagePreviewOpen}
+                  onDidDismiss={() => setCalendarImagePreviewOpen(false)}
+                >
+                  <IonContent>
+                    <div className="calendar-image-preview-content">
+                      <button
+                        type="button"
+                        className="calendar-image-preview-close"
+                        aria-label="Close full-size banner"
+                        onClick={() => setCalendarImagePreviewOpen(false)}
+                      >
+                        <IonIcon icon={closeOutline} />
+                      </button>
+                      {calendarBannerImage && (
+                        <img
+                          src={calendarBannerImage}
+                          alt={`${selectedCalendarDay?.theme || 'Campaign'} banner full size`}
+                        />
                       )}
                     </div>
                   </IonContent>

@@ -28,6 +28,7 @@ export interface AuthUser {
   city?: string | null;
   website?: string | null;
   language?: string | null;
+  bannerLanguage?: 'Hindi' | 'English' | null;
   logo?: string | null;
 }
 

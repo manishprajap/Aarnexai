@@ -25,7 +25,7 @@ interface Catalog {
 
 interface FormState {
   name: string; email: string; phone: string; businessName: string;
-  country: string; state: string; city: string;
+  country: string; state: string; city: string; address: string; banner_language: 'Hindi' | 'English';
   industry_id: number | null; business_category_id: number | null;
   service_ids: number[]; target_customer_ids: number[];
   marketing_goal: string; automation_mode: 'AUTO' | 'MANUAL'; strategy_id: number | null; custom_prompt: string;
@@ -58,7 +58,8 @@ const Onboarding: React.FC = () => {
   const [step, setStep] = useState(1);
   const [logo, setLogo] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
-  const [politicianPortrait, setPoliticianPortrait] = useState<File | null>(null);
+  const [professionalPhoto, setProfessionalPhoto] = useState<File | null>(null);
+  const [savedProfessionalPhotoUrl, setSavedProfessionalPhotoUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -66,11 +67,11 @@ const Onboarding: React.FC = () => {
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState('');
   const logoInputRef = useRef<HTMLInputElement>(null);
-  const politicianPortraitInputRef = useRef<HTMLInputElement>(null);
+  const professionalPhotoInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState<FormState>({
     name: user?.name || '', email: user?.email || '', phone: user?.mobile || '', businessName: '',
-    country: 'India', state: 'Uttar Pradesh', city: 'Lucknow',
+    country: 'India', state: 'Uttar Pradesh', city: 'Lucknow', address: '', banner_language: 'English',
     industry_id: null, business_category_id: null, service_ids: [], target_customer_ids: [],
     marketing_goal: 'Generate Leads', automation_mode: 'AUTO', strategy_id: null, custom_prompt: '',
   });
@@ -104,11 +105,14 @@ const Onboarding: React.FC = () => {
           country: b.country || p.country,
           state: b.state || p.state,
           city: b.city || p.city,
+          address: b.address || p.address,
+          banner_language: b.bannerLanguage === 'Hindi' ? 'Hindi' : 'English',
           industry_id: b.industryId ?? p.industry_id,
           business_category_id: b.businessCategoryId ?? p.business_category_id,
           automation_mode: b.automationMode === 'MANUAL' ? 'MANUAL' : p.automation_mode,
           custom_prompt: b.customPrompt || p.custom_prompt,
         }));
+        setSavedProfessionalPhotoUrl(b.professionalPhotoUrl || '');
       }
     } catch { /* ignore, form just starts empty */ }
     setCatalogLoading(false);
@@ -120,7 +124,7 @@ const Onboarding: React.FC = () => {
   const categories = useMemo(() => catalog.categories.filter(c => c.industryId === form.industry_id), [catalog, form.industry_id]);
   const selectedIndustryName = catalog.industries.find(i => i.id === form.industry_id)?.name ?? '';
   const selectedCategoryName = categories.find(c => c.id === form.business_category_id)?.name ?? '';
-  const isPoliticalBusiness = /\bpolitic(?:s|al|ian)?\b|\belection\b|\bpublic representative\b/i.test(
+  const isProfessionalBusiness = /\bpolitic(?:s|al|ian)?\b|\belection\b|\bpublic representative\b|\bdoctor\b|\bphysician\b|\bmedical\b|\bhealthcare\b|\bclinic\b|\bchartered accountant\b|\baccountant\b|\bca\b/i.test(
     `${selectedIndustryName} ${selectedCategoryName}`,
   );
   const services = useMemo(() => catalog.services.filter(s => s.businessCategoryId === form.business_category_id), [catalog, form.business_category_id]);
@@ -132,7 +136,7 @@ const Onboarding: React.FC = () => {
     switch (step) {
       case 1: return !!form.name.trim() && !!form.businessName.trim() && emailOk;
       case 2: return !!form.industry_id && !!form.business_category_id
-        && (!isPoliticalBusiness || !!politicianPortrait);
+        && (!isProfessionalBusiness || !!professionalPhoto || !!savedProfessionalPhotoUrl);
       case 3: return form.service_ids.length > 0;
       case 4: return form.target_customer_ids.length > 0;
       default: return form.automation_mode === 'AUTO' || !!form.strategy_id;
@@ -158,20 +162,21 @@ const Onboarding: React.FC = () => {
     r.readAsDataURL(file);
   };
 
-  const pickPoliticianPortrait = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const pickProfessionalPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = '';
     if (!file) return;
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
-      setError('Choose a JPG, PNG or WEBP politician portrait.');
+      setError('Choose a JPG, PNG or WEBP professional photo.');
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
-      setError('Politician portrait must be 10 MB or smaller.');
+      setError('Professional photo must be 10 MB or smaller.');
       return;
     }
     setError('');
-    setPoliticianPortrait(file);
+    setProfessionalPhoto(file);
+    setSavedProfessionalPhotoUrl('');
   };
 
   const takeLogoPhoto = async () => {
@@ -213,6 +218,8 @@ const Onboarding: React.FC = () => {
       payload.append('country', form.country);
       payload.append('state', form.state);
       payload.append('city', form.city);
+      payload.append('address', form.address);
+      payload.append('banner_language', form.banner_language);
       payload.append('industry_id', String(form.industry_id));
       payload.append('business_category_id', String(form.business_category_id));
       payload.append('service_ids', JSON.stringify(form.service_ids));
@@ -224,6 +231,7 @@ const Onboarding: React.FC = () => {
         : '');
       payload.append('custom_prompt', form.custom_prompt);
       if (logoFile) payload.append('logo', logoFile);
+      if (professionalPhoto) payload.append('professional_photo', professionalPhoto);
 
       const response = await apiPost<{ success?: boolean }>('/business', payload);
       if (response?.success === false) {
@@ -234,9 +242,7 @@ const Onboarding: React.FC = () => {
       if (!Array.isArray(savedPlan.items) || savedPlan.items.length !== 30) {
         await apiPost('/prompt-plan/generate', {});
       }
-      const initialBannerData = new FormData();
-      if (politicianPortrait) initialBannerData.append('portrait', politicianPortrait);
-      await apiPost('/business/initial-banner', initialBannerData);
+      await apiPost('/business/initial-banner', {});
 
       // RequireAuth sends completed onboarding directly to the dashboard.
       await refreshStatus();
@@ -345,6 +351,19 @@ const Onboarding: React.FC = () => {
                     <span className="lbl">City</span>
                     <IonInput value={form.city} placeholder="City" onIonInput={e => set('city', String(e.detail.value ?? ''))} />
                   </div>
+                  <div className="field">
+                    <IonIcon icon={locationOutline} className="ico green" />
+                    <span className="lbl">Business Address</span>
+                    <IonInput value={form.address} placeholder="Street, area or landmark" onIonInput={e => set('address', String(e.detail.value ?? ''))} />
+                  </div>
+                  <div className="field">
+                    <IonIcon icon={globeOutline} className="ico blue" />
+                    <span className="lbl">Banner Language *</span>
+                    <IonSelect value={form.banner_language} onIonChange={e => set('banner_language', e.detail.value === 'Hindi' ? 'Hindi' : 'English')}>
+                      <IonSelectOption value="Hindi">Hindi</IonSelectOption>
+                      <IonSelectOption value="English">English</IonSelectOption>
+                    </IonSelect>
+                  </div>
                 </div>
               </>
             )}
@@ -378,21 +397,23 @@ const Onboarding: React.FC = () => {
                   </IonSelect>
                 </div>
                 {form.industry_id && <p className="note">{categories.length} business categories available.</p>}
-                {isPoliticalBusiness && (
-                  <div className="politician-portrait-picker">
-                    <strong>Politician portrait for banners *</strong>
-                    <p>Upload a clear photo. AI will use it as the main portrait in political and festival banners.</p>
+                {isProfessionalBusiness && (
+                  <div className="professional-photo-picker">
+                    <strong>Professional photo for banners *</strong>
+                    <p>For Doctor, CA and Politician categories, add a clear portrait. It will be reused in your generated banners.</p>
                     <input
-                      ref={politicianPortraitInputRef}
+                      ref={professionalPhotoInputRef}
                       type="file"
                       accept="image/jpeg,image/png,image/webp"
                       hidden
-                      onChange={pickPoliticianPortrait}
+                      onChange={pickProfessionalPhoto}
                     />
-                    <button type="button" onClick={() => politicianPortraitInputRef.current?.click()}>
-                      {politicianPortrait ? 'Change portrait' : 'Choose portrait photo'}
+                    <button type="button" onClick={() => professionalPhotoInputRef.current?.click()}>
+                      {professionalPhoto || savedProfessionalPhotoUrl ? 'Change photo' : 'Choose professional photo'}
                     </button>
-                    {politicianPortrait && <span>{politicianPortrait.name}</span>}
+                    {professionalPhoto
+                      ? <span>{professionalPhoto.name}</span>
+                      : savedProfessionalPhotoUrl && <span>Saved photo will be used in banners.</span>}
                   </div>
                 )}
               </div>
