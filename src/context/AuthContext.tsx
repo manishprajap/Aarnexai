@@ -20,6 +20,11 @@ export interface AuthUser {
   // Business Setup details (returned by /auth/me)
   category?: string | null;
   categoryId?: number | null;
+  businessCategoryName?: string | null;
+  businessCategoryId?: number | null;
+  industry?: string | null;
+  industryName?: string | null;
+  industryId?: number | null;
   city?: string | null;
   website?: string | null;
   language?: string | null;

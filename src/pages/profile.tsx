@@ -39,7 +39,8 @@ const Profile: React.FC = () => {
   const [success, setSuccess] = useState('');
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [businessDetails, setBusinessDetails] = useState({
-    category: user?.category ?? '',
+    industry: user?.industryName ?? user?.industry ?? '',
+    category: user?.businessCategoryName ?? user?.category ?? '',
     city: user?.city ?? '',
     website: user?.website ?? '',
   });
@@ -51,13 +52,17 @@ const Profile: React.FC = () => {
       try {
         const response = await apiGet<{ user?: {
           category?: string | null;
+          businessCategoryName?: string | null;
+          industry?: string | null;
+          industryName?: string | null;
           city?: string | null;
           website?: string | null;
         } }>('/auth/me');
         if (cancelled || !response.user) return;
 
         setBusinessDetails({
-          category: response.user.category ?? '',
+          industry: response.user.industryName ?? response.user.industry ?? '',
+          category: response.user.businessCategoryName ?? response.user.category ?? '',
           city: response.user.city ?? '',
           website: response.user.website ?? '',
         });
@@ -249,7 +254,11 @@ const Profile: React.FC = () => {
 
             <div className="profile-detail-grid">
               <div className="detail-item">
-                <span className="detail-label"><IonIcon icon={businessOutline} /> Category</span>
+                <span className="detail-label"><IonIcon icon={businessOutline} /> Industry</span>
+                <strong>{displayValue(businessDetails.industry)}</strong>
+              </div>
+              <div className="detail-item">
+                <span className="detail-label"><IonIcon icon={businessOutline} /> Business Category</span>
                 <strong>{displayValue(businessDetails.category)}</strong>
               </div>
               <div className="detail-item">

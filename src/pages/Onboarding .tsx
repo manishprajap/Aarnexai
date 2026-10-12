@@ -58,6 +58,7 @@ const Onboarding: React.FC = () => {
   const [step, setStep] = useState(1);
   const [logo, setLogo] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [politicianPortrait, setPoliticianPortrait] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -65,6 +66,7 @@ const Onboarding: React.FC = () => {
   const [catalogLoading, setCatalogLoading] = useState(true);
   const [catalogError, setCatalogError] = useState('');
   const logoInputRef = useRef<HTMLInputElement>(null);
+  const politicianPortraitInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState<FormState>({
     name: user?.name || '', email: user?.email || '', phone: user?.mobile || '', businessName: '',
@@ -116,6 +118,11 @@ const Onboarding: React.FC = () => {
 
   /* ------------------------------ derived lists ------------------------------ */
   const categories = useMemo(() => catalog.categories.filter(c => c.industryId === form.industry_id), [catalog, form.industry_id]);
+  const selectedIndustryName = catalog.industries.find(i => i.id === form.industry_id)?.name ?? '';
+  const selectedCategoryName = categories.find(c => c.id === form.business_category_id)?.name ?? '';
+  const isPoliticalBusiness = /\bpolitic(?:s|al|ian)?\b|\belection\b|\bpublic representative\b/i.test(
+    `${selectedIndustryName} ${selectedCategoryName}`,
+  );
   const services = useMemo(() => catalog.services.filter(s => s.businessCategoryId === form.business_category_id), [catalog, form.business_category_id]);
   const targets = useMemo(() => catalog.targets.filter(t => t.businessCategoryId === form.business_category_id), [catalog, form.business_category_id]);
 
@@ -124,7 +131,8 @@ const Onboarding: React.FC = () => {
   const valid = (() => {
     switch (step) {
       case 1: return !!form.name.trim() && !!form.businessName.trim() && emailOk;
-      case 2: return !!form.industry_id && !!form.business_category_id;
+      case 2: return !!form.industry_id && !!form.business_category_id
+        && (!isPoliticalBusiness || !!politicianPortrait);
       case 3: return form.service_ids.length > 0;
       case 4: return form.target_customer_ids.length > 0;
       default: return form.automation_mode === 'AUTO' || !!form.strategy_id;
@@ -148,6 +156,22 @@ const Onboarding: React.FC = () => {
     const r = new FileReader();
     r.onload = () => setLogo(r.result as string);
     r.readAsDataURL(file);
+  };
+
+  const pickPoliticianPortrait = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setError('Choose a JPG, PNG or WEBP politician portrait.');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setError('Politician portrait must be 10 MB or smaller.');
+      return;
+    }
+    setError('');
+    setPoliticianPortrait(file);
   };
 
   const takeLogoPhoto = async () => {
@@ -210,7 +234,9 @@ const Onboarding: React.FC = () => {
       if (!Array.isArray(savedPlan.items) || savedPlan.items.length !== 30) {
         await apiPost('/prompt-plan/generate', {});
       }
-      await apiPost('/business/initial-banner', {});
+      const initialBannerData = new FormData();
+      if (politicianPortrait) initialBannerData.append('portrait', politicianPortrait);
+      await apiPost('/business/initial-banner', initialBannerData);
 
       // RequireAuth sends completed onboarding directly to the dashboard.
       await refreshStatus();
@@ -352,6 +378,23 @@ const Onboarding: React.FC = () => {
                   </IonSelect>
                 </div>
                 {form.industry_id && <p className="note">{categories.length} business categories available.</p>}
+                {isPoliticalBusiness && (
+                  <div className="politician-portrait-picker">
+                    <strong>Politician portrait for banners *</strong>
+                    <p>Upload a clear photo. AI will use it as the main portrait in political and festival banners.</p>
+                    <input
+                      ref={politicianPortraitInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      hidden
+                      onChange={pickPoliticianPortrait}
+                    />
+                    <button type="button" onClick={() => politicianPortraitInputRef.current?.click()}>
+                      {politicianPortrait ? 'Change portrait' : 'Choose portrait photo'}
+                    </button>
+                    {politicianPortrait && <span>{politicianPortrait.name}</span>}
+                  </div>
+                )}
               </div>
             )}
 

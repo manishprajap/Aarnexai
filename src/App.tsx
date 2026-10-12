@@ -45,6 +45,7 @@ import WhatsAppWorkspace from './pages/WhatsAppWorkspace';
 import { startWhatsAppResumeWatcher } from './services/whatsappResume';
 import Onboarding from './pages/Onboarding ';
 import Uploadnew from './pages/Uploadnew';
+import PromptPlan from './pages/PromptPlan';
 
 setupIonicReact();
 
@@ -198,6 +199,15 @@ const App: React.FC = () => {
               element={
                 <RequireAuth>
                   <Analytics />
+                </RequireAuth>
+              }
+            />
+
+            <Route
+              path="/prompt-plan"
+              element={
+                <RequireAuth>
+                  <PromptPlan />
                 </RequireAuth>
               }
             />

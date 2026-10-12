@@ -250,7 +250,7 @@
 
 .dashboard-chart-pie {
   display: grid;
-  width: 78px;
+  width: 100px;
   aspect-ratio: 1;
   place-items: center;
   border-radius: 50%;
