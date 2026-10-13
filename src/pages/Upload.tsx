@@ -608,7 +608,7 @@ const Upload: React.FC = () => {
         : undefined;
 
       // STEP 2 — analyze product + generate ad (product analyze API)
-      const analyzeResponse: AnalyzeResponse = await apiPost('', {
+      const analyzeResponse: AnalyzeResponse = await apiPost('/products/analyze', {
         productId,
         aspectRatio,
         promptDescription: promptDescription.trim(),

@@ -1428,7 +1428,7 @@ const Uploadnew: React.FC = () => {
         ? await readFileAsDataUrl(professionalPhotoFile)
         : undefined;
 
-      const analyzeResponse: AnalyzeResponse = await apiPost('', {
+      const analyzeResponse: AnalyzeResponse = await apiPost('/products/analyze', {
         productId,
         categoryId: category.categoryId,
         subcategoryId,
