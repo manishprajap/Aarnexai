@@ -27,6 +27,7 @@ import {
 import { apiGet, apiPost, apiPut } from '../api';
 import { useAuth } from '../context/AuthContext';
 import aarnaLogo from '../assets/aarna-logo.png';
+import FestivalSelector from '../components/FestivalSelector';
 
 // ==================================================
 // BRAND / TOKENS
@@ -233,6 +234,7 @@ const Upload: React.FC = () => {
   const [bannerLanguage, setBannerLanguage] = useState<'Hindi' | 'English'>(
     user?.bannerLanguage === 'Hindi' ? 'Hindi' : 'English',
   );
+  const [selectedFestivalIds, setSelectedFestivalIds] = useState<number[]>([]);
   const [savingBannerLanguage, setSavingBannerLanguage] = useState(false);
 
   const [promptDescription, setPromptDescription] = useState('');
@@ -473,6 +475,7 @@ const Upload: React.FC = () => {
     setUploadedImageUrl(null);
     setSelectedSavedProduct(null);
     setPromptDescription('');
+    setSelectedFestivalIds([]);
     setAspectRatio('1:1');
     setStep('upload');
   };
@@ -519,6 +522,7 @@ const Upload: React.FC = () => {
         aspectRatio,
         promptDescription: promptDescription.trim(),
         bannerLanguage,
+        festivalIds: selectedFestivalIds,
       });
 
       if (!analyzeResponse?.success) {
@@ -892,6 +896,14 @@ const Upload: React.FC = () => {
               <p style={{ margin: '8px 0 0', color: ui.muted, fontSize: 12 }}>
                 Banner text and greetings will be generated in the selected language.
               </p>
+            </div>
+
+            <div style={{ marginTop: 20 }}>
+              <FestivalSelector
+                value={selectedFestivalIds}
+                onChange={setSelectedFestivalIds}
+                disabled={generating}
+              />
             </div>
 
             {/* Aspect ratio */}

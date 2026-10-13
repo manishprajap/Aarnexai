@@ -18,7 +18,6 @@ const RequireAuth: React.FC<{
     isAuthenticated,
     isInitializing,
     hasBusiness,
-    hasSubscription,
   } = useAuth();
 
   const location = useLocation();
@@ -47,16 +46,10 @@ const RequireAuth: React.FC<{
       return;
     }
 
-    if (hasBusiness && hasSubscription && path === '/subscription') {
-      ionRouter.push('/dashboard', 'root', 'replace');
-      return;
-    }
-
   }, [
     isInitializing,
     isAuthenticated,
     hasBusiness,
-    hasSubscription,
     path,
     ionRouter,
   ]);
@@ -87,8 +80,7 @@ const RequireAuth: React.FC<{
   const shouldBlock =
     !isAuthenticated ||
     (!hasBusiness && path !== '/onboarding') ||
-    (hasBusiness && path === '/onboarding') ||
-    (hasBusiness && hasSubscription && path === '/subscription');
+    (hasBusiness && path === '/onboarding');
 
   /**
    * A redirect is in flight (handled by the effect above) —

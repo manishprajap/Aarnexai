@@ -56,6 +56,98 @@
   font-weight: 800;
 }
 
+.settings-section-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-section-title ion-icon {
+  color: var(--settings-blue);
+  font-size: 23px;
+}
+
+.settings-info-card,
+.settings-help-list {
+  border: 1px solid var(--settings-line);
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.settings-info-card {
+  padding: 18px;
+}
+
+.settings-info-card h2 {
+  margin: 0 0 8px;
+  color: var(--settings-ink);
+  font-size: 16px;
+}
+
+.settings-info-card p,
+.settings-help-list p {
+  margin: 0;
+  color: var(--settings-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.settings-help-list {
+  overflow: hidden;
+}
+
+.settings-help-list details {
+  padding: 16px;
+  border-bottom: 1px solid var(--settings-line);
+}
+
+.settings-help-list details:last-child {
+  border-bottom: 0;
+}
+
+.settings-help-list summary {
+  color: var(--settings-ink);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.settings-help-list p {
+  margin-top: 10px;
+}
+
+.settings-help-list button,
+.settings-inline-link {
+  margin-top: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--settings-blue);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.settings-about-card {
+  text-align: center;
+}
+
+.settings-about-card img {
+  width: 142px;
+  height: 52px;
+  object-fit: contain;
+}
+
+.settings-about-card h2 {
+  margin-top: 12px;
+}
+
+.settings-about-card small {
+  display: block;
+  margin-top: 16px;
+  color: var(--settings-muted);
+}
+
 .settings-list {
   overflow: hidden;
   border: 1px solid var(--settings-line);

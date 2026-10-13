@@ -5,11 +5,11 @@ import {
   chevronForwardOutline,
   helpCircleOutline,
   informationCircleOutline,
-  logoInstagram,
   notificationsOutline,
   personOutline,
   pricetagOutline,
   arrowBackOutline,
+  shareSocialOutline,
 } from 'ionicons/icons';
 import { useNavigate } from 'react-router-dom';
 import logo from '../assets/aarna-logo.png';
@@ -59,11 +59,11 @@ const Settings: React.FC = () => {
           <h1>Settings</h1>
           <div className="settings-list" aria-label="Settings options">
             <SettingRow icon={personOutline} title="Account" subtitle={user?.name || 'Manage your account'} onClick={() => navigate('/profile')} />
-            <SettingRow icon={logoInstagram} title="Instagram Connection" subtitle="Not Connected" onClick={() => navigate('/social-connections')} />
-            <SettingRow icon={notificationsOutline} title="Notifications" subtitle="Manage alerts and updates" />
+            <SettingRow icon={shareSocialOutline} title="Social Connect" subtitle="Manage connected social accounts" onClick={() => navigate('/social-connections')} />
+            <SettingRow icon={notificationsOutline} title="Notifications" subtitle="Notification information" onClick={() => navigate('/settings/notifications')} />
             <SettingRow icon={pricetagOutline} title="Subscription" subtitle="View your current plan" onClick={() => navigate('/subscription')} />
-            <SettingRow icon={helpCircleOutline} title="Help & Support" subtitle="Get help with AarnexAi" />
-            <SettingRow icon={informationCircleOutline} title="About" subtitle="Version and app information" />
+            <SettingRow icon={helpCircleOutline} title="Help & Support" subtitle="Guides for using AarnexAi" onClick={() => navigate('/settings/help')} />
+            <SettingRow icon={informationCircleOutline} title="About" subtitle="Version and app information" onClick={() => navigate('/settings/about')} />
           </div>
 
           <button type="button" className="settings-row settings-logout" onClick={handleLogout}>

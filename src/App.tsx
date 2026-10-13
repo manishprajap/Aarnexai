@@ -36,6 +36,7 @@ import CampaignDetails from './pages/CampaignDetails';
 import Profile from './pages/profile';
 import SocialConnections from './pages/SocialConnections';
 import Settings from './pages/Settings';
+import SettingsSection from './pages/SettingsSection';
 import Analytics from './pages/Analytics';
 import aarnaLogo from './assets/aarna-logo.png';
 import './splash.css';
@@ -244,6 +245,15 @@ const App: React.FC = () => {
               element={
                 <RequireAuth>
                   <Profile />
+                </RequireAuth>
+              }
+            />
+
+            <Route
+              path="/settings/:section"
+              element={
+                <RequireAuth>
+                  <SettingsSection />
                 </RequireAuth>
               }
             />

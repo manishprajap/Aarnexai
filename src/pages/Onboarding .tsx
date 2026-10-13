@@ -11,6 +11,7 @@ import {
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { apiGet, apiPost } from '../api';
 import { useAuth } from '../context/AuthContext';
+import FestivalSelector from '../components/FestivalSelector';
 import './Onboarding.css';
 
 /* ----------------------------- Types ----------------------------- */
@@ -60,6 +61,7 @@ const Onboarding: React.FC = () => {
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [professionalPhoto, setProfessionalPhoto] = useState<File | null>(null);
   const [savedProfessionalPhotoUrl, setSavedProfessionalPhotoUrl] = useState('');
+  const [selectedFestivalIds, setSelectedFestivalIds] = useState<number[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -242,7 +244,7 @@ const Onboarding: React.FC = () => {
       if (!Array.isArray(savedPlan.items) || savedPlan.items.length !== 30) {
         await apiPost('/prompt-plan/generate', {});
       }
-      await apiPost('/business/initial-banner', {});
+      await apiPost('/business/initial-banner', { festivalIds: selectedFestivalIds });
 
       // RequireAuth sends completed onboarding directly to the dashboard.
       await refreshStatus();
@@ -452,6 +454,12 @@ const Onboarding: React.FC = () => {
             {/* STEP 5 — Strategy */}
             {step === 5 && (
               <div className="sheet top setup-sheet">
+                <FestivalSelector
+                  value={selectedFestivalIds}
+                  onChange={setSelectedFestivalIds}
+                  disabled={submitting}
+                />
+
                 <div className="field">
                   <IonIcon icon={flagOutline} className="ico blue" />
                   <span className="lbl">Marketing Goal</span>
