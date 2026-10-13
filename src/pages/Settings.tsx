@@ -14,6 +14,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import logo from '../assets/aarna-logo.png';
 import { useAuth } from '../context/AuthContext';
+import BottomTabBar from '../components/BottomTabBar';
 import './Settings.css';
 
 type SettingRowProps = {
@@ -48,7 +49,7 @@ const Settings: React.FC = () => {
     <IonPage className="settings-page">
       <IonContent fullscreen>
         <IonToolbar className="settings-toolbar">
-          <button type="button" className="settings-back" onClick={() => navigate(-1)} aria-label="Back">
+          <button type="button" className="settings-back" onClick={() => navigate('/dashboard', { replace: true })} aria-label="Back to dashboard">
             <IonIcon icon={arrowBackOutline} />
           </button>
           <img src={logo} alt="AarnexAi" className="settings-logo" />
@@ -73,6 +74,7 @@ const Settings: React.FC = () => {
           </button>
         </main>
       </IonContent>
+      <BottomTabBar />
     </IonPage>
   );
 };

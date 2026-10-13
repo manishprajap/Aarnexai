@@ -9,6 +9,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 import logo from '../assets/aarna-logo.png';
 import packageInfo from '../../package.json';
+import BottomTabBar from '../components/BottomTabBar';
 import './Settings.css';
 
 const sections = {
@@ -37,7 +38,7 @@ const SettingsSection: React.FC = () => {
     <IonPage className="settings-page">
       <IonContent fullscreen>
         <IonToolbar className="settings-toolbar">
-          <button type="button" className="settings-back" onClick={() => navigate('/settings')} aria-label="Back to settings">
+          <button type="button" className="settings-back" onClick={() => navigate('/settings', { replace: true })} aria-label="Back to settings">
             <IonIcon icon={arrowBackOutline} />
           </button>
           <img src={logo} alt="AarnexAi" className="settings-logo" />
@@ -101,6 +102,7 @@ const SettingsSection: React.FC = () => {
           )}
         </main>
       </IonContent>
+      <BottomTabBar />
     </IonPage>
   );
 };

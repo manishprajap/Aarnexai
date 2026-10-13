@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { IonLabel, IonSelect, IonSelectOption, IonSpinner } from '@ionic/react';
+import { IonCheckbox, IonLabel, IonSpinner } from '@ionic/react';
 import { apiGet } from '../api';
 
 export type FestivalOption = {
@@ -44,11 +44,10 @@ const FestivalSelector: React.FC<FestivalSelectorProps> = ({ value, onChange, di
     return () => { cancelled = true; };
   }, []);
 
-  const updateSelection = (selected: unknown) => {
-    const ids = Array.isArray(selected)
-      ? selected.map(Number).filter((id) => Number.isInteger(id) && id > 0)
-      : [];
-    onChange([...new Set(ids)]);
+  const toggleSelection = (id: number, checked: boolean) => {
+    onChange(checked
+      ? [...new Set([...value, id])]
+      : value.filter((selectedId) => selectedId !== id));
   };
 
   return (
@@ -69,24 +68,42 @@ const FestivalSelector: React.FC<FestivalSelectorProps> = ({ value, onChange, di
         </p>
       ) : (
         <>
-          <IonSelect
-            multiple
-            interface="alert"
-            placeholder="Select one or more occasions"
-            value={value}
-            disabled={disabled}
-            onIonChange={(event) => updateSelection(event.detail.value)}
-          >
-            {festivals.map((festival) => (
-              <IonSelectOption key={festival.id} value={festival.id}>
-                {festival.name}{festival.nameHi ? ` · ${festival.nameHi}` : ''}
-                {' '}({festival.festivalType.replace(/_/g, ' ')} · {festival.festivalDate})
-              </IonSelectOption>
-            ))}
-          </IonSelect>
-          <p style={{ color: '#6B7A90', fontSize: 12, margin: '6px 0 0' }}>
-            Choose multiple occasions to include them together in one banner.
+          <p style={{ color: '#6B7A90', fontSize: 12, margin: '6px 0 10px' }}>
+            Select as many occasions as you want ({value.length} selected). They will be combined into one banner.
           </p>
+          <div role="group" aria-label="Select festivals and occasions" style={{ display: 'grid', gap: 8 }}>
+            {festivals.map((festival) => (
+              <label
+                key={festival.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: '12px',
+                  border: `1px solid ${value.includes(festival.id) ? '#6C63FF' : '#E3E8EF'}`,
+                  borderRadius: 12,
+                  background: value.includes(festival.id) ? '#F5F4FF' : '#FFFFFF',
+                  cursor: disabled ? 'not-allowed' : 'pointer',
+                  opacity: disabled ? 0.65 : 1,
+                }}
+              >
+                <IonCheckbox
+                  checked={value.includes(festival.id)}
+                  disabled={disabled}
+                  onIonChange={(event) => toggleSelection(festival.id, event.detail.checked)}
+                  aria-label={`Select ${festival.name}`}
+                />
+                <span style={{ display: 'grid', gap: 3 }}>
+                  <strong style={{ color: '#263238', fontSize: 14 }}>
+                    {festival.name}{festival.nameHi ? ` · ${festival.nameHi}` : ''}
+                  </strong>
+                  <small style={{ color: '#6B7A90', fontSize: 12 }}>
+                    {festival.festivalType.replace(/_/g, ' ')} · {festival.festivalDate}
+                  </small>
+                </span>
+              </label>
+            ))}
+          </div>
         </>
       )}
     </div>

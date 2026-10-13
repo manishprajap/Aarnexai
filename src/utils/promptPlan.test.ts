@@ -1,8 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import {
+  getCurrentPromptPlanItem,
   getPromptPlanRegenerationState,
   normalizePromptPlanResponse,
 } from './promptPlan';
+
+describe('getCurrentPromptPlanItem', () => {
+  it('returns the item matching the current calendar date in the plan', () => {
+    const items = [
+      { day: 1, prompt: 'First day' },
+      { day: 2, prompt: 'Second day' },
+    ];
+
+    expect(getCurrentPromptPlanItem(items, '2026-10-12', '2026-10-13')).toEqual(items[1]);
+  });
+
+  it('returns null when today is outside the saved plan', () => {
+    expect(getCurrentPromptPlanItem([{ day: 1, prompt: 'First day' }], '2026-10-12', '2026-11-12')).toBeNull();
+  });
+});
 
 describe('normalizePromptPlanResponse', () => {
   it('reads nested database responses and sorts prompts by day', () => {

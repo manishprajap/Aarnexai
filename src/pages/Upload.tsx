@@ -28,6 +28,12 @@ import { apiGet, apiPost, apiPut } from '../api';
 import { useAuth } from '../context/AuthContext';
 import aarnaLogo from '../assets/aarna-logo.png';
 import FestivalSelector from '../components/FestivalSelector';
+import {
+  fetchPromptPlan,
+  fillPromptTemplate,
+  getCurrentPromptPlanItem,
+  type PromptPlanItem,
+} from '../utils/promptPlan';
 
 // ==================================================
 // BRAND / TOKENS
@@ -48,6 +54,29 @@ const LOGO_SRC = aarnaLogo;
 
 const MAX_DESCRIPTION = 500;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB (change to 5MB if you want to match the mockup text)
+
+const formatPromptPlanDate = (startDate: string | null, day: number): string => {
+  if (!startDate) return `Day ${day}`;
+  const date = new Date(`${startDate.slice(0, 10)}T12:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return `Day ${day}`;
+  date.setUTCDate(date.getUTCDate() + day - 1);
+  return date.toLocaleDateString('en-IN', {
+    timeZone: 'UTC',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+};
+
+const readFileAsDataUrl = (file: File): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => typeof reader.result === 'string'
+      ? resolve(reader.result)
+      : reject(new Error('The selected photo could not be read.'));
+    reader.onerror = () => reject(new Error('The selected photo could not be read.'));
+    reader.readAsDataURL(file);
+  });
 
 // ==================================================
 // TYPES
@@ -236,8 +265,15 @@ const Upload: React.FC = () => {
   );
   const [selectedFestivalIds, setSelectedFestivalIds] = useState<number[]>([]);
   const [savingBannerLanguage, setSavingBannerLanguage] = useState(false);
+  const [professionalPhotoFile, setProfessionalPhotoFile] = useState<File | null>(null);
+
+  const [promptPlanItems, setPromptPlanItems] = useState<PromptPlanItem[]>([]);
+  const [promptPlanStartDate, setPromptPlanStartDate] = useState<string | null>(null);
+  const [loadingPromptPlan, setLoadingPromptPlan] = useState(true);
+  const [promptPlanError, setPromptPlanError] = useState('');
 
   const [promptDescription, setPromptDescription] = useState('');
+  const promptDescriptionManuallyEdited = useRef(false);
 
   const [uploadingImage, setUploadingImage] = useState(false); // step 1: image upload
   const [generating, setGenerating] = useState(false); // step 2: analyze / generate ad
@@ -256,6 +292,10 @@ const Upload: React.FC = () => {
 
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
+  const professionalPhotoInputRef = useRef<HTMLInputElement>(null);
+  const hasProfessionalPortraitCategory = /\bpolitic(?:s|al|ian)?\b|\belection\b|\bpublic representative\b|\bdoctor\b|\bphysician\b|\bmedical\b|\bhealthcare\b|\bclinic\b|\bchartered accountant\b|\baccountant\b|\bca\b/i.test(
+    `${user?.category ?? ''} ${user?.industry ?? ''} ${user?.industryName ?? ''} ${user?.businessCategoryName ?? ''}`,
+  );
 
   const showMessage = (message: string) => {
     setToastMessage(message);
@@ -274,6 +314,39 @@ const Upload: React.FC = () => {
     });
     return () => { cancelled = true; };
   }, [user?.id]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchPromptPlan()
+      .then((plan) => {
+        if (cancelled) return;
+        setPromptPlanItems(plan.items);
+        setPromptPlanStartDate(plan.startDate);
+        const todayPrompt = plan.today?.prompt
+          ? plan.today
+          : getCurrentPromptPlanItem(plan.items, plan.startDate);
+        if (todayPrompt && !promptDescriptionManuallyEdited.current) {
+          const prompt = fillPromptTemplate(todayPrompt.prompt, {
+            category: user?.category ?? user?.businessCategoryName,
+            location: user?.city,
+          });
+          setPromptDescription(
+            `Today's content plan (${formatPromptPlanDate(plan.startDate, todayPrompt.day)}): ${prompt}`
+              .slice(0, MAX_DESCRIPTION),
+          );
+        }
+      })
+      .catch((error: unknown) => {
+        console.error('LOAD PROMPT PLAN ERROR:', error);
+        if (!cancelled) {
+          setPromptPlanError(error instanceof Error ? error.message : 'Unable to load saved prompts.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingPromptPlan(false);
+      });
+    return () => { cancelled = true; };
+  }, [user?.businessCategoryName, user?.category, user?.city]);
 
   const handleBannerLanguageChange = async (language: 'Hindi' | 'English') => {
     const previousLanguage = bannerLanguage;
@@ -493,6 +566,21 @@ const Upload: React.FC = () => {
     navigate(-1);
   };
 
+  const handleProfessionalPhotoChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = event.target.files?.[0];
+    event.target.value = '';
+    if (!selected) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(selected.type)) {
+      showMessage('Choose a JPG, PNG or WEBP professional photo.');
+      return;
+    }
+    if (selected.size > 5 * 1024 * 1024) {
+      showMessage('Professional photo must be 5 MB or smaller.');
+      return;
+    }
+    setProfessionalPhotoFile(selected);
+  };
+
   /*
   |--------------------------------------------------------------------------
   | Generate Ad  ->  /upload  ->  /products/analyze
@@ -515,14 +603,18 @@ const Upload: React.FC = () => {
       setGenerating(true);
 
       showMessage('AI is generating your ad...');
+      const professionalPhotoDataUrl = professionalPhotoFile
+        ? await readFileAsDataUrl(professionalPhotoFile)
+        : undefined;
 
       // STEP 2 — analyze product + generate ad (product analyze API)
-      const analyzeResponse: AnalyzeResponse = await apiPost('/products/analyze', {
+      const analyzeResponse: AnalyzeResponse = await apiPost('', {
         productId,
         aspectRatio,
         promptDescription: promptDescription.trim(),
         bannerLanguage,
         festivalIds: selectedFestivalIds,
+        professionalPhotoDataUrl,
       });
 
       if (!analyzeResponse?.success) {
@@ -906,6 +998,43 @@ const Upload: React.FC = () => {
               />
             </div>
 
+            {hasProfessionalPortraitCategory && (
+              <div style={{ marginTop: 18, padding: 14, border: `1px solid ${ui.border}`, borderRadius: 12 }}>
+                <FieldLabel text="Professional photo for this banner (optional)" />
+                <p style={{ margin: '0 0 10px', color: ui.muted, fontSize: 12, lineHeight: 1.45 }}>
+                  Add a portrait to include yourself in this banner. If omitted, the saved Business Setup photo will be used when available.
+                </p>
+                <input
+                  ref={professionalPhotoInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  hidden
+                  onChange={handleProfessionalPhotoChange}
+                />
+                <button
+                  type="button"
+                  onClick={() => professionalPhotoInputRef.current?.click()}
+                  disabled={generating}
+                  style={{
+                    minHeight: 40,
+                    padding: '0 14px',
+                    border: `1px solid ${ui.border}`,
+                    borderRadius: 10,
+                    background: ui.white,
+                    color: ui.primary,
+                    fontWeight: 600,
+                  }}
+                >
+                  {professionalPhotoFile ? 'Change portrait' : 'Choose portrait'}
+                </button>
+                {professionalPhotoFile && (
+                  <span style={{ marginLeft: 10, color: ui.muted, fontSize: 12 }}>
+                    {professionalPhotoFile.name}
+                  </span>
+                )}
+              </div>
+            )}
+
             {/* Aspect ratio */}
             <FieldLabel text="Select Aspect Ratio" />
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
@@ -961,10 +1090,27 @@ const Upload: React.FC = () => {
             {/* Description */}
             <div style={{ marginTop: 24 }}>
               <FieldLabel text="Product Description" />
+              {loadingPromptPlan ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, color: ui.muted }}>
+                  <IonSpinner name="crescent" />
+                  <span style={{ fontSize: 13 }}>Loading today's prompt...</span>
+                </div>
+              ) : promptPlanError ? (
+                <p role="alert" style={{ margin: '0 0 8px', color: '#B42318', fontSize: 13 }}>
+                  Saved prompt plan could not be loaded. You can still enter a prompt manually.
+                </p>
+              ) : promptPlanItems.length === 0 ? (
+                <p style={{ margin: '0 0 8px', color: ui.muted, fontSize: 13 }}>
+                  No saved daily prompts are available. Enter a prompt manually.
+                </p>
+              ) : null}
               <textarea
                 value={promptDescription}
-                onChange={(e) => setPromptDescription(e.target.value.slice(0, MAX_DESCRIPTION))}
-                placeholder="Enter product details..."
+                onChange={(e) => {
+                  promptDescriptionManuallyEdited.current = true;
+                  setPromptDescription(e.target.value.slice(0, MAX_DESCRIPTION));
+                }}
+                placeholder="Today's plan prompt will appear here. You can edit it or enter your own prompt..."
                 rows={4}
                 maxLength={MAX_DESCRIPTION}
                 style={{

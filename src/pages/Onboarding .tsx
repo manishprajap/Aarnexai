@@ -126,9 +126,6 @@ const Onboarding: React.FC = () => {
   const categories = useMemo(() => catalog.categories.filter(c => c.industryId === form.industry_id), [catalog, form.industry_id]);
   const selectedIndustryName = catalog.industries.find(i => i.id === form.industry_id)?.name ?? '';
   const selectedCategoryName = categories.find(c => c.id === form.business_category_id)?.name ?? '';
-  const isProfessionalBusiness = /\bpolitic(?:s|al|ian)?\b|\belection\b|\bpublic representative\b|\bdoctor\b|\bphysician\b|\bmedical\b|\bhealthcare\b|\bclinic\b|\bchartered accountant\b|\baccountant\b|\bca\b/i.test(
-    `${selectedIndustryName} ${selectedCategoryName}`,
-  );
   const services = useMemo(() => catalog.services.filter(s => s.businessCategoryId === form.business_category_id), [catalog, form.business_category_id]);
   const targets = useMemo(() => catalog.targets.filter(t => t.businessCategoryId === form.business_category_id), [catalog, form.business_category_id]);
 
@@ -137,8 +134,7 @@ const Onboarding: React.FC = () => {
   const valid = (() => {
     switch (step) {
       case 1: return !!form.name.trim() && !!form.businessName.trim() && emailOk;
-      case 2: return !!form.industry_id && !!form.business_category_id
-        && (!isProfessionalBusiness || !!professionalPhoto || !!savedProfessionalPhotoUrl);
+      case 2: return !!form.industry_id && !!form.business_category_id;
       case 3: return form.service_ids.length > 0;
       case 4: return form.target_customer_ids.length > 0;
       default: return form.automation_mode === 'AUTO' || !!form.strategy_id;
@@ -399,10 +395,10 @@ const Onboarding: React.FC = () => {
                   </IonSelect>
                 </div>
                 {form.industry_id && <p className="note">{categories.length} business categories available.</p>}
-                {isProfessionalBusiness && (
+                {/\bpolitic(?:s|al|ian)?\b|\belection\b|\bpublic representative\b|\bdoctor\b|\bphysician\b|\bmedical\b|\bhealthcare\b|\bclinic\b|\bchartered accountant\b|\baccountant\b|\bca\b/i.test(`${selectedIndustryName} ${selectedCategoryName}`) && (
                   <div className="professional-photo-picker">
-                    <strong>Professional photo for banners *</strong>
-                    <p>For Doctor, CA and Politician categories, add a clear portrait. It will be reused in your generated banners.</p>
+                    <strong>Professional photo for banners (optional)</strong>
+                    <p>For Doctor, CA, Politician and similar categories, add a portrait if you want it included in generated banners. You can also add or change it later from Upload.</p>
                     <input
                       ref={professionalPhotoInputRef}
                       type="file"

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useNavigate } from 'react-router-dom';
 
@@ -48,6 +48,12 @@ import {
   resolveBusinessCategory,
   saveBusinessCategory,
 } from '../utils/businessCategory';
+import {
+  fetchPromptPlan,
+  fillPromptTemplate,
+  getCurrentPromptPlanItem,
+  type PromptPlanItem,
+} from '../utils/promptPlan';
 
 // ==================================================
 // BRAND / TOKENS
@@ -74,6 +80,19 @@ const MAX_IMAGE_EDGE = 1600;
 const MEDIA_STORAGE_PREFIX = 'upload_media_v1';
 const VIDEO_DB_NAME = 'aarnexai-upload-media';
 const VIDEO_STORE_NAME = 'videos';
+
+const formatPromptPlanDate = (startDate: string | null, day: number): string => {
+  if (!startDate) return `Day ${day}`;
+  const date = new Date(`${startDate.slice(0, 10)}T12:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return `Day ${day}`;
+  date.setUTCDate(date.getUTCDate() + day - 1);
+  return date.toLocaleDateString('en-IN', {
+    timeZone: 'UTC',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+};
 
 type PublishPlatform =
   | 'instagram'
@@ -239,76 +258,6 @@ const extractBannerId = (res: any): string | number | null => {
   }
 
   return null;
-};
-
-const extractMarketingPrompts = (response: unknown): string[] => {
-  if (
-    response &&
-    typeof response === 'object' &&
-    'success' in response &&
-    (response as { success?: boolean }).success === false
-  ) {
-    const message = (response as { message?: unknown; error?: unknown }).message ??
-      (response as { error?: unknown }).error;
-    throw new Error(typeof message === 'string' ? message : 'Unable to load saved prompts.');
-  }
-
-  const promptKeys = [
-    'prompt',
-    'customPrompt',
-    'custom_prompt',
-    'caption',
-    'description',
-    'content',
-    'topicTitle',
-    'topic_title',
-    'topic',
-  ];
-  const arrayKeys = [
-    'customerMarketingDays',
-    'customer_marketing_days',
-    'customerMarketingPlans',
-    'customer_marketing_plans',
-    'items',
-    'prompts',
-    'days',
-    'plans',
-    'data',
-    'result',
-    'rows',
-  ];
-  const visited = new Set<object>();
-  const prompts: string[] = [];
-
-  const visit = (value: unknown, depth: number) => {
-    if (!value || typeof value !== 'object' || depth > 8 || visited.has(value)) {
-      return;
-    }
-    visited.add(value);
-
-    if (Array.isArray(value)) {
-      value.forEach((item) => visit(item, depth + 1));
-      return;
-    }
-
-    const record = value as Record<string, unknown>;
-    for (const key of promptKeys) {
-      const prompt = record[key];
-      if (typeof prompt === 'string' && prompt.trim()) {
-        prompts.push(prompt.trim());
-        break;
-      }
-    }
-
-    for (const key of arrayKeys) {
-      if (record[key] && typeof record[key] === 'object') {
-        visit(record[key], depth + 1);
-      }
-    }
-  };
-
-  visit(response, 0);
-  return [...new Set(prompts)];
 };
 
 // ==================================================
@@ -545,9 +494,11 @@ const Uploadnew: React.FC = () => {
   const [selectedMedia, setSelectedMedia] = useState<LocalMedia | null>(null);
   const [selectedPlatforms, setSelectedPlatforms] = useState<PublishPlatform[]>([]);
   const [postDescription, setPostDescription] = useState('');
-  const [marketingPrompts, setMarketingPrompts] = useState<string[]>([]);
-  const [loadingMarketingPrompts, setLoadingMarketingPrompts] = useState(false);
-  const [marketingPromptsError, setMarketingPromptsError] = useState('');
+  const [promptPlanItems, setPromptPlanItems] = useState<PromptPlanItem[]>([]);
+  const [promptPlanToday, setPromptPlanToday] = useState<PromptPlanItem | null>(null);
+  const [promptPlanStartDate, setPromptPlanStartDate] = useState<string | null>(null);
+  const [loadingPromptPlan, setLoadingPromptPlan] = useState(true);
+  const [promptPlanError, setPromptPlanError] = useState('');
   const [savingPosts, setSavingPosts] = useState(false);
 
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('1:1');
@@ -556,6 +507,7 @@ const Uploadnew: React.FC = () => {
   );
   const [selectedFestivalIds, setSelectedFestivalIds] = useState<number[]>([]);
   const [savingBannerLanguage, setSavingBannerLanguage] = useState(false);
+  const [professionalPhotoFile, setProfessionalPhotoFile] = useState<File | null>(null);
 
   // Category comes from Business Setup (saved in localStorage), not selected here
   const [businessCategory, setBusinessCategory] = useState<BusinessCategory | null>(null);
@@ -569,6 +521,7 @@ const Uploadnew: React.FC = () => {
   const [loadingChildCategories, setLoadingChildCategories] = useState(false);
 
   const [promptDescription, setPromptDescription] = useState('');
+  const promptDescriptionManuallyEdited = useRef(false);
 
   const [uploadingImage, setUploadingImage] = useState(false); // step 1: image upload
   const [generating, setGenerating] = useState(false); // step 2: analyze / generate ad
@@ -583,12 +536,60 @@ const Uploadnew: React.FC = () => {
 
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null); // browser fallback for the camera
+  const professionalPhotoInputRef = useRef<HTMLInputElement>(null);
   const videoObjectUrlsRef = useRef(new Set<string>());
 
   const showMessage = (message: string) => {
     setToastMessage(message);
     setShowToast(true);
   };
+
+  const loadPromptPlan = useCallback(async () => {
+    setLoadingPromptPlan(true);
+    setPromptPlanError('');
+    try {
+      const plan = await fetchPromptPlan();
+      setPromptPlanItems(plan.items);
+      setPromptPlanToday(plan.today?.prompt ? plan.today : null);
+      setPromptPlanStartDate(plan.startDate);
+    } catch (error: unknown) {
+      console.error('LOAD PROMPT PLAN ERROR:', error);
+      setPromptPlanError(error instanceof Error ? error.message : 'Unable to load saved prompts.');
+    } finally {
+      setLoadingPromptPlan(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadPromptPlan();
+  }, [loadPromptPlan]);
+
+  useEffect(() => {
+    const todayPrompt = promptPlanToday ?? getCurrentPromptPlanItem(promptPlanItems, promptPlanStartDate);
+    if (!todayPrompt || promptDescriptionManuallyEdited.current) return;
+    const prompt = fillPromptTemplate(todayPrompt.prompt, {
+      category: businessCategory?.categoryName ?? user?.category ?? user?.businessCategoryName,
+      subcategory: subcategories.find((item) => item.id === subcategoryId)?.name,
+      childCategory: childCategories.find((item) => item.id === childCategoryId)?.name,
+      location: user?.city,
+    });
+    setPromptDescription(
+      `Today's content plan (${formatPromptPlanDate(promptPlanStartDate, todayPrompt.day)}): ${prompt}`
+        .slice(0, MAX_DESCRIPTION),
+    );
+  }, [
+    businessCategory?.categoryName,
+    childCategories,
+    childCategoryId,
+    promptPlanItems,
+    promptPlanStartDate,
+    promptPlanToday,
+    subcategories,
+    subcategoryId,
+    user?.businessCategoryName,
+    user?.category,
+    user?.city,
+  ]);
 
   const closePostModalAndOpenSubscription = async () => {
     await postModalRef.current?.dismiss();
@@ -607,6 +608,9 @@ const Uploadnew: React.FC = () => {
 
   const currentUserId = user?.id;
   const videoStorageKey = (mediaId: string) => `${currentUserId}:${mediaId}`;
+  const hasProfessionalPortraitCategory = /\bpolitic(?:s|al|ian)?\b|\belection\b|\bpublic representative\b|\bdoctor\b|\bphysician\b|\bmedical\b|\bhealthcare\b|\bclinic\b|\bchartered accountant\b|\baccountant\b|\bca\b/i.test(
+    `${businessCategory?.categoryName ?? ''} ${user?.industryName ?? ''} ${user?.industry ?? ''} ${user?.category ?? ''}`,
+  );
 
   useEffect(() => {
     if (!currentUserId) return;
@@ -1002,48 +1006,21 @@ const Uploadnew: React.FC = () => {
   const openMediaShare = (media: LocalMedia) => {
     setSelectedMedia(media);
     setSelectedPlatforms([]);
-    setPostDescription('');
-    setMarketingPrompts([]);
-    setMarketingPromptsError('');
+    const todayPrompt = promptPlanToday ?? getCurrentPromptPlanItem(promptPlanItems, promptPlanStartDate);
+    const prompt = todayPrompt
+      ? fillPromptTemplate(todayPrompt.prompt, {
+          category: businessCategory?.categoryName ?? user?.category ?? user?.businessCategoryName,
+          subcategory: subcategories.find((item) => item.id === subcategoryId)?.name,
+          childCategory: childCategories.find((item) => item.id === childCategoryId)?.name,
+          location: user?.city,
+        })
+      : '';
+    setPostDescription(todayPrompt
+      ? `Today's content plan (${formatPromptPlanDate(promptPlanStartDate, todayPrompt.day)}): ${prompt}`
+          .slice(0, MAX_DESCRIPTION)
+      : '');
     void refreshConnections();
   };
-
-  const selectedMediaId = selectedMedia?.id;
-
-  useEffect(() => {
-    if (!selectedMediaId) {
-      setLoadingMarketingPrompts(false);
-      return;
-    }
-
-    let cancelled = false;
-    setLoadingMarketingPrompts(true);
-    setMarketingPromptsError('');
-
-    apiGet('/prompt-plan')
-      .then((response) => {
-        if (!cancelled) {
-          setMarketingPrompts(extractMarketingPrompts(response));
-        }
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          console.error('LOAD MARKETING PROMPTS ERROR:', error);
-          setMarketingPromptsError(
-            error instanceof Error ? error.message : 'Unable to load saved prompts.',
-          );
-        }
-      })
-      .finally(() => {
-        if (!cancelled) {
-          setLoadingMarketingPrompts(false);
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedMediaId]);
 
   const togglePublishPlatform = (platform: PublishPlatform) => {
     if (!connected[platform] || checkingConnections) return;
@@ -1377,6 +1354,31 @@ const Uploadnew: React.FC = () => {
     navigate(-1);
   };
 
+  const handleProfessionalPhotoChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = event.target.files?.[0];
+    event.target.value = '';
+    if (!selected) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(selected.type)) {
+      showMessage('Choose a JPG, PNG or WEBP professional photo.');
+      return;
+    }
+    if (selected.size > 10 * 1024 * 1024) {
+      showMessage('Professional photo must be 10 MB or smaller.');
+      return;
+    }
+    try {
+      const compressed = await compressImage(selected);
+      if (compressed.size > MAX_IMAGE_SIZE) {
+        showMessage('Could not resize the professional photo. Choose a smaller image.');
+        return;
+      }
+      setProfessionalPhotoFile(compressed);
+    } catch (error) {
+      console.error('PROFESSIONAL PHOTO PROCESSING ERROR:', error);
+      showMessage('Could not process the professional photo. Please choose another image.');
+    }
+  };
+
   // ==================================================
   // STEP 2 — Generate Ad
   // ==================================================
@@ -1422,8 +1424,11 @@ const Uploadnew: React.FC = () => {
       setGenerating(true);
 
       showMessage('AI is generating your ad...');
+      const professionalPhotoDataUrl = professionalPhotoFile
+        ? await readFileAsDataUrl(professionalPhotoFile)
+        : undefined;
 
-      const analyzeResponse: AnalyzeResponse = await apiPost('/products/analyze', {
+      const analyzeResponse: AnalyzeResponse = await apiPost('', {
         productId,
         categoryId: category.categoryId,
         subcategoryId,
@@ -1432,6 +1437,7 @@ const Uploadnew: React.FC = () => {
         promptDescription: promptDescription.trim(),
         bannerLanguage,
         festivalIds: selectedFestivalIds,
+        professionalPhotoDataUrl,
       });
 
       if (!analyzeResponse?.success) {
@@ -1979,6 +1985,43 @@ const Uploadnew: React.FC = () => {
               </div>
             )}
 
+            {hasProfessionalPortraitCategory && (
+              <div style={{ marginTop: 16, padding: 14, border: `1px solid ${ui.border}`, borderRadius: 12 }}>
+                <FieldLabel text="Professional photo for this banner (optional)" />
+                <p style={{ margin: '0 0 10px', color: ui.muted, fontSize: 12, lineHeight: 1.45 }}>
+                  Add a portrait to include yourself in this banner. If omitted, the saved Business Setup photo will be used when available.
+                </p>
+                <input
+                  ref={professionalPhotoInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  hidden
+                  onChange={(event) => void handleProfessionalPhotoChange(event)}
+                />
+                <button
+                  type="button"
+                  onClick={() => professionalPhotoInputRef.current?.click()}
+                  disabled={generating}
+                  style={{
+                    minHeight: 40,
+                    padding: '0 14px',
+                    border: `1px solid ${ui.border}`,
+                    borderRadius: 10,
+                    background: ui.white,
+                    color: ui.primary,
+                    fontWeight: 600,
+                  }}
+                >
+                  {professionalPhotoFile ? 'Change portrait' : 'Choose portrait'}
+                </button>
+                {professionalPhotoFile && (
+                  <span style={{ marginLeft: 10, color: ui.muted, fontSize: 12 }}>
+                    {professionalPhotoFile.name}
+                  </span>
+                )}
+              </div>
+            )}
+
             {/* Subcategory — only when this category has some */}
             {businessCategoryId && (loadingSubcategories || subcategories.length > 0) && (
               <div style={{ marginTop: 16 }}>
@@ -2010,10 +2053,27 @@ const Uploadnew: React.FC = () => {
             {/* Description */}
             <div style={{ marginTop: 24 }}>
               <FieldLabel text="Product Description" />
+              {loadingPromptPlan ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, color: ui.muted }}>
+                  <IonSpinner name="crescent" />
+                  <span style={{ fontSize: 13 }}>Loading today's prompt...</span>
+                </div>
+              ) : promptPlanError ? (
+                <p role="alert" style={{ margin: '0 0 8px', color: '#B42318', fontSize: 13 }}>
+                  Saved prompt plan could not be loaded. You can still enter a prompt manually.
+                </p>
+              ) : promptPlanItems.length === 0 ? (
+                <p style={{ margin: '0 0 8px', color: ui.muted, fontSize: 13 }}>
+                  No saved daily prompts are available. Enter a prompt manually.
+                </p>
+              ) : null}
               <textarea
                 value={promptDescription}
-                onChange={(e) => setPromptDescription(e.target.value.slice(0, MAX_DESCRIPTION))}
-                placeholder="Enter product details..."
+                onChange={(e) => {
+                  promptDescriptionManuallyEdited.current = true;
+                  setPromptDescription(e.target.value.slice(0, MAX_DESCRIPTION));
+                }}
+                placeholder="Today's plan prompt will appear here. You can edit it or enter your own prompt..."
                 rows={4}
                 maxLength={MAX_DESCRIPTION}
                 style={{
@@ -2187,44 +2247,6 @@ const Uploadnew: React.FC = () => {
 
               <div style={{ marginBottom: 18 }}>
               <FieldLabel text="Description (optional)" />
-              {loadingMarketingPrompts ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: ui.muted }}>
-                  <IonSpinner name="crescent" />
-                  <span style={{ fontSize: 13 }}>Loading saved prompts...</span>
-                </div>
-              ) : marketingPromptsError ? (
-                <p role="alert" style={{ margin: '0 0 10px', color: '#D33', fontSize: 13 }}>
-                  {marketingPromptsError}
-                </p>
-              ) : marketingPrompts.length > 0 ? (
-                <IonSelect
-                  aria-label="Select a saved prompt for the description"
-                  interface="alert"
-                  placeholder="Choose a saved prompt"
-                  onIonChange={(event) => {
-                    const prompt = marketingPrompts[event.detail.value];
-                    if (prompt) {
-                      setPostDescription(prompt.slice(0, MAX_DESCRIPTION));
-                    }
-                  }}
-                  style={{
-                    marginBottom: 10,
-                    border: `1px solid ${ui.border}`,
-                    borderRadius: 12,
-                    paddingInline: 12,
-                  }}
-                >
-                  {marketingPrompts.map((prompt, index) => (
-                    <IonSelectOption key={`${index}-${prompt.slice(0, 40)}`} value={index}>
-                      {prompt}
-                    </IonSelectOption>
-                  ))}
-                </IonSelect>
-              ) : (
-                <p style={{ margin: '0 0 10px', color: ui.muted, fontSize: 13 }}>
-                  No saved prompts available.
-                </p>
-              )}
               <textarea
                 value={postDescription}
                 onChange={(e) => setPostDescription(e.target.value.slice(0, MAX_DESCRIPTION))}

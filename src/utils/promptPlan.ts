@@ -24,6 +24,27 @@ export interface PromptPlanResponse {
   startDate: string | null;
 }
 
+export const getCurrentPromptPlanItem = (
+  items: PromptPlanItem[],
+  startDate: string | null,
+  today = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date()),
+): PromptPlanItem | null => {
+  const start = startDate?.slice(0, 10);
+  if (!start || !/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(today)) {
+    return null;
+  }
+  const startTime = Date.parse(`${start}T00:00:00.000Z`);
+  const todayTime = Date.parse(`${today}T00:00:00.000Z`);
+  if (!Number.isFinite(startTime) || !Number.isFinite(todayTime)) return null;
+  const currentDay = Math.floor((todayTime - startTime) / (24 * 60 * 60 * 1000)) + 1;
+  return items.find((item) => item.day === currentDay) ?? null;
+};
+
 export interface PromptPlanRegenerationState {
   locked: boolean;
   nextAvailableAt: number | null;
