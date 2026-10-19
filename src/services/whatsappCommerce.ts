@@ -343,11 +343,28 @@ export const startWhatsAppConversation = async (
   return raw?.id !== undefined && raw?.id !== null ? normalizeConversation(raw) : null;
 };
 
-/** Registers the connected number on WhatsApp Cloud API (fixes "Account not registered"). */
-export const activateWhatsAppNumber = async (pin?: string) => {
-  const response = await apiPost('/whatsapp/register', pin ? { pin } : {});
-  if (response?.success === false) {
-    throw new Error(response?.message || 'Could not activate messaging.');
+
+/**
+ * Checks WhatsApp Cloud API registration status.
+ * The backend must return success only when Meta confirms
+ * that the phone number is registered for messaging.
+ */
+export const activateWhatsAppNumber = async () => {
+  const response = await apiPost('/whatsapp/register', {});
+
+  const data = response?.data ?? response;
+
+  if (
+    response?.success === false ||
+    data?.success === false ||
+    data?.registered === false
+  ) {
+    throw new Error(
+      data?.message ||
+        response?.message ||
+        'WhatsApp number is not registered with Meta. Complete registration in WhatsApp Manager.'
+    );
   }
-  return response;
+
+  return data;
 };

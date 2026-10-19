@@ -595,12 +595,20 @@ const WhatsAppWorkspace: React.FC = () => {
     }
   };
 
+
   const handleActivate = async () => {
     setActivating(true);
     setPageError('');
+    setToast('');
+
     try {
       const result = await activateWhatsAppNumber();
-      setToast(result?.message || 'Messaging activated.');
+
+      setToast(
+        result?.message ||
+        'Registration status checked successfully.'
+      );
+
       await loadConnection();
     } catch (error) {
       setPageError(errorText(error));
@@ -608,6 +616,7 @@ const WhatsAppWorkspace: React.FC = () => {
       setActivating(false);
     }
   };
+
 
   const totalUnread = conversations.reduce((total, conversation) => total + (conversation.unreadCount || 0), 0);
 
