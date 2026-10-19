@@ -14,6 +14,9 @@ import {
   arrowBackOutline,
   attachOutline,
   businessOutline,
+  callOutline,
+  chatbubbleEllipsesOutline,
+  linkOutline,
   checkmarkCircleOutline,
   closeOutline,
   createOutline,
@@ -32,28 +35,38 @@ import { useAuth } from '../context/AuthContext';
 import {
   CatalogCategory,
   CatalogProduct,
+  MessageStatus,
   ProductAvailability,
   ProductInput,
   WhatsAppCatalog,
+  WhatsAppConnection,
   WhatsAppConversation,
   WhatsAppMessage,
   createCatalogCategory,
   createCatalogProduct,
+  activateWhatsAppNumber,
   createWhatsAppCatalog,
   deleteCatalogProduct,
   getCatalogCategories,
   getCatalogProducts,
   getWhatsAppCatalog,
+  getWhatsAppConnection,
   getWhatsAppConversations,
   getWhatsAppMessages,
   sendWhatsAppMessage,
+  startWhatsAppConversation,
   syncWhatsAppCatalog,
   updateCatalogProduct,
 } from '../services/whatsappCommerce';
 import './WhatsAppWorkspace.css';
 
-type WorkspaceTab = 'catalog' | 'inbox';
+type WorkspaceTab = 'connection' | 'catalog' | 'inbox';
+
+// Route of your existing "connect WhatsApp" screen. Change if yours differs.
+const CONNECT_ROUTE = '/whatsapp-connect';
 type CatalogTab = 'products' | 'categories';
+
+const POLL_INTERVAL_MS = 5000;
 
 const emptyProduct = (catalogId = '', businessCategoryId = '', businessCategory = ''): ProductInput => ({
   catalogId,
@@ -85,6 +98,23 @@ const formatTime = (value?: string | null) => {
     : date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 };
 
+const renderStatusTick = (status?: MessageStatus) => {
+  switch (status) {
+    case 'sending':
+      return <span className="wa-tick" title="Sending">🕓</span>;
+    case 'sent':
+      return <span className="wa-tick" title="Sent">✓</span>;
+    case 'delivered':
+      return <span className="wa-tick" title="Delivered">✓✓</span>;
+    case 'read':
+      return <span className="wa-tick is-read" title="Read">✓✓</span>;
+    case 'failed':
+      return <span className="wa-tick is-failed" title="Failed">Failed</span>;
+    default:
+      return null;
+  }
+};
+
 const getSuggestedCategories = (businessCategory: string) => {
   const category = businessCategory.toLowerCase();
   if (/doctor|physician|medical|health|clinic/.test(category)) {
@@ -105,9 +135,18 @@ const WhatsAppWorkspace: React.FC = () => {
   const { user } = useAuth();
   const profileCategoryId = user?.categoryId ? String(user.categoryId) : '';
   const profileCategoryName = user?.category?.trim() || '';
-  const initialTab: WorkspaceTab = searchParams.get('view') === 'inbox' ? 'inbox' : 'catalog';
+  const viewParam = searchParams.get('view');
+  const initialTab: WorkspaceTab =
+    viewParam === 'inbox' ? 'inbox' : viewParam === 'connection' ? 'connection' : 'catalog';
   const [activeTab, setActiveTab] = useState<WorkspaceTab>(initialTab);
   const [catalogTab, setCatalogTab] = useState<CatalogTab>('products');
+  const [connection, setConnection] = useState<WhatsAppConnection | null>(null);
+  const [loadingConnection, setLoadingConnection] = useState(false);
+  const [newChatOpen, setNewChatOpen] = useState(false);
+  const [newChatPhone, setNewChatPhone] = useState('');
+  const [newChatText, setNewChatText] = useState('');
+  const [startingChat, setStartingChat] = useState(false);
+  const [activating, setActivating] = useState(false);
   const [catalog, setCatalog] = useState<WhatsAppCatalog | null>(null);
   const [catalogName, setCatalogName] = useState('');
   const [products, setProducts] = useState<CatalogProduct[]>([]);
@@ -137,36 +176,52 @@ const WhatsAppWorkspace: React.FC = () => {
   const [pageError, setPageError] = useState('');
   const [toast, setToast] = useState('');
   const messageListRef = useRef<HTMLDivElement>(null);
+  const pollingRef = useRef(false);
+
+  /* ------------------------------------------------------------------ */
+  /* Loaders                                                            */
+  /* ------------------------------------------------------------------ */
+
+  const loadConnection = async () => {
+    setLoadingConnection(true);
+    try {
+      setConnection(await getWhatsAppConnection());
+    } catch {
+      setConnection(null);
+    } finally {
+      setLoadingConnection(false);
+    }
+  };
 
   const loadCatalog = async () => {
-  setLoadingCatalog(true);
-  setPageError('');
-  try {
-    const currentCatalog = await getWhatsAppCatalog();
-    setCatalog(currentCatalog);
-    if (!currentCatalog) {
-      setProducts([]);
-      setCategories([]);
-      return;
+    setLoadingCatalog(true);
+    setPageError('');
+    try {
+      const currentCatalog = await getWhatsAppCatalog();
+      setCatalog(currentCatalog);
+      if (!currentCatalog) {
+        setProducts([]);
+        setCategories([]);
+        return;
+      }
+
+      const [productsResult, categoriesResult] = await Promise.allSettled([
+        getCatalogProducts(currentCatalog.id, profileCategoryId, profileCategoryName),
+        getCatalogCategories(currentCatalog.id, profileCategoryId, profileCategoryName),
+      ]);
+
+      if (productsResult.status === 'fulfilled') setProducts(productsResult.value);
+      else setPageError(errorText(productsResult.reason));
+
+      // Categories failing should not hide products
+      if (categoriesResult.status === 'fulfilled') setCategories(categoriesResult.value);
+      else setCategories([]);
+    } catch (error) {
+      setPageError(errorText(error));
+    } finally {
+      setLoadingCatalog(false);
     }
-
-    const [productsResult, categoriesResult] = await Promise.allSettled([
-      getCatalogProducts(currentCatalog.id, profileCategoryId, profileCategoryName),
-      getCatalogCategories(currentCatalog.id, profileCategoryId, profileCategoryName),
-    ]);
-
-    if (productsResult.status === 'fulfilled') setProducts(productsResult.value);
-    else setPageError(errorText(productsResult.reason));
-
-    // Categories failing should not hide products
-    if (categoriesResult.status === 'fulfilled') setCategories(categoriesResult.value);
-    else setCategories([]);
-  } catch (error) {
-    setPageError(errorText(error));
-  } finally {
-    setLoadingCatalog(false);
-  }
-};
+  };
 
   const loadConversations = async () => {
     setLoadingInbox(true);
@@ -197,9 +252,21 @@ const WhatsAppWorkspace: React.FC = () => {
     }
   };
 
+  /* ------------------------------------------------------------------ */
+  /* Effects                                                            */
+  /* ------------------------------------------------------------------ */
+
   useEffect(() => {
+    void loadConnection();
     void loadCatalog();
     void loadConversations();
+  }, []);
+
+  // Refresh connection card when the connect flow finishes
+  useEffect(() => {
+    const refresh = () => void loadConnection();
+    window.addEventListener('whatsapp-linked', refresh);
+    return () => window.removeEventListener('whatsapp-linked', refresh);
   }, []);
 
   useEffect(() => {
@@ -213,6 +280,39 @@ const WhatsAppWorkspace: React.FC = () => {
       messageListRef.current?.scrollTo({ top: messageListRef.current.scrollHeight });
     }
   }, [activeTab, messages, selectedConversation]);
+
+  // Near real-time updates: the webhook updates the DB, the app polls it.
+  useEffect(() => {
+    if (activeTab !== 'inbox') return undefined;
+
+    const selectedId = selectedConversation?.id;
+
+    const timer = window.setInterval(async () => {
+      if (document.hidden || pollingRef.current) return;
+      pollingRef.current = true;
+      try {
+        const latestConversations = await getWhatsAppConversations();
+        setConversations(
+          latestConversations.map((item) =>
+            selectedId !== undefined && item.id === selectedId ? { ...item, unreadCount: 0 } : item
+          )
+        );
+        if (selectedId !== undefined) {
+          setMessages(await getWhatsAppMessages(selectedId));
+        }
+      } catch {
+        // Silent: the next tick will retry.
+      } finally {
+        pollingRef.current = false;
+      }
+    }, POLL_INTERVAL_MS);
+
+    return () => window.clearInterval(timer);
+  }, [activeTab, selectedConversation?.id]);
+
+  /* ------------------------------------------------------------------ */
+  /* Derived data                                                       */
+  /* ------------------------------------------------------------------ */
 
   const filteredProducts = useMemo(() => {
     const query = productSearch.trim().toLowerCase();
@@ -237,13 +337,27 @@ const WhatsAppWorkspace: React.FC = () => {
     [profileCategoryName]
   );
 
+  /* ------------------------------------------------------------------ */
+  /* Handlers                                                           */
+  /* ------------------------------------------------------------------ */
+
   const updateActiveTab = (tab: WorkspaceTab) => {
     setActiveTab(tab);
     const next = new URLSearchParams(searchParams);
-    if (tab === 'inbox') next.set('view', 'inbox');
-    else next.delete('view');
+    if (tab === 'catalog') next.delete('view');
+    else next.set('view', tab);
     setSearchParams(next, { replace: true });
     if (tab === 'inbox' && conversations.length === 0) void loadConversations();
+  };
+
+  const handleRefresh = () => {
+    void loadConnection();
+    if (activeTab === 'connection') return;
+    if (activeTab === 'catalog') void loadCatalog();
+    else {
+      void loadConversations();
+      if (selectedConversation) void loadMessages(selectedConversation);
+    }
   };
 
   const openCreateProduct = () => {
@@ -382,27 +496,124 @@ const WhatsAppWorkspace: React.FC = () => {
   const handleSendMessage = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!selectedConversation || (!messageText.trim() && !attachment && !sharedProductId)) return;
+    if (connection && !connection.connected) {
+      setPageError('WhatsApp is not connected. Connect your number before sending messages.');
+      return;
+    }
+
+    const conversation = selectedConversation;
+    const text = messageText;
+    const file = attachment;
+    const productId = sharedProductId || undefined;
+
+    // Optimistic bubble so the message shows up instantly with a clock icon.
+    const tempId = `temp-${Date.now()}`;
+    const optimistic: WhatsAppMessage = {
+      id: tempId,
+      conversationId: conversation.id,
+      direction: 'outgoing',
+      type: file ? 'document' : productId ? 'product' : 'text',
+      text: text.trim() || null,
+      fileName: file?.name ?? null,
+      status: 'sending',
+      createdAt: new Date().toISOString(),
+    };
+    setMessages((current) => [...current, optimistic]);
+    setMessageText('');
+    setAttachment(null);
+    setSharedProductId('');
+
     setSendingMessage(true);
     setPageError('');
     try {
-      await sendWhatsAppMessage(
-        selectedConversation.id,
-        messageText,
-        attachment,
-        sharedProductId || undefined
-      );
-      setMessageText('');
-      setAttachment(null);
-      setSharedProductId('');
-      await Promise.all([loadMessages(selectedConversation), loadConversations()]);
+      await sendWhatsAppMessage(conversation.id, text, file, productId);
+      await Promise.all([loadMessages(conversation), loadConversations()]);
     } catch (error) {
-      setPageError(errorText(error));
+      const message = errorText(error);
+      setMessages((current) =>
+        current.map((item) =>
+          item.id === tempId ? { ...item, status: 'failed', errorMessage: message } : item
+        )
+      );
+      setPageError(message);
     } finally {
       setSendingMessage(false);
     }
   };
 
+  const handleRetryMessage = async (failed: WhatsAppMessage) => {
+    if (!selectedConversation || !failed.text) return;
+    const conversation = selectedConversation;
+    setMessages((current) =>
+      current.map((item) =>
+        item.id === failed.id ? { ...item, status: 'sending', errorMessage: null } : item
+      )
+    );
+    setPageError('');
+    try {
+      await sendWhatsAppMessage(conversation.id, failed.text, null);
+      await Promise.all([loadMessages(conversation), loadConversations()]);
+    } catch (error) {
+      const message = errorText(error);
+      setMessages((current) =>
+        current.map((item) =>
+          item.id === failed.id ? { ...item, status: 'failed', errorMessage: message } : item
+        )
+      );
+      setPageError(message);
+    }
+  };
+
+  const handleStartConversation = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    let digits = newChatPhone.replace(/\D/g, '');
+    if (digits.length === 10) digits = `91${digits}`; // default to India
+    if (digits.length < 11 || digits.length > 15 || !newChatText.trim()) {
+      setPageError('Enter a valid phone number with country code and a message.');
+      return;
+    }
+    if (connection && !connection.connected) {
+      setPageError('WhatsApp is not connected. Connect your number first.');
+      return;
+    }
+
+    setStartingChat(true);
+    setPageError('');
+    try {
+      const conversation = await startWhatsAppConversation(digits, newChatText);
+      setNewChatOpen(false);
+      setNewChatPhone('');
+      setNewChatText('');
+      updateActiveTab('inbox');
+      await loadConversations();
+      if (conversation) await loadMessages(conversation);
+      setToast('Message sent.');
+    } catch (error) {
+      setPageError(errorText(error));
+    } finally {
+      setStartingChat(false);
+    }
+  };
+
+  const handleActivate = async () => {
+    setActivating(true);
+    setPageError('');
+    try {
+      const result = await activateWhatsAppNumber();
+      setToast(result?.message || 'Messaging activated.');
+      await loadConnection();
+    } catch (error) {
+      setPageError(errorText(error));
+    } finally {
+      setActivating(false);
+    }
+  };
+
   const totalUnread = conversations.reduce((total, conversation) => total + (conversation.unreadCount || 0), 0);
+
+  /* ------------------------------------------------------------------ */
+  /* Render                                                             */
+  /* ------------------------------------------------------------------ */
 
   return (
     <IonPage className="wa-workspace-page">
@@ -412,18 +623,37 @@ const WhatsAppWorkspace: React.FC = () => {
             <IonIcon icon={arrowBackOutline} />
           </button>
           <div className="wa-brand"><IonIcon icon={logoWhatsapp} /><span>WhatsApp Business</span></div>
-          <button
-            type="button"
-            className="wa-icon-button"
-            onClick={() => activeTab === 'catalog' ? void loadCatalog() : void loadConversations()}
-            aria-label="Refresh"
-          >
+          <button type="button" className="wa-icon-button" onClick={handleRefresh} aria-label="Refresh">
             <IonIcon icon={refreshOutline} />
           </button>
         </header>
 
         <main className="wa-workspace-content">
+          {connection && activeTab !== 'connection' && (
+            <div className={`wa-connection-card ${connection.connected ? 'is-connected' : 'is-disconnected'}`}>
+              <IonIcon icon={connection.connected ? checkmarkCircleOutline : informationCircleOutline} />
+              <div>
+                <strong>
+                  {connection.connected
+                    ? connection.displayName || 'WhatsApp connected'
+                    : 'WhatsApp not connected'}
+                </strong>
+                <small>
+                  {connection.phoneNumber || (connection.connected
+                    ? 'Number connected'
+                    : 'Connect your number to start messaging')}
+                </small>
+              </div>
+              {connection.connected && connection.qualityRating && (
+                <span className="wa-quality">{connection.qualityRating.toLowerCase()}</span>
+              )}
+            </div>
+          )}
+
           <nav className="wa-main-tabs" aria-label="WhatsApp workspace">
+            <button type="button" className={activeTab === 'connection' ? 'is-active' : ''} onClick={() => updateActiveTab('connection')}>
+              <IonIcon icon={linkOutline} /> Connection
+            </button>
             <button type="button" className={activeTab === 'catalog' ? 'is-active' : ''} onClick={() => updateActiveTab('catalog')}>
               <IonIcon icon={cubeOutline} /> Catalog
             </button>
@@ -441,7 +671,66 @@ const WhatsAppWorkspace: React.FC = () => {
             </div>
           )}
 
-          {activeTab === 'catalog' ? (
+          {activeTab === 'connection' ? (
+            <section className="wa-section">
+              <div className="wa-page-heading">
+                <div>
+                  <p className="wa-eyebrow">WHATSAPP NUMBER</p>
+                  <h1>Connection</h1>
+                  <p>Your connected business number and messaging shortcuts.</p>
+                </div>
+              </div>
+
+              {loadingConnection && !connection ? (
+                <div className="wa-loading"><IonSpinner /><span>Checking connection...</span></div>
+              ) : connection?.connected ? (
+                <div className="wa-connect-panel">
+                  <div className="wa-connect-hero is-connected">
+                    <span className="wa-connect-hero-icon"><IonIcon icon={checkmarkCircleOutline} /></span>
+                    <div>
+                      <strong>WhatsApp connected</strong>
+                      <small>You can send and receive customer messages.</small>
+                    </div>
+                  </div>
+
+                  <dl className="wa-connect-details">
+                    <div><dt><IonIcon icon={businessOutline} /> Business name</dt><dd>{connection.displayName || '—'}</dd></div>
+                    <div><dt><IonIcon icon={callOutline} /> Phone number</dt><dd>{connection.phoneNumber || '—'}</dd></div>
+                    <div><dt><IonIcon icon={informationCircleOutline} /> Quality rating</dt><dd className="is-capitalize">{connection.qualityRating?.toLowerCase() || '—'}</dd></div>
+                    <div><dt><IonIcon icon={linkOutline} /> Status</dt><dd className="is-capitalize">{connection.status || 'connected'}</dd></div>
+                  </dl>
+
+                  <div className="wa-connect-actions">
+                    <button type="button" className="wa-primary-button" onClick={() => { updateActiveTab('inbox'); setNewChatOpen(true); }}>
+                      <IonIcon icon={chatbubbleEllipsesOutline} /> New message
+                    </button>
+                    <button type="button" className="wa-secondary-button" onClick={() => updateActiveTab('inbox')}>
+                      <IonIcon icon={logoWhatsapp} /> Open inbox
+                    </button>
+                    <button type="button" className="wa-secondary-button" onClick={() => void loadConnection()} disabled={loadingConnection}>
+                      {loadingConnection ? <IonSpinner name="crescent" /> : <IonIcon icon={refreshOutline} />} Refresh status
+                    </button>
+                    <button type="button" className="wa-secondary-button" onClick={() => navigate(CONNECT_ROUTE)}>
+                      <IonIcon icon={linkOutline} /> Reconnect number
+                    </button>
+                    <button type="button" className="wa-secondary-button" onClick={() => void handleActivate()} disabled={activating}>
+                      {activating ? <IonSpinner name="crescent" /> : <IonIcon icon={checkmarkCircleOutline} />} Activate messaging
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <section className="wa-catalog-setup">
+                  <span className="wa-catalog-setup-icon"><IonIcon icon={logoWhatsapp} /></span>
+                  <p className="wa-eyebrow">NOT CONNECTED</p>
+                  <h2>Connect your WhatsApp number</h2>
+                  <p className="wa-catalog-setup-copy">Connect your WhatsApp Business number to send and receive customer messages from this app.</p>
+                  <button type="button" className="wa-primary-button" style={{ width: '100%', minHeight: 46 }} onClick={() => navigate(CONNECT_ROUTE)}>
+                    <IonIcon icon={linkOutline} /> Connect WhatsApp
+                  </button>
+                </section>
+              )}
+            </section>
+          ) : activeTab === 'catalog' ? (
             <section className="wa-section">
               <div className="wa-page-heading">
                 <div><p className="wa-eyebrow">SELL ON WHATSAPP</p><h1>Catalog</h1><p>{profileCategoryName ? `Profile category: ${profileCategoryName}. Manage your products and services.` : 'Manage products and keep your WhatsApp catalog in sync.'}</p></div>
@@ -540,13 +829,16 @@ const WhatsAppWorkspace: React.FC = () => {
             <section className={`wa-section wa-inbox-section${selectedConversation ? ' has-conversation' : ''}`}>
               <div className="wa-page-heading wa-inbox-heading">
                 <div><p className="wa-eyebrow">CUSTOMER MESSAGES</p><h1>Inbox</h1><p>{totalUnread ? `${totalUnread} unread messages` : 'Conversations with your customers'}</p></div>
-                <button type="button" className="wa-primary-icon" onClick={() => void loadConversations()} aria-label="Refresh conversations"><IonIcon icon={refreshOutline} /></button>
+                <div className="wa-heading-actions">
+                  <button type="button" className="wa-icon-button" onClick={() => void loadConversations()} aria-label="Refresh conversations"><IonIcon icon={refreshOutline} /></button>
+                  <button type="button" className="wa-primary-icon" onClick={() => setNewChatOpen(true)} aria-label="New message" title="New message"><IonIcon icon={chatbubbleEllipsesOutline} /></button>
+                </div>
               </div>
 
               <div className="wa-inbox-layout">
                 <aside className={`wa-conversation-pane${selectedConversation ? ' is-hidden-mobile' : ''}`}>
                   <div className="wa-search wa-conversation-search"><IonIcon icon={searchOutline} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search conversations" aria-label="Search conversations" /></div>
-                  {loadingInbox ? <div className="wa-loading"><IonSpinner /><span>Loading conversations...</span></div> : filteredConversations.length ? (
+                  {loadingInbox && conversations.length === 0 ? <div className="wa-loading"><IonSpinner /><span>Loading conversations...</span></div> : filteredConversations.length ? (
                     <ul className="wa-conversation-list">
                       {filteredConversations.map((conversation) => (
                         <li key={conversation.id}>
@@ -572,11 +864,22 @@ const WhatsAppWorkspace: React.FC = () => {
                       </header>
                       <div className="wa-chat-body">
                         <div className="wa-message-list" ref={messageListRef}>
-                          {loadingMessages ? <div className="wa-loading"><IonSpinner /><span>Loading messages...</span></div> : messages.length ? messages.map((message) => (
+                          {loadingMessages && messages.length === 0 ? <div className="wa-loading"><IonSpinner /><span>Loading messages...</span></div> : messages.length ? messages.map((message) => (
                             <article key={message.id} className={`wa-message ${message.direction === 'outgoing' ? 'is-outgoing' : 'is-incoming'}`}>
                               {message.type === 'product' ? <div className="wa-product-message"><IonIcon icon={cubeOutline} /><span>Product shared{message.text ? `: ${message.text}` : ''}</span></div> : message.mediaUrl && ['image', 'video'].includes(message.type) ? <a href={message.mediaUrl} target="_blank" rel="noreferrer"><img className="wa-message-media" src={message.mediaUrl} alt={message.fileName || 'Message attachment'} /></a> : message.mediaUrl ? <a className="wa-document-link" href={message.mediaUrl} target="_blank" rel="noreferrer"><IonIcon icon={attachOutline} />{message.fileName || 'Open attachment'}</a> : null}
                               {message.text && message.type !== 'product' && <p>{message.text}</p>}
-                              <time>{formatTime(message.createdAt)}</time>
+                              <time>
+                                {formatTime(message.createdAt)}
+                                {message.direction === 'outgoing' && renderStatusTick(message.status)}
+                              </time>
+                              {message.direction === 'outgoing' && message.status === 'failed' && (
+                                <small className="wa-message-error">
+                                  <span>{message.errorMessage || 'Message not delivered'}</span>
+                                  {message.text && (
+                                    <button type="button" onClick={() => void handleRetryMessage(message)}>Retry</button>
+                                  )}
+                                </small>
+                              )}
                             </article>
                           )) : <div className="wa-chat-start"><IonIcon icon={logoWhatsapp} /><p>This is the start of your conversation.</p></div>}
                         </div>
@@ -630,6 +933,33 @@ const WhatsAppWorkspace: React.FC = () => {
               <button form="wa-product-form" type="submit" className="wa-primary-button" disabled={savingProduct}>
                 {savingProduct ? <IonSpinner name="crescent" /> : <IonIcon icon={checkmarkCircleOutline} />}
                 {savingProduct ? 'Saving product...' : editingProduct ? 'Save changes' : 'Save product'}
+              </button>
+            </footer>
+          </div>
+        </IonModal>
+
+        <IonModal isOpen={newChatOpen} onDidDismiss={() => setNewChatOpen(false)} className="wa-product-modal wa-chat-modal">
+          <div className="wa-modal-content">
+            <header className="wa-modal-header">
+              <div><p className="wa-eyebrow">WHATSAPP</p><h2>New message</h2></div>
+              <button type="button" className="wa-icon-button" onClick={() => setNewChatOpen(false)} aria-label="Close"><IonIcon icon={closeOutline} /></button>
+            </header>
+            <form id="wa-new-chat-form" className="wa-product-form" onSubmit={(event) => void handleStartConversation(event)}>
+              <label>Phone number
+                <input required inputMode="tel" value={newChatPhone} onChange={(event) => setNewChatPhone(event.target.value)} placeholder="e.g. 919876543210" />
+              </label>
+              <label>Message
+                <textarea required rows={4} maxLength={1000} value={newChatText} onChange={(event) => setNewChatText(event.target.value)} placeholder="Write your message" />
+              </label>
+              <p className="wa-muted-message wa-chat-note">
+                WhatsApp allows free-form messages only within 24 hours of the customer's last message. For first-time contacts, an approved template is required.
+              </p>
+              {pageError && <p className="wa-form-error">{pageError}</p>}
+            </form>
+            <footer className="wa-product-savebar">
+              <button form="wa-new-chat-form" type="submit" className="wa-primary-button" disabled={startingChat || !newChatPhone.trim() || !newChatText.trim()}>
+                {startingChat ? <IonSpinner name="crescent" /> : <IonIcon icon={sendOutline} />}
+                {startingChat ? 'Sending...' : 'Send message'}
               </button>
             </footer>
           </div>

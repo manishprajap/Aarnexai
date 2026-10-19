@@ -1,6 +1,15 @@
 import { apiDelete, apiGet, apiPost, apiPut } from '../api';
 
 export type ProductAvailability = 'in_stock' | 'out_of_stock' | 'preorder';
+export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+
+export interface WhatsAppConnection {
+  connected: boolean;
+  phoneNumber?: string | null;
+  displayName?: string | null;
+  qualityRating?: string | null;
+  status?: string | null;
+}
 
 export interface WhatsAppCatalog {
   id: string | number;
@@ -68,6 +77,8 @@ export interface WhatsAppMessage {
   mediaUrl?: string | null;
   fileName?: string | null;
   productId?: string | number | null;
+  status?: MessageStatus;
+  errorMessage?: string | null;
   createdAt: string;
 }
 
@@ -93,6 +104,35 @@ const categoryScopedEndpoint = (
   if (!query.size) return endpoint;
   return `${endpoint}?${query.toString()}`;
 };
+
+/* -------------------------------------------------------------------------- */
+/* Connection                                                                 */
+/* -------------------------------------------------------------------------- */
+
+export const getWhatsAppConnection = async (): Promise<WhatsAppConnection> => {
+  const response = await apiGet('/whatsapp/status');
+  const data = response?.data ?? response;
+  // Backend shape: { success, connected, profile: { phoneNumber, businessName, ... } }
+  const raw = data?.profile ?? data?.connection ?? data?.account ?? data;
+  const status = typeof raw?.status === 'string' ? raw.status.toLowerCase() : null;
+  return {
+    connected: Boolean(
+      data?.connected ?? raw?.connected ?? raw?.linked ?? ['connected', 'active', 'linked'].includes(status ?? '')
+    ),
+    phoneNumber:
+      raw?.phoneNumber ?? raw?.displayPhoneNumber ?? raw?.display_phone_number ??
+      raw?.phone_number ?? raw?.whatsappNumber ?? raw?.number ?? null,
+    displayName:
+      raw?.displayName ?? raw?.verifiedName ?? raw?.verified_name ??
+      raw?.businessName ?? raw?.name ?? null,
+    qualityRating: raw?.qualityRating ?? raw?.quality_rating ?? null,
+    status,
+  };
+};
+
+/* -------------------------------------------------------------------------- */
+/* Catalog                                                                    */
+/* -------------------------------------------------------------------------- */
 
 const normalizeCatalog = (response: any): WhatsAppCatalog | null => {
   const data = response?.data ?? response;
@@ -197,21 +237,72 @@ export const syncWhatsAppCatalog = (
   ...(businessCategory?.trim() ? { businessCategory: businessCategory.trim() } : {}),
 });
 
+/* -------------------------------------------------------------------------- */
+/* Inbox / messaging                                                          */
+/* -------------------------------------------------------------------------- */
+
+const withPlus = (phone: unknown) => {
+  const value = String(phone ?? '').trim();
+  return value && /^\d+$/.test(value) ? `+${value}` : value;
+};
+
+// Backend row  ->  UI shape
+const normalizeConversation = (raw: any): WhatsAppConversation => {
+  const contact = raw?.contact ?? {};
+  const phone = withPlus(contact.phoneNumber ?? contact.waId ?? raw?.phoneNumber);
+  return {
+    id: raw?.id,
+    customerName: contact.name || contact.profileName || raw?.customerName || phone,
+    phoneNumber: phone,
+    profileImageUrl: contact.avatarUrl ?? raw?.profileImageUrl ?? null,
+    lastMessage: raw?.lastMessageText ?? raw?.lastMessage ?? null,
+    lastMessageAt: raw?.lastMessageAt ?? null,
+    unreadCount: Number(raw?.unreadCount || 0),
+    status: raw?.status ?? null,
+  };
+};
+
+const MESSAGE_TYPES: WhatsAppMessage['type'][] = ['text', 'image', 'video', 'document', 'product'];
+const MESSAGE_STATUSES: MessageStatus[] = ['sending', 'sent', 'delivered', 'read', 'failed'];
+
+const normalizeMessage = (raw: any): WhatsAppMessage => {
+  const metadata = raw?.metadata && typeof raw.metadata === 'object' ? raw.metadata : {};
+  const type: WhatsAppMessage['type'] = MESSAGE_TYPES.includes(raw?.type) ? raw.type : 'text';
+  const status = raw?.status === 'pending' ? 'sending' : raw?.status;
+  const fileName = raw?.fileName ?? metadata.fileName ?? null;
+  const text =
+    raw?.text ||
+    (fileName ? `📎 ${fileName}` : type !== 'text' ? `[${raw?.type || type}]` : null);
+
+  return {
+    id: raw?.id,
+    conversationId: raw?.conversationId,
+    direction: ['outbound', 'outgoing'].includes(raw?.direction) ? 'outgoing' : 'incoming',
+    type,
+    text,
+    mediaUrl: raw?.mediaUrl ?? metadata.mediaUrl ?? null,
+    fileName,
+    productId: raw?.productId ?? null,
+    status: MESSAGE_STATUSES.includes(status) ? status : undefined,
+    errorMessage: raw?.errorMessage ?? null,
+    createdAt: raw?.createdAt,
+  };
+};
+
 export const getWhatsAppConversations = async (): Promise<WhatsAppConversation[]> =>
-  unwrapArray<WhatsAppConversation>(
-    await apiGet('/whatsapp/inbox/conversations'),
-    'conversations'
+  unwrapArray<any>(await apiGet('/whatsapp/inbox/conversations'), 'conversations').map(
+    normalizeConversation
   );
 
 export const getWhatsAppMessages = async (
   conversationId: string | number
 ): Promise<WhatsAppMessage[]> =>
-  unwrapArray<WhatsAppMessage>(
+  unwrapArray<any>(
     await apiGet(`/whatsapp/inbox/conversations/${encodeURIComponent(String(conversationId))}/messages`),
     'messages'
-  );
+  ).map(normalizeMessage);
 
-export const sendWhatsAppMessage = (
+export const sendWhatsAppMessage = async (
   conversationId: string | number,
   text: string,
   attachment: File | null,
@@ -222,8 +313,41 @@ export const sendWhatsAppMessage = (
   if (attachment) form.set('file', attachment);
   if (productId !== undefined) form.set('productId', String(productId));
 
-  return apiPost(
+  const response = await apiPost(
     `/whatsapp/inbox/conversations/${encodeURIComponent(String(conversationId))}/messages`,
     form
   );
+  if (response?.success === false) {
+    throw new Error(response?.message || 'Message could not be sent.');
+  }
+  return response;
+};
+
+/**
+ * Start a brand-new conversation with a phone number (country code included,
+ * digits only, e.g. 919876543210) and send the first text message.
+ */
+export const startWhatsAppConversation = async (
+  phoneNumber: string,
+  text: string
+): Promise<WhatsAppConversation | null> => {
+  const response = await apiPost('/whatsapp/inbox/conversations', {
+    phoneNumber,
+    text: text.trim(),
+  });
+  if (response?.success === false) {
+    throw new Error(response?.message || 'Could not start the conversation.');
+  }
+  const data = response?.data ?? response;
+  const raw = data?.conversation ?? data;
+  return raw?.id !== undefined && raw?.id !== null ? normalizeConversation(raw) : null;
+};
+
+/** Registers the connected number on WhatsApp Cloud API (fixes "Account not registered"). */
+export const activateWhatsAppNumber = async (pin?: string) => {
+  const response = await apiPost('/whatsapp/register', pin ? { pin } : {});
+  if (response?.success === false) {
+    throw new Error(response?.message || 'Could not activate messaging.');
+  }
+  return response;
 };

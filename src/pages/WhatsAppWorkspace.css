@@ -7,6 +7,9 @@
   --wa-line: #e5ece8;
   --wa-canvas: #f5f8f6;
   --wa-white: #ffffff;
+  --wa-danger: #b33c31;
+  --wa-danger-soft: #fff4f2;
+  --wa-read-blue: #34b7f1;
   background: var(--wa-canvas);
 }
 
@@ -60,9 +63,43 @@
   padding: 12px 16px 28px;
 }
 
+/* ------------------------------------------------------------------ */
+/* Connection card                                                    */
+/* ------------------------------------------------------------------ */
+
+.wa-connection-card {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 12px;
+  padding: 11px 13px;
+  border: 1px solid #d6eadd;
+  border-radius: 12px;
+  background: #f4faf6;
+  color: #24543a;
+}
+.wa-connection-card > ion-icon { flex: none; color: var(--wa-green); font-size: 22px; }
+.wa-connection-card > div { flex: 1; min-width: 0; }
+.wa-connection-card strong,
+.wa-connection-card small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wa-connection-card strong { color: var(--wa-ink); font-size: 12px; font-weight: 750; }
+.wa-connection-card small { margin-top: 3px; color: var(--wa-muted); font-size: 10px; }
+.wa-connection-card .wa-quality {
+  flex: none;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #e1f4e7;
+  color: var(--wa-green-dark);
+  font-size: 9px;
+  font-weight: 750;
+  text-transform: capitalize;
+}
+.wa-connection-card.is-disconnected { border-color: #f2cbc5; background: var(--wa-danger-soft); }
+.wa-connection-card.is-disconnected > ion-icon { color: #c05a50; }
+
 .wa-main-tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
   gap: 4px;
   margin-bottom: 20px;
   padding: 4px;
@@ -74,14 +111,14 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
+  gap: 5px;
   min-height: 42px;
   border: 0;
   border-radius: 9px;
   background: transparent;
   color: var(--wa-muted);
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -216,6 +253,19 @@
 .wa-message-media { display: block; max-width: 220px; max-height: 220px; border-radius: 7px; object-fit: cover; }
 .wa-document-link, .wa-product-message { display: flex; align-items: center; gap: 7px; color: var(--wa-green-dark); font-size: 11px; text-decoration: none; }
 .wa-product-message ion-icon { font-size: 20px; }
+
+/* ------------------------------------------------------------------ */
+/* Message status ticks + failed state                                */
+/* ------------------------------------------------------------------ */
+
+.wa-tick { display: inline-block; margin-left: 5px; color: #89978f; font-size: 10px; font-weight: 700; letter-spacing: -2px; line-height: 1; vertical-align: baseline; }
+.wa-tick.is-read { color: var(--wa-read-blue); }
+.wa-tick.is-failed { color: var(--wa-danger); letter-spacing: 0; }
+
+.wa-message.is-outgoing .wa-message-error { display: flex; align-items: center; justify-content: flex-end; gap: 8px; margin-top: 4px; color: var(--wa-danger); font-size: 9px; line-height: 1.35; }
+.wa-message-error span { min-width: 0; overflow-wrap: anywhere; text-align: right; }
+.wa-message-error button { flex: none; padding: 2px 8px; border: 1px solid #f2cbc5; border-radius: 999px; background: #ffffff; color: var(--wa-danger); font: inherit; font-size: 9px; font-weight: 750; cursor: pointer; }
+
 .wa-chat-start, .wa-chat-placeholder { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; padding: 24px; color: #8ca497; text-align: center; }
 .wa-chat-start ion-icon, .wa-chat-placeholder > ion-icon { font-size: 40px; }
 .wa-chat-start p, .wa-chat-placeholder p { margin: 10px 0 0; color: var(--wa-muted); font-size: 12px; }
@@ -266,6 +316,37 @@ button.wa-profile-category { width: 100%; text-align: left; }
 .wa-product-savebar { flex: none; margin: 0 -18px; padding: 10px 18px max(12px, env(safe-area-inset-bottom)); border-top: 1px solid var(--wa-line); background: #ffffff; }
 .wa-product-savebar .wa-primary-button { width: 100%; min-height: 48px; font-size: 13px; }
 
+/* ------------------------------------------------------------------ */
+/* Connection tab + new message                                       */
+/* ------------------------------------------------------------------ */
+
+.wa-heading-actions { display: flex; flex: none; gap: 8px; }
+
+.wa-connect-panel { display: grid; gap: 14px; }
+.wa-connect-hero { display: flex; align-items: center; gap: 12px; padding: 16px; border: 1px solid #d6eadd; border-radius: 14px; background: #f4faf6; }
+.wa-connect-hero-icon { display: grid; place-items: center; flex: none; width: 44px; height: 44px; border-radius: 12px; background: var(--wa-green-soft); color: var(--wa-green); font-size: 24px; }
+.wa-connect-hero strong { display: block; color: var(--wa-ink); font-size: 14px; font-weight: 800; }
+.wa-connect-hero small { display: block; margin-top: 3px; color: var(--wa-muted); font-size: 11px; line-height: 1.4; }
+
+.wa-connect-details { margin: 0; border: 1px solid var(--wa-line); border-radius: 14px; background: #ffffff; }
+.wa-connect-details > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 50px; padding: 0 14px; border-bottom: 1px solid var(--wa-line); }
+.wa-connect-details > div:last-child { border-bottom: 0; }
+.wa-connect-details dt { display: flex; align-items: center; gap: 8px; color: var(--wa-muted); font-size: 11px; font-weight: 700; }
+.wa-connect-details dt ion-icon { color: var(--wa-green); font-size: 16px; }
+.wa-connect-details dd { margin: 0; overflow: hidden; color: var(--wa-ink); font-size: 12px; font-weight: 750; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.wa-connect-details dd.is-capitalize { text-transform: capitalize; }
+
+.wa-connect-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.wa-connect-actions .wa-primary-button { grid-column: 1 / -1; min-height: 46px; }
+.wa-secondary-button { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 44px; padding: 0 10px; border: 1px solid #bddcc9; border-radius: 9px; background: #f3fbf6; color: var(--wa-green-dark); font: inherit; font-size: 11px; font-weight: 750; cursor: pointer; }
+.wa-secondary-button ion-icon { font-size: 16px; }
+.wa-secondary-button:disabled { opacity: 0.6; }
+
+.wa-chat-modal { --height: auto; --max-height: 92%; }
+.wa-chat-modal .wa-modal-content { height: auto; max-height: 92vh; }
+.wa-chat-modal .wa-product-form { flex: none; }
+.wa-chat-note { padding: 0; font-size: 10px; line-height: 1.5; }
+
 @media (max-width: 680px) {
   .wa-workspace-content { padding: 10px 14px 24px; }
   .wa-inbox-layout { display: block; min-height: 0; overflow: visible; border: 0; border-radius: 0; background: transparent; }
@@ -287,4 +368,5 @@ button.wa-profile-category { width: 100%; text-align: left; }
   .wa-product-image { width: 50px; height: 50px; }
   .wa-product-actions button { width: 27px; }
   .wa-customer-details { display: none; }
+  .wa-connection-card { padding: 9px 11px; }
 }
