@@ -197,21 +197,6 @@ const getLocalDateKey = (date: Date): string => {
   return `${year}-${month}-${day}`;
 };
 
-function getRandomPreviousBannerImage(
-  days: MarketingCalendarDay[],
-  selectedDate: string,
-): string {
-  const images = days
-    .filter((day) => day.date !== selectedDate)
-    .flatMap((day) => [
-      day.banner?.imageUrl,
-      ...(day.publishedBanners ?? []).map((banner) => banner.imageUrl),
-    ])
-    .filter((imageUrl): imageUrl is string => Boolean(imageUrl));
-
-  return images.length ? images[Math.floor(Math.random() * images.length)] : '';
-}
-
 const adSlides = [
   {
     type: 'image',
@@ -257,7 +242,6 @@ const Home: React.FC = () => {
   const [calendarError, setCalendarError] = useState('');
   const [calendarMonth, setCalendarMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [calendarSelectedDate, setCalendarSelectedDate] = useState(() => getLocalDateKey(new Date()));
-  const [calendarPreviewImage, setCalendarPreviewImage] = useState('');
   const [calendarModalOpen, setCalendarModalOpen] = useState(false);
   const [calendarImagePreviewOpen, setCalendarImagePreviewOpen] = useState(false);
   const [generatingCalendarDay, setGeneratingCalendarDay] = useState<number | null>(null);
@@ -345,8 +329,6 @@ const Home: React.FC = () => {
   const selectedPublishedImage = selectedCalendarDay?.publishedBanners?.find((banner) => banner.imageUrl)?.imageUrl;
   const calendarBannerImage = selectedPublishedImage
     || selectedCalendarDay?.banner?.imageUrl
-    || calendarAnalytics.find((banner) => banner.imageUrl)?.imageUrl
-    || calendarPreviewImage
     || '';
   const calendarFirstWeekday = new Date(
     calendarMonth.getFullYear(),
@@ -534,16 +516,17 @@ const Home: React.FC = () => {
     }
   };
 
-  const handleGenerateCalendarBanner = async (day: MarketingCalendarDay) => {
+  const handleGenerateCalendarBanner = async (day: MarketingCalendarDay, regenerate = false) => {
     if (generatingCalendarDay !== null) return;
     setGeneratingCalendarDay(day.day);
     setCalendarActionError('');
     try {
       const response = await apiPost<{
         success: boolean;
+        alreadyGenerated?: boolean;
         banner?: { id: number; imageUrl: string };
         error?: string;
-      }>('/marketing-calendar', { day: day.day });
+      }>('/marketing-calendar', { day: day.day, ...(regenerate ? { regenerate: true } : {}) });
       const banner = response?.banner;
       if (!response?.success || !banner?.id || !banner.imageUrl) {
         throw new Error(response?.error || 'Banner generation returned no image.');
@@ -1305,7 +1288,7 @@ const Home: React.FC = () => {
                               aria-label={`${new Date(`${date}T00:00:00`).toLocaleDateString()}${isToday ? ', today' : ''}${day ? ', campaign planned' : ''}${day?.banner?.posted ? ', posted' : ''}`}
                               onClick={() => {
                                 setCalendarSelectedDate(date);
-                                setCalendarPreviewImage(getRandomPreviousBannerImage(calendarDays, date));
+                                setCalendarImagePreviewOpen(false);
                                 setCalendarActionError('');
                                 setCalendarModalOpen(true);
                                 void loadMarketingCalendar();
@@ -1354,10 +1337,10 @@ const Home: React.FC = () => {
                         <>
                           <button
                             type="button"
-                            className={`calendar-banner-preview${selectedCalendarDay.banner ? '' : ' is-blurred'}`}
+                            className={`calendar-banner-preview${calendarBannerImage ? ' has-image' : ' is-blurred'}`}
                             onClick={() => calendarBannerImage && setCalendarImagePreviewOpen(true)}
                             disabled={!calendarBannerImage}
-                            aria-label="Open full-size campaign banner"
+                            aria-label={calendarBannerImage ? 'Open full-size campaign banner' : 'Banner preview unavailable until generated'}
                           >
                             {calendarBannerImage ? (
                               <img src={calendarBannerImage} alt={`${selectedCalendarDay.theme || 'Campaign'} banner`} />
@@ -1377,6 +1360,19 @@ const Home: React.FC = () => {
                               {generatingCalendarDay === selectedCalendarDay.day
                                 ? <><IonSpinner name="crescent" /> Generating…</>
                                 : 'Generate banner'}
+                            </IonButton>
+                          )}
+                          {selectedCalendarDay.banner && !selectedCalendarDay.banner.posted && (
+                            <IonButton
+                              className="calendar-generate-button"
+                              onClick={() => void handleGenerateCalendarBanner(selectedCalendarDay, true)}
+                              disabled={generatingCalendarDay !== null}
+                              expand="block"
+                              fill="outline"
+                            >
+                              {generatingCalendarDay === selectedCalendarDay.day
+                                ? <><IonSpinner name="crescent" /> Regenerating…</>
+                                : 'Regenerate banner (uses 1 credit)'}
                             </IonButton>
                           )}
 

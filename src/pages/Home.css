@@ -1579,12 +1579,26 @@ ion-modal.connect-sheet ion-content.cs-content {
   cursor: default;
 }
 
+.calendar-banner-preview.has-image {
+  min-height: 0;
+  aspect-ratio: auto;
+  background: #f4f7fb;
+  cursor: zoom-in;
+}
+
 .calendar-banner-preview > img {
   display: block;
   width: 100%;
   height: 100%;
   min-height: 170px;
   object-fit: cover;
+}
+
+.calendar-banner-preview.has-image > img {
+  height: auto;
+  min-height: 0;
+  max-height: min(62vh, 560px);
+  object-fit: contain;
 }
 
 .calendar-banner-preview.is-blurred > img {
