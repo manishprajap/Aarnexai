@@ -42,6 +42,7 @@ import {
   WhatsAppConnection,
   WhatsAppConversation,
   WhatsAppMessage,
+  WhatsAppMessageTemplate,
   createCatalogCategory,
   createCatalogProduct,
   activateWhatsAppNumber,
@@ -53,13 +54,16 @@ import {
   getWhatsAppConnection,
   getWhatsAppConversations,
   getWhatsAppMessages,
+  getWhatsAppMessageTemplates,
   sendWhatsAppMessage,
+  sendWhatsAppMessageTemplate,
   startWhatsAppConversation,
   subscribeWhatsAppWebhook,
   syncWhatsAppCatalog,
   updateCatalogProduct,
 } from '../services/whatsappCommerce';
 import './WhatsAppWorkspace.css';
+import './WhatsAppWorkspace-template.css';
 
 type WorkspaceTab = 'connection' | 'catalog' | 'inbox';
 
@@ -158,6 +162,11 @@ const WhatsAppWorkspace: React.FC = () => {
   const [search, setSearch] = useState('');
   const [productSearch, setProductSearch] = useState('');
   const [messageText, setMessageText] = useState('');
+  const [messageTemplates, setMessageTemplates] = useState<WhatsAppMessageTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [templateParameters, setTemplateParameters] = useState<string[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+  const [sendingTemplate, setSendingTemplate] = useState(false);
   const [attachment, setAttachment] = useState<File | null>(null);
   const [sharedProductId, setSharedProductId] = useState('');
   const [categoryName, setCategoryName] = useState('');
@@ -236,6 +245,17 @@ const WhatsAppWorkspace: React.FC = () => {
     }
   };
 
+  const loadMessageTemplates = async () => {
+    setLoadingTemplates(true);
+    try {
+      setMessageTemplates(await getWhatsAppMessageTemplates());
+    } catch (error) {
+      setPageError(errorText(error));
+    } finally {
+      setLoadingTemplates(false);
+    }
+  };
+
   const loadMessages = async (conversation: WhatsAppConversation) => {
     setSelectedConversation(conversation);
     setLoadingMessages(true);
@@ -261,6 +281,7 @@ const WhatsAppWorkspace: React.FC = () => {
     void loadConnection();
     void loadCatalog();
     void loadConversations();
+    void loadMessageTemplates();
   }, []);
 
   // Refresh connection card when the connect flow finishes
@@ -491,6 +512,47 @@ const WhatsAppWorkspace: React.FC = () => {
       setPageError(errorText(error));
     } finally {
       setCreatingCatalog(false);
+    }
+  };
+
+  const selectedMessageTemplate = messageTemplates.find(
+    (template) => String(template.id) === selectedTemplateId,
+  );
+
+  const handleSendTemplate = async () => {
+    if (!selectedConversation || !selectedMessageTemplate) {
+      setPageError('Select an approved message template first.');
+      return;
+    }
+    if (selectedMessageTemplate.status !== 'APPROVED') {
+      setPageError('Only Meta-approved templates can be sent.');
+      return;
+    }
+    if (templateParameters.some((value) => !value.trim())) {
+      setPageError('Please fill in all template parameters.');
+      return;
+    }
+    if (connection && !connection.connected) {
+      setPageError('WhatsApp is not connected. Connect your number before sending messages.');
+      return;
+    }
+
+    setSendingTemplate(true);
+    setPageError('');
+    try {
+      await sendWhatsAppMessageTemplate(
+        selectedConversation.id,
+        selectedMessageTemplate.id,
+        templateParameters,
+      );
+      setSelectedTemplateId('');
+      setTemplateParameters([]);
+      setToast('WhatsApp template sent.');
+      await Promise.all([loadMessages(selectedConversation), loadConversations()]);
+    } catch (error) {
+      setPageError(errorText(error));
+    } finally {
+      setSendingTemplate(false);
     }
   };
 
@@ -903,6 +965,51 @@ const WhatsAppWorkspace: React.FC = () => {
                         {showCustomerDetails && <aside className="wa-customer-details"><div className="wa-details-avatar">{selectedConversation.customerName?.slice(0, 1).toUpperCase() || '?'}</div><h3>{selectedConversation.customerName || 'WhatsApp customer'}</h3><p>{selectedConversation.phoneNumber}</p><div className="wa-details-rule" /><small>Customer details</small><span><IonIcon icon={businessOutline} /> WhatsApp contact</span><span><IonIcon icon={informationCircleOutline} /> {selectedConversation.status || 'Conversation active'}</span></aside>}
                       </div>
                       <form className="wa-composer" onSubmit={(event) => void handleSendMessage(event)}>
+                        <div className="wa-template-controls">
+                          <label htmlFor="wa-message-template">Message template</label>
+                          <div className="wa-template-select-row">
+                            <select
+                              id="wa-message-template"
+                              aria-label="Select approved WhatsApp message template"
+                              value={selectedTemplateId}
+                              onChange={(event) => {
+                                const nextId = event.target.value;
+                                const template = messageTemplates.find((item) => String(item.id) === nextId);
+                                setSelectedTemplateId(nextId);
+                                setTemplateParameters(Array.from({ length: template?.parameterCount ?? 0 }, () => ''));
+                                setPageError('');
+                              }}
+                              disabled={loadingTemplates || sendingTemplate}
+                            >
+                              <option value="">{loadingTemplates ? 'Loading templates…' : 'Choose an approved template'}</option>
+                              {messageTemplates.map((template) => (
+                                <option key={template.id} value={String(template.id)} disabled={template.status !== 'APPROVED'}>
+                                  {template.displayName} ({template.status})
+                                </option>
+                              ))}
+                            </select>
+                            <button type="button" className="wa-template-refresh" onClick={() => void loadMessageTemplates()} disabled={loadingTemplates} title="Refresh templates">
+                              {loadingTemplates ? <IonSpinner name="crescent" /> : <IonIcon icon={refreshOutline} />}
+                            </button>
+                          </div>
+                          {selectedMessageTemplate && (
+                            <>
+                              {selectedMessageTemplate.bodyText && <p className="wa-template-preview">{selectedMessageTemplate.bodyText}</p>}
+                              {templateParameters.map((value, index) => (
+                                <input
+                                  key={`${selectedTemplateId}-${index}`}
+                                  value={value}
+                                  onChange={(event) => setTemplateParameters((current) => current.map((item, i) => i === index ? event.target.value : item))}
+                                  placeholder={`Value for {{${index + 1}}}`}
+                                  aria-label={`Template parameter ${index + 1}`}
+                                />
+                              ))}
+                              <button type="button" className="wa-template-send" onClick={() => void handleSendTemplate()} disabled={sendingTemplate || selectedMessageTemplate.status !== 'APPROVED' || templateParameters.some((value) => !value.trim())}>
+                                {sendingTemplate ? <IonSpinner name="crescent" /> : <IonIcon icon={sendOutline} />} Send template
+                              </button>
+                            </>
+                          )}
+                        </div>
                         {products.length > 0 && <select aria-label="Share a catalog product" value={sharedProductId} onChange={(event) => setSharedProductId(event.target.value)}><option value="">Share a product (optional)</option>{products.map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}</select>}
                         {attachment && <div className="wa-attachment-chip"><IonIcon icon={attachOutline} /><span>{attachment.name}</span><button type="button" onClick={() => setAttachment(null)} aria-label="Remove attachment"><IonIcon icon={closeOutline} /></button></div>}
                         <div className="wa-composer-row"><label className="wa-attach-button" title="Attach image, video or document"><IonIcon icon={attachOutline} /><input type="file" accept="image/*,video/*,.pdf,.doc,.docx,.txt" onChange={(event) => setAttachment(event.target.files?.[0] ?? null)} /></label><input value={messageText} onChange={(event) => setMessageText(event.target.value)} placeholder="Write a message" aria-label="Message text" /><button type="submit" disabled={sendingMessage || (!messageText.trim() && !attachment && !sharedProductId)} aria-label="Send message">{sendingMessage ? <IonSpinner name="crescent" /> : <IonIcon icon={sendOutline} />}</button></div>

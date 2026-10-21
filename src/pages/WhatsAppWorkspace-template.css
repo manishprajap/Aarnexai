@@ -1,0 +1,8 @@
+.wa-template-controls { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid #dce8e1; border-radius: 12px; background: #f8fbf9; }
+.wa-template-controls > label { font-size: 12px; font-weight: 700; color: #456057; }
+.wa-template-select-row { display: flex; align-items: center; gap: 8px; }
+.wa-template-select-row select, .wa-template-controls > input { min-width: 0; width: 100%; padding: 10px 12px; border: 1px solid #dce5df; border-radius: 9px; background: #fff; color: #1e342b; }
+.wa-template-refresh { display: inline-flex; align-items: center; justify-content: center; min-width: 38px; height: 38px; border: 1px solid #dce5df; border-radius: 9px; background: #fff; color: #087b50; }
+.wa-template-preview { margin: 0; padding: 10px; border-radius: 8px; background: #fff; color: #50635a; font-size: 12px; line-height: 1.5; white-space: pre-wrap; }
+.wa-template-send { display: inline-flex; justify-content: center; align-items: center; gap: 8px; padding: 9px 12px; border: 0; border-radius: 9px; background: #128c61; color: #fff; font-weight: 700; }
+.wa-template-send:disabled, .wa-template-refresh:disabled { opacity: .55; cursor: not-allowed; }

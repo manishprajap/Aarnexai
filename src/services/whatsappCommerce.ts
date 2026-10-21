@@ -57,6 +57,16 @@ export interface ProductInput {
   image: File | null;
 }
 
+export interface WhatsAppMessageTemplate {
+  id: string | number;
+  name: string;
+  displayName: string;
+  language: string;
+  status: string;
+  bodyText: string;
+  parameterCount: number;
+}
+
 export interface WhatsAppConversation {
   id: string | number;
   customerName: string;
@@ -301,6 +311,43 @@ export const getWhatsAppMessages = async (
     await apiGet(`/whatsapp/inbox/conversations/${encodeURIComponent(String(conversationId))}/messages`),
     'messages'
   ).map(normalizeMessage);
+
+/** Approved Meta WhatsApp message templates available to the connected business. */
+export const getWhatsAppMessageTemplates = async (): Promise<WhatsAppMessageTemplate[]> => {
+  const response = await apiGet('/whatsapp/templates');
+  if (response?.success === false) {
+    throw new Error(response?.message || 'Could not load WhatsApp message templates.');
+  }
+  const data = response?.data ?? response;
+  console.log('WhatsApp templates response:', data);
+  const rows = data?.templates ?? data?.items ?? data?.results;
+  if (!Array.isArray(rows)) return [];
+  return rows.map((raw: any) => ({
+    id: raw.id ?? raw.name,
+    name: String(raw.name ?? ''),
+    displayName: String(raw.displayName ?? raw.display_name ?? raw.name ?? 'Message template'),
+    language: String(raw.language ?? raw.languageCode ?? raw.language_code ?? 'en'),
+    status: String(raw.status ?? 'UNKNOWN').toUpperCase(),
+    bodyText: String(raw.bodyText ?? raw.body_text ?? raw.body ?? ''),
+    parameterCount: Number(raw.parameterCount ?? raw.parameter_count ?? (String(raw.bodyText ?? raw.body_text ?? raw.body ?? '').match(/\{\{\s*\d+\s*\}\}/g) ?? []).length),
+  }));
+};
+
+/** Send an approved template to the selected conversation. */
+export const sendWhatsAppMessageTemplate = async (
+  conversationId: string | number,
+  templateId: string | number,
+  parameters: string[] = [],
+) => {
+  const response = await apiPost(
+    `/whatsapp/inbox/conversations/${encodeURIComponent(String(conversationId))}/template`,
+    { templateId, parameters },
+  );
+  if (response?.success === false) {
+    throw new Error(response?.message || 'WhatsApp template could not be sent.');
+  }
+  return response;
+};
 
 export const sendWhatsAppMessage = async (
   conversationId: string | number,
