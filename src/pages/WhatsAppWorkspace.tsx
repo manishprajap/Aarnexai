@@ -55,6 +55,7 @@ import {
   getWhatsAppMessages,
   sendWhatsAppMessage,
   startWhatsAppConversation,
+  subscribeWhatsAppWebhook,
   syncWhatsAppCatalog,
   updateCatalogProduct,
 } from '../services/whatsappCommerce';
@@ -603,6 +604,13 @@ const WhatsAppWorkspace: React.FC = () => {
 
     try {
       const result = await activateWhatsAppNumber();
+
+      // Make sure Meta delivers incoming messages + delivered/read ticks.
+      try {
+        await subscribeWhatsAppWebhook();
+      } catch (subscribeError) {
+        setPageError(errorText(subscribeError));
+      }
 
       setToast(
         result?.message ||

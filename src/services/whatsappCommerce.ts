@@ -368,3 +368,16 @@ export const activateWhatsAppNumber = async () => {
 
   return data;
 };
+
+/**
+ * Subscribes this WhatsApp Business Account to the app's webhook.
+ * Without this, Meta never sends incoming messages or delivered/read updates.
+ */
+export const subscribeWhatsAppWebhook = async () => {
+  const response = await apiPost('/whatsapp/subscribe', {});
+  const data = response?.data ?? response;
+  if (response?.success === false || data?.success === false) {
+    throw new Error(data?.message || response?.message || 'Could not subscribe the webhook.');
+  }
+  return data;
+};
