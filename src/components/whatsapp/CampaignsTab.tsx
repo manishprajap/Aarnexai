@@ -35,7 +35,7 @@ interface CampaignsTabProps {
 }
 
 const errorText = (error: unknown) =>
-  error instanceof Error ? error.message : 'Request failed. Please try again.';
+  error instanceof Error ? error.message : 'Request failed.  try again.';
 
 const normalizePhone = (raw: string): string | null => {
   let digits = raw.replace(/\D/g, '');
