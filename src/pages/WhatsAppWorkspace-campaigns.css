@@ -1,0 +1,71 @@
+/* Import in WhatsAppWorkspace.tsx: import './WhatsAppWorkspace-campaigns.css'; */
+
+/* Scrollable main tabs (5 tabs on mobile) */
+.wa-main-tabs { overflow-x: auto; white-space: nowrap; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.wa-main-tabs::-webkit-scrollbar { display: none; }
+.wa-main-tabs button { flex: 0 0 auto; }
+
+/* Upgrade gate */
+.wa-upgrade-gate { display: flex; align-items: center; gap: 12px; padding: 16px; margin: 12px 0; border: 1px dashed rgba(128,128,128,.45); border-radius: 12px; flex-wrap: wrap; }
+.wa-upgrade-gate.is-compact { padding: 10px 12px; margin: 0; }
+.wa-upgrade-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: rgba(18,140,126,.12); color: #128c7e; font-size: 18px; }
+.wa-upgrade-text { flex: 1 1 160px; display: flex; flex-direction: column; gap: 2px; }
+.wa-upgrade-text small { opacity: .7; }
+
+/* Campaigns */
+.wa-camp-quota { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border-radius: 10px; background: rgba(128,128,128,.08); font-size: 13px; margin-bottom: 12px; }
+.wa-camp-plan { padding: 2px 10px; border-radius: 999px; background: rgba(128,128,128,.2); font-weight: 600; font-size: 12px; }
+.wa-camp-plan.is-pro { background: #128c7e; color: #fff; }
+.wa-camp-meter { flex: 1 1 100px; height: 6px; border-radius: 999px; background: rgba(128,128,128,.2); overflow: hidden; }
+.wa-camp-meter > div { height: 100%; background: #25a370; transition: width .3s ease; }
+.wa-camp-notice { padding: 10px 12px; border-radius: 10px; background: rgba(37,163,112,.12); color: #1b7a54; font-size: 13px; margin-bottom: 12px; }
+.wa-camp-form { display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid rgba(128,128,128,.25); border-radius: 14px; margin-bottom: 16px; }
+.wa-camp-form label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 500; }
+.wa-camp-form input:not([type='checkbox']), .wa-camp-form select, .wa-camp-form textarea { padding: 10px 12px; border: 1px solid rgba(128,128,128,.35); border-radius: 10px; font: inherit; background: transparent; color: inherit; }
+.wa-camp-form-head { display: flex; justify-content: space-between; align-items: center; }
+.wa-camp-form-head h2 { margin: 0; font-size: 18px; }
+.wa-camp-upload { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.wa-camp-warn { color: #b3261e; }
+.wa-camp-contacts { border: 1px solid rgba(128,128,128,.25); border-radius: 10px; padding: 8px 12px 12px; }
+.wa-camp-contacts legend { font-size: 12px; padding: 0 6px; opacity: .8; }
+.wa-camp-contacts > div { display: flex; flex-wrap: wrap; gap: 6px; max-height: 120px; overflow-y: auto; }
+.wa-camp-chip { flex-direction: row !important; align-items: center; gap: 6px !important; padding: 4px 10px; border: 1px solid rgba(128,128,128,.35); border-radius: 999px; font-weight: 400 !important; }
+.wa-camp-count { margin: 0; font-size: 13px; opacity: .8; }
+.wa-camp-count.is-over { color: #b3261e; opacity: 1; font-weight: 600; }
+.wa-camp-optin { flex-direction: row !important; align-items: flex-start; gap: 8px !important; font-weight: 400 !important; }
+.wa-camp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.wa-camp-item { padding: 14px; border: 1px solid rgba(128,128,128,.25); border-radius: 14px; display: flex; flex-direction: column; gap: 10px; }
+.wa-camp-item-head { display: flex; justify-content: space-between; gap: 8px; }
+.wa-camp-item-head small { display: block; opacity: .7; margin-top: 2px; }
+.wa-camp-status { align-self: flex-start; padding: 2px 10px; border-radius: 999px; font-size: 12px; background: rgba(128,128,128,.2); }
+.wa-camp-status.is-completed { background: rgba(37,163,112,.15); color: #1b7a54; }
+.wa-camp-status.is-sending { background: rgba(33,150,243,.15); color: #1565c0; }
+.wa-camp-status.is-scheduled { background: rgba(255,167,38,.18); color: #a35f00; }
+.wa-camp-status.is-failed, .wa-camp-status.is-cancelled { background: rgba(179,38,30,.12); color: #b3261e; }
+.wa-camp-stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 0; text-align: center; }
+.wa-camp-stats dt { font-size: 11px; opacity: .7; }
+.wa-camp-stats dd { margin: 0; font-weight: 600; }
+.wa-camp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Analytics */
+.wa-an-ranges { display: flex; gap: 6px; margin-bottom: 12px; }
+.wa-an-ranges button { padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(128,128,128,.35); background: transparent; color: inherit; font: inherit; font-size: 13px; }
+.wa-an-ranges button.is-active { background: #128c7e; border-color: #128c7e; color: #fff; }
+.wa-an-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.wa-an-card { padding: 12px; border: 1px solid rgba(128,128,128,.25); border-radius: 12px; display: flex; flex-direction: column; gap: 4px; }
+.wa-an-card small { opacity: .7; }
+.wa-an-card strong { font-size: 24px; }
+.wa-an-panel { padding: 14px; border: 1px solid rgba(128,128,128,.25); border-radius: 14px; margin-bottom: 14px; overflow-x: auto; }
+.wa-an-panel h2 { margin: 0 0 10px; font-size: 16px; }
+.wa-an-big { font-size: 28px; font-weight: 700; margin: 0 0 4px; }
+.wa-an-chart { display: flex; align-items: flex-end; gap: 6px; height: 160px; }
+.wa-an-day { flex: 1 1 0; min-width: 22px; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; }
+.wa-an-bars { flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 2px; }
+.wa-an-bars span { width: 40%; min-height: 2px; border-radius: 3px 3px 0 0; }
+.wa-an-bars .is-sent, .wa-an-legend .is-sent::before { background: #128c7e; }
+.wa-an-bars .is-received, .wa-an-legend .is-received::before { background: #9bd5c4; }
+.wa-an-day small { font-size: 10px; opacity: .7; white-space: nowrap; }
+.wa-an-legend { display: flex; gap: 14px; margin-top: 8px; font-size: 12px; }
+.wa-an-legend span::before { content: ''; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; }
+.wa-an-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.wa-an-table th, .wa-an-table td { text-align: left; padding: 8px 6px; border-bottom: 1px solid rgba(128,128,128,.2); }

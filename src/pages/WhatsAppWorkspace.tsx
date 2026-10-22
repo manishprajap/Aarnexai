@@ -13,6 +13,7 @@ import {
   addOutline,
   arrowBackOutline,
   attachOutline,
+  barChartOutline,
   businessOutline,
   callOutline,
   chatbubbleEllipsesOutline,
@@ -24,6 +25,7 @@ import {
   imageOutline,
   informationCircleOutline,
   logoWhatsapp,
+  megaphoneOutline,
   pricetagOutline,
   refreshOutline,
   searchOutline,
@@ -62,16 +64,23 @@ import {
   syncWhatsAppCatalog,
   updateCatalogProduct,
 } from '../services/whatsappCommerce';
+import CampaignsTab from '../components/whatsapp/CampaignsTab';
+import AnalyticsTab from '../components/whatsapp/AnalyticsTab';
 import './WhatsAppWorkspace.css';
 import './WhatsAppWorkspace-template.css';
+import './WhatsAppWorkspace-campaigns.css';
 
-type WorkspaceTab = 'connection' | 'catalog' | 'inbox';
+type WorkspaceTab = 'connection' | 'catalog' | 'inbox' | 'campaigns' | 'analytics';
 
 // Route of your existing "connect WhatsApp" screen. Change if yours differs.
 const CONNECT_ROUTE = '/whatsapp-connect';
+// Route of your upgrade / pricing screen. Change if yours differs.
+const UPGRADE_ROUTE = '/pricing';
 type CatalogTab = 'products' | 'categories';
 
 const POLL_INTERVAL_MS = 5000;
+
+const VALID_VIEWS: WorkspaceTab[] = ['connection', 'inbox', 'campaigns', 'analytics'];
 
 const emptyProduct = (catalogId = '', businessCategoryId = '', businessCategory = ''): ProductInput => ({
   catalogId,
@@ -140,9 +149,12 @@ const WhatsAppWorkspace: React.FC = () => {
   const { user } = useAuth();
   const profileCategoryId = user?.categoryId ? String(user.categoryId) : '';
   const profileCategoryName = user?.category?.trim() || '';
+  // Plan flag: change the field name/value to match your user object.
+  const isPaid = String((user as { plan?: string } | null)?.plan ?? '').toLowerCase() === 'pro';
   const viewParam = searchParams.get('view');
-  const initialTab: WorkspaceTab =
-    viewParam === 'inbox' ? 'inbox' : viewParam === 'connection' ? 'connection' : 'catalog';
+  const initialTab: WorkspaceTab = VALID_VIEWS.includes(viewParam as WorkspaceTab)
+    ? (viewParam as WorkspaceTab)
+    : 'catalog';
   const [activeTab, setActiveTab] = useState<WorkspaceTab>(initialTab);
   const [catalogTab, setCatalogTab] = useState<CatalogTab>('products');
   const [connection, setConnection] = useState<WhatsAppConnection | null>(null);
@@ -374,7 +386,8 @@ const WhatsAppWorkspace: React.FC = () => {
 
   const handleRefresh = () => {
     void loadConnection();
-    if (activeTab === 'connection') return;
+    // Campaigns and Analytics have their own refresh buttons.
+    if (activeTab === 'connection' || activeTab === 'campaigns' || activeTab === 'analytics') return;
     if (activeTab === 'catalog') void loadCatalog();
     else {
       void loadConversations();
@@ -740,6 +753,12 @@ const WhatsAppWorkspace: React.FC = () => {
               <IonIcon icon={logoWhatsapp} /> Inbox
               {totalUnread > 0 && <span className="wa-unread-badge">{totalUnread}</span>}
             </button>
+            <button type="button" className={activeTab === 'campaigns' ? 'is-active' : ''} onClick={() => updateActiveTab('campaigns')}>
+              <IonIcon icon={megaphoneOutline} /> Campaigns
+            </button>
+            <button type="button" className={activeTab === 'analytics' ? 'is-active' : ''} onClick={() => updateActiveTab('analytics')}>
+              <IonIcon icon={barChartOutline} /> Analytics
+            </button>
           </nav>
 
           {pageError && (
@@ -904,6 +923,20 @@ const WhatsAppWorkspace: React.FC = () => {
                 </>
               )}
             </section>
+          ) : activeTab === 'campaigns' ? (
+            <CampaignsTab
+              isPaid={isPaid}
+              connection={connection}
+              templates={messageTemplates}
+              conversations={conversations}
+              onUpgrade={() => navigate(UPGRADE_ROUTE)}
+            />
+          ) : activeTab === 'analytics' ? (
+            <AnalyticsTab
+              isPaid={isPaid}
+              conversations={conversations}
+              onUpgrade={() => navigate(UPGRADE_ROUTE)}
+            />
           ) : (
             <section className={`wa-section wa-inbox-section${selectedConversation ? ' has-conversation' : ''}`}>
               <div className="wa-page-heading wa-inbox-heading">
