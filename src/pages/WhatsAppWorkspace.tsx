@@ -79,7 +79,7 @@ type WorkspaceTab = 'connection' | 'catalog' | 'inbox' | 'campaigns' | 'analytic
 // Route of your existing "connect WhatsApp" screen. Change if yours differs.
 const CONNECT_ROUTE = '/whatsapp-connect';
 // Route of your upgrade / pricing screen. Change if yours differs.
-const UPGRADE_ROUTE = '/pricing';
+const UPGRADE_ROUTE = '/subscription';
 type CatalogTab = 'products' | 'categories';
 
 const POLL_INTERVAL_MS = 5000;
@@ -159,8 +159,16 @@ const WhatsAppWorkspace: React.FC = () => {
   const { user } = useAuth();
   const profileCategoryId = user?.categoryId ? String(user.categoryId) : '';
   const profileCategoryName = user?.category?.trim() || '';
-  // Plan flag: change the field name/value to match your user object.
-  const isPaid = String((user as { plan?: string } | null)?.plan ?? '').toLowerCase() === 'pro';
+  // The backend should remain the source of truth for paid entitlements.
+  const userPlan = String((user as { plan?: string } | null)?.plan ?? 'free')
+    .trim()
+    .toLowerCase();
+  const isPaid = ['pro', 'paid', 'premium', 'business'].includes(userPlan);
+
+  // All WhatsApp campaign/analytics upgrade prompts use the registered subscription route.
+  const handleUpgrade = () => {
+    navigate(UPGRADE_ROUTE);
+  };
   const viewParam = searchParams.get('view');
   const initialTab: WorkspaceTab = VALID_VIEWS.includes(viewParam as WorkspaceTab)
     ? (viewParam as WorkspaceTab)
@@ -1071,13 +1079,13 @@ const WhatsAppWorkspace: React.FC = () => {
               connection={connection}
               templates={messageTemplates}
               conversations={conversations}
-              onUpgrade={() => navigate(UPGRADE_ROUTE)}
+              onUpgrade={handleUpgrade}
             />
           ) : activeTab === 'analytics' ? (
             <AnalyticsTab
               isPaid={isPaid}
               conversations={conversations}
-              onUpgrade={() => navigate(UPGRADE_ROUTE)}
+              onUpgrade={handleUpgrade}
             />
           ) : (
             <section className={`wa-section wa-inbox-section${selectedConversation ? ' has-conversation' : ''}`}>

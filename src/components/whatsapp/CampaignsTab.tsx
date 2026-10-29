@@ -25,6 +25,7 @@ import {
   retryCampaignFailures,
 } from '../../services/whatsappCampaigns';
 import UpgradeGate from './UpgradeGate';
+import './CampaignsTab-upgrade.css';
 
 interface CampaignsTabProps {
   isPaid: boolean;
@@ -34,28 +35,13 @@ interface CampaignsTabProps {
   onUpgrade: () => void;
 }
 
-const MAX_CUSTOM_MESSAGE_LENGTH = 1000;
-
 const errorText = (error: unknown) =>
-  error instanceof Error ? error.message : 'Request failed. Please try again.';
+  error instanceof Error ? error.message : 'Request failed.  try again.';
 
 const normalizePhone = (raw: string): string | null => {
-  let digits = String(raw ?? '').replace(/\D/g, '');
+  let digits = raw.replace(/\D/g, '');
   if (digits.length === 10) digits = `91${digits}`; // default to India
   return digits.length >= 11 && digits.length <= 15 ? digits : null;
-};
-
-/** Highest {{n}} placeholder found in a template body (0 if none). */
-const countPlaceholders = (body?: string | null): number => {
-  const nums = Array.from((body ?? '').matchAll(/\{\{\s*(\d+)\s*\}\}/g)).map((m) => Number(m[1]));
-  return nums.length ? Math.max(...nums) : 0;
-};
-
-/** Trust parameterCount from the API, but fall back to counting placeholders in the body. */
-const getParamCount = (template?: WhatsAppMessageTemplate | null): number => {
-  if (!template) return 0;
-  const fromApi = Number(template.parameterCount ?? 0);
-  return fromApi > 0 ? fromApi : countPlaceholders(template.bodyText);
 };
 
 // Accepts lines like "9876543210", "9876543210,Asha" or "9876543210<tab>Asha"
@@ -118,7 +104,6 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
   const [name, setName] = useState('');
   const [templateId, setTemplateId] = useState('');
   const [parameters, setParameters] = useState<string[]>([]);
-  const [customMessage, setCustomMessage] = useState('');
   const [recipientText, setRecipientText] = useState('');
   const [pickedPhones, setPickedPhones] = useState<string[]>([]);
   const [scheduledAt, setScheduledAt] = useState('');
@@ -129,16 +114,6 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
     [templates],
   );
   const selectedTemplate = approvedTemplates.find((template) => String(template.id) === templateId);
-  const paramCount = getParamCount(selectedTemplate);
-
-  // Keep the number of value inputs in sync with the template (also covers templates loading late).
-  useEffect(() => {
-    setParameters((current) =>
-      current.length === paramCount
-        ? current
-        : Array.from({ length: paramCount }, (_, i) => current[i] ?? ''),
-    );
-  }, [paramCount, templateId]);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -171,11 +146,9 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
 
   const allRecipients = useMemo(() => {
     const map = new Map<string, CampaignRecipient>();
-    const picked = new Set(
-      pickedPhones
-        .map((phone) => normalizePhone(phone))
-        .filter((phone): phone is string => Boolean(phone)),
-    );
+    const picked = new Set(pickedPhones.map((phone) => normalizePhone(phone)).filter(
+      (phone): phone is string => Boolean(phone),
+    ));
 
     conversations.forEach((conversation) => {
       const phone = normalizePhone(conversation.phoneNumber);
@@ -196,40 +169,20 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
     return Array.from(map.values());
   }, [conversations, pickedPhones, parsed.valid]);
 
-  // Live preview of the template using the first recipient's name
-  const previewText = useMemo(() => {
-    if (!selectedTemplate?.bodyText) return '';
-    const sampleName = allRecipients[0]?.name || 'there';
-    return selectedTemplate.bodyText.replace(/\{\{\s*(\d+)\s*\}\}/g, (_m, n) => {
-      const raw = parameters[Number(n) - 1];
-      if (!raw || !raw.trim()) return `{{${n}}}`;
-      return raw.replace(/\{\{\s*name\s*\}\}/gi, sampleName);
-    });
-  }, [selectedTemplate, parameters, allRecipients]);
-
-  // Live preview of the custom follow-up (only sent to recipients inside the 24h window)
-  const customPreview = useMemo(() => {
-    const text = customMessage.trim();
-    if (!text) return '';
-    const sampleName = allRecipients[0]?.name || 'there';
-    return text.replace(/\{\{\s*name\s*\}\}/gi, sampleName);
-  }, [customMessage, allRecipients]);
-
-  const hasCustomMessage = customMessage.trim().length > 0;
-
-  const remaining =
-    !quota || quota.monthlyLimit === null
+  // Never treat a failed quota request as unlimited.
+  const remaining = !quota
+    ? 0
+    : quota.monthlyLimit === null
       ? Infinity
       : Math.max(0, quota.monthlyLimit - quota.usedThisMonth);
   const activeBlocked =
     !!quota && quota.activeLimit !== null && quota.activeCount >= quota.activeLimit;
-  const overLimit = allRecipients.length > remaining;
+  const overLimit = !quota || allRecipients.length > remaining;
 
   const resetForm = () => {
     setName('');
     setTemplateId('');
     setParameters([]);
-    setCustomMessage('');
     setRecipientText('');
     setPickedPhones([]);
     setScheduledAt('');
@@ -259,22 +212,23 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
     setError('');
     setNotice('');
 
+    if (!quota) {
+      setError('Unable to verify your campaign quota. Refresh the page and try again.');
+      return;
+    }
     if (connection && !connection.connected) {
       setError('WhatsApp is not connected. Connect your number before sending campaigns.');
       return;
     }
     if (!name.trim()) return setError('Give your campaign a name.');
     if (!selectedTemplate) return setError('Choose an approved template.');
-    if (parameters.length !== paramCount || parameters.some((value) => !value.trim())) {
-      return setError('Fill in all template values.');
-    }
-    if (customMessage.length > MAX_CUSTOM_MESSAGE_LENGTH) {
-      return setError(`Custom message must be ${MAX_CUSTOM_MESSAGE_LENGTH} characters or fewer.`);
-    }
+    if (parameters.some((value) => !value.trim())) return setError('Fill in all template values.');
     if (allRecipients.length === 0) return setError('Add at least one recipient.');
     if (overLimit) {
       return setError(
-        `Your free plan has ${remaining} recipient${remaining === 1 ? '' : 's'} left this month. Remove some or upgrade.`,
+        isPaid
+          ? `Your current plan has ${remaining} recipient${remaining === 1 ? '' : 's'} left this month.`
+          : `Your free plan has ${remaining} recipient${remaining === 1 ? '' : 's'} left this month. Remove some or upgrade.`,
       );
     }
     if (activeBlocked) return setError('Free plan allows 1 active campaign. Wait for it to finish or upgrade.');
@@ -289,8 +243,7 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
       await createCampaign({
         name: name.trim(),
         templateId: selectedTemplate.id,
-        parameters: parameters.map((value) => value.trim()),
-        customMessage: customMessage.trim() || null,
+        parameters,
         recipients: allRecipients,
         scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null,
         optInConfirmed: true,
@@ -372,6 +325,22 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
         </div>
       )}
 
+      <div className="wa-camp-plan-info">
+        <div className="wa-camp-plan-copy">
+          <strong>{isPaid ? 'Pro plan enabled' : 'Free plan'}</strong>
+          <p>
+            {isPaid
+              ? 'CSV contact imports, campaign scheduling and failed-message retries are available with your plan.'
+              : 'Create campaigns within your available quota. Upgrade to Pro for CSV imports, scheduled campaigns and failed-message retries.'}
+          </p>
+        </div>
+        {!isPaid && (
+          <button type="button" className="wa-secondary-button wa-camp-upgrade-button" onClick={onUpgrade}>
+            Upgrade to Pro
+          </button>
+        )}
+      </div>
+
       {error && (
         <div className="wa-error" role="alert">
           <IonIcon icon={informationCircleOutline} />
@@ -390,7 +359,7 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
             </button>
           </div>
 
-          <label>Campaign name (internal, customers do not see this)
+          <label>Campaign name
             <input required maxLength={120} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Diwali offer" />
           </label>
 
@@ -401,7 +370,7 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
                 const next = e.target.value;
                 const template = approvedTemplates.find((item) => String(item.id) === next);
                 setTemplateId(next);
-                setParameters(Array.from({ length: getParamCount(template) }, () => ''));
+                setParameters(Array.from({ length: template?.parameterCount ?? 0 }, () => ''));
               }}
             >
               <option value="">{approvedTemplates.length ? 'Choose an approved template' : 'No approved templates available'}</option>
@@ -411,33 +380,16 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
             </select>
           </label>
 
-          {selectedTemplate?.bodyText && (
-            <p className="wa-template-preview">{previewText || selectedTemplate.bodyText}</p>
-          )}
+          {selectedTemplate?.bodyText && <p className="wa-template-preview">{selectedTemplate.bodyText}</p>}
           {parameters.map((value, index) => (
             <input
               key={`${templateId}-${index}`}
-              required
               value={value}
               onChange={(e) => setParameters((cur) => cur.map((item, i) => (i === index ? e.target.value : item)))}
               placeholder={`Value for {{${index + 1}}} (use {{name}} for the customer's name)`}
               aria-label={`Template value ${index + 1}`}
             />
           ))}
-
-          <label>Custom message (optional)
-            <textarea
-              rows={3}
-              maxLength={MAX_CUSTOM_MESSAGE_LENGTH}
-              value={customMessage}
-              onChange={(e) => setCustomMessage(e.target.value)}
-              placeholder={'Sent as an extra message (free) only to customers who messaged you in the last 24 hours. Everyone gets the template above.\ne.g. Namaste {{name}}, Diwali offer: 20% discount!'}
-            />
-            <small className="wa-muted-message">
-              {customMessage.length}/{MAX_CUSTOM_MESSAGE_LENGTH} · use {'{{name}}'} for the customer&apos;s name
-            </small>
-          </label>
-          {customPreview && <p className="wa-camp-custom-preview">{customPreview}</p>}
 
           <label>Recipients
             <textarea
@@ -462,9 +414,9 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
 
           {conversations.length > 0 && (
             <fieldset className="wa-camp-contacts">
-              <legend>Select WhatsApp numbers from your conversations</legend>
+              <legend>Or pick from your conversations</legend>
               <div>
-                {conversations.map((c) => (
+                {conversations.slice(0, 30).map((c) => (
                   <label key={c.id} className="wa-camp-chip">
                     <input type="checkbox" checked={pickedPhones.includes(c.phoneNumber)} onChange={() => togglePicked(c.phoneNumber)} />
                     <span>{c.customerName || c.phoneNumber}</span>
@@ -513,12 +465,8 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
             </p>
           )}
           <p className="wa-camp-delivery-note">
-            The approved template will be sent to {allRecipients.length} recipient
-            {allRecipients.length === 1 ? '' : 's'} with your values filled in.
-            {hasCustomMessage
-              ? ' Customers who messaged you in the last 24 hours will also get your custom message right after it.'
-              : ''}{' '}
-            Delivery also depends on WhatsApp eligibility and Meta delivery status.
+            The campaign will submit the selected template and all {allRecipients.length} listed recipient number(s).
+            Actual delivery depends on the backend dispatcher, WhatsApp eligibility, and Meta delivery status.
           </p>
           <button type="submit" className="wa-primary-button" disabled={saving || !approvedTemplates.length}>
             {saving ? <IonSpinner name="crescent" /> : <IonIcon icon={sendOutline} />}
@@ -545,40 +493,19 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
             return (
               <li key={campaign.id} className="wa-camp-item">
                 <div className="wa-camp-item-head">
-                  <div className="wa-camp-item-title">
-                    <strong title={campaign.name}>{campaign.name}</strong>
+                  <div>
+                    <strong>{campaign.name}</strong>
                     <small>{campaign.templateName} · {formatDate(campaign.scheduledAt || campaign.createdAt)}</small>
                   </div>
                   <span className={`wa-camp-status is-${campaign.status}`}>{statusLabel[campaign.status]}</span>
                 </div>
-                {campaign.customMessage && (
-                  <p className="wa-camp-custom">
-                    <span>Custom message</span>
-                    {campaign.customMessage}
-                  </p>
-                )}
-                <div className="wa-camp-progress">
-                  <div className="wa-camp-progress-top">
-                    <span>{done} of {campaign.total} processed</span>
-                    <strong>{pct}%</strong>
-                  </div>
-                  <div
-                    className="wa-camp-meter"
-                    role="progressbar"
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-valuenow={pct}
-                    aria-label={`${pct}% processed`}
-                  >
-                    <div style={{ width: `${pct}%` }} />
-                  </div>
-                </div>
+                <div className="wa-camp-meter" aria-label={`${pct}% processed`}><div style={{ width: `${pct}%` }} /></div>
                 <dl className="wa-camp-stats">
-                  <div className="is-total"><dt>Total</dt><dd>{campaign.total}</dd></div>
-                  <div className="is-sent"><dt>Sent</dt><dd>{campaign.sent}</dd></div>
-                  <div className="is-delivered"><dt>Delivered</dt><dd>{campaign.delivered}</dd></div>
-                  <div className="is-read"><dt>Read</dt><dd>{campaign.read}</dd></div>
-                  <div className={`is-failed${campaign.failed > 0 ? ' has-value' : ''}`}><dt>Failed</dt><dd>{campaign.failed}</dd></div>
+                  <div><dt>Total</dt><dd>{campaign.total}</dd></div>
+                  <div><dt>Sent</dt><dd>{campaign.sent}</dd></div>
+                  <div><dt>Delivered</dt><dd>{campaign.delivered}</dd></div>
+                  <div><dt>Read</dt><dd>{campaign.read}</dd></div>
+                  <div><dt>Failed</dt><dd>{campaign.failed}</dd></div>
                 </dl>
                 <div className="wa-camp-actions">
                   {cancellable && (

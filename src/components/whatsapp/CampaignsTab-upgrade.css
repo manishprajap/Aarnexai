@@ -1,0 +1,38 @@
+.wa-camp-plan-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 16px 0;
+  padding: 16px;
+  border: 1px solid var(--ion-color-light-shade, #dedede);
+  border-radius: 14px;
+  background: var(--ion-background-color, #fff);
+}
+
+.wa-camp-plan-copy {
+  min-width: 0;
+}
+
+.wa-camp-plan-info strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.wa-camp-plan-info p {
+  margin: 0;
+  color: var(--ion-color-medium, #666);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.wa-camp-upgrade-button {
+  flex-shrink: 0;
+}
+
+@media (max-width: 520px) {
+  .wa-camp-plan-info {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
