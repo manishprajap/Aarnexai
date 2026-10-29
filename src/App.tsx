@@ -28,7 +28,6 @@ import './theme/variables.css';
 import ProductDetails from './pages/ProductDetails';
 import SelectCategory from './pages/SelectCategory';
 import Login from './pages/login';
-import BusinessSetup from './pages/business-setup';
 import Subscription from './pages/subscription';
 import Campaigns from './pages/Campaigns';
 import CreateCampaign from './pages/CreateCampaign';
@@ -47,6 +46,8 @@ import { startWhatsAppResumeWatcher } from './services/whatsappResume';
 import Onboarding from './pages/Onboarding ';
 import Uploadnew from './pages/Uploadnew';
 import PromptPlan from './pages/PromptPlan';
+import BusinessWebsite from './pages/BusinessWebsite';
+import PublicBusinessSite from './pages/PublicBusinessSite';
 
 setupIonicReact();
 
@@ -267,6 +268,16 @@ const App: React.FC = () => {
               }
             />
 
+            <Route
+              path="/business-website"
+              element={
+                <RequireAuth>
+                  <BusinessWebsite />
+                </RequireAuth>
+              }
+            />
+
+            <Route path="/:slug" element={<PublicBusinessSite />} />
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="*" element={<Navigate to="/login" replace />} />
           </IonRouterOutlet>

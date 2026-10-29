@@ -10,6 +10,7 @@ import {
   pricetagOutline,
   arrowBackOutline,
   shareSocialOutline,
+  globeOutline,
 } from 'ionicons/icons';
 import { useNavigate } from 'react-router-dom';
 import logo from '../assets/aarna-logo.png';
@@ -63,6 +64,7 @@ const Settings: React.FC = () => {
             <SettingRow icon={shareSocialOutline} title="Social Connect" subtitle="Manage connected social accounts" onClick={() => navigate('/social-connections')} />
             <SettingRow icon={notificationsOutline} title="Notifications" subtitle="Notification information" onClick={() => navigate('/settings/notifications')} />
             <SettingRow icon={pricetagOutline} title="Subscription" subtitle="View your current plan" onClick={() => navigate('/subscription')} />
+            <SettingRow icon={globeOutline} title="Business Website" subtitle="Subscribe, publish and manage your landing page" onClick={() => navigate('/business-website')} />
             <SettingRow icon={helpCircleOutline} title="Help & Support" subtitle="Guides for using AarnexAi" onClick={() => navigate('/settings/help')} />
             <SettingRow icon={informationCircleOutline} title="About" subtitle="Version and app information" onClick={() => navigate('/settings/about')} />
           </div>
