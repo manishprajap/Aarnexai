@@ -34,6 +34,8 @@ interface CampaignsTabProps {
   onUpgrade: () => void;
 }
 
+const MAX_CUSTOM_MESSAGE_LENGTH = 1000;
+
 const errorText = (error: unknown) =>
   error instanceof Error ? error.message : 'Request failed. Please try again.';
 
@@ -116,6 +118,7 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
   const [name, setName] = useState('');
   const [templateId, setTemplateId] = useState('');
   const [parameters, setParameters] = useState<string[]>([]);
+  const [customMessage, setCustomMessage] = useState('');
   const [recipientText, setRecipientText] = useState('');
   const [pickedPhones, setPickedPhones] = useState<string[]>([]);
   const [scheduledAt, setScheduledAt] = useState('');
@@ -204,6 +207,16 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
     });
   }, [selectedTemplate, parameters, allRecipients]);
 
+  // Live preview of the custom follow-up (only sent to recipients inside the 24h window)
+  const customPreview = useMemo(() => {
+    const text = customMessage.trim();
+    if (!text) return '';
+    const sampleName = allRecipients[0]?.name || 'there';
+    return text.replace(/\{\{\s*name\s*\}\}/gi, sampleName);
+  }, [customMessage, allRecipients]);
+
+  const hasCustomMessage = customMessage.trim().length > 0;
+
   const remaining =
     !quota || quota.monthlyLimit === null
       ? Infinity
@@ -216,6 +229,7 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
     setName('');
     setTemplateId('');
     setParameters([]);
+    setCustomMessage('');
     setRecipientText('');
     setPickedPhones([]);
     setScheduledAt('');
@@ -254,6 +268,9 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
     if (parameters.length !== paramCount || parameters.some((value) => !value.trim())) {
       return setError('Fill in all template values.');
     }
+    if (customMessage.length > MAX_CUSTOM_MESSAGE_LENGTH) {
+      return setError(`Custom message must be ${MAX_CUSTOM_MESSAGE_LENGTH} characters or fewer.`);
+    }
     if (allRecipients.length === 0) return setError('Add at least one recipient.');
     if (overLimit) {
       return setError(
@@ -273,6 +290,7 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
         name: name.trim(),
         templateId: selectedTemplate.id,
         parameters: parameters.map((value) => value.trim()),
+        customMessage: customMessage.trim() || null,
         recipients: allRecipients,
         scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null,
         optInConfirmed: true,
@@ -407,6 +425,20 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
             />
           ))}
 
+          <label>Custom message (optional)
+            <textarea
+              rows={3}
+              maxLength={MAX_CUSTOM_MESSAGE_LENGTH}
+              value={customMessage}
+              onChange={(e) => setCustomMessage(e.target.value)}
+              placeholder={'Sent as an extra message (free) only to customers who messaged you in the last 24 hours. Everyone gets the template above.\ne.g. Namaste {{name}}, Diwali offer: 20% discount!'}
+            />
+            <small className="wa-muted-message">
+              {customMessage.length}/{MAX_CUSTOM_MESSAGE_LENGTH} · use {'{{name}}'} for the customer&apos;s name
+            </small>
+          </label>
+          {customPreview && <p className="wa-camp-custom-preview">{customPreview}</p>}
+
           <label>Recipients
             <textarea
               rows={4}
@@ -482,8 +514,11 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
           )}
           <p className="wa-camp-delivery-note">
             The approved template will be sent to {allRecipients.length} recipient
-            {allRecipients.length === 1 ? '' : 's'} with your values filled in. Delivery also depends on
-            WhatsApp eligibility and Meta delivery status.
+            {allRecipients.length === 1 ? '' : 's'} with your values filled in.
+            {hasCustomMessage
+              ? ' Customers who messaged you in the last 24 hours will also get your custom message right after it.'
+              : ''}{' '}
+            Delivery also depends on WhatsApp eligibility and Meta delivery status.
           </p>
           <button type="submit" className="wa-primary-button" disabled={saving || !approvedTemplates.length}>
             {saving ? <IonSpinner name="crescent" /> : <IonIcon icon={sendOutline} />}
@@ -516,6 +551,12 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
                   </div>
                   <span className={`wa-camp-status is-${campaign.status}`}>{statusLabel[campaign.status]}</span>
                 </div>
+                {campaign.customMessage && (
+                  <p className="wa-camp-custom">
+                    <span>Custom message</span>
+                    {campaign.customMessage}
+                  </p>
+                )}
                 <div className="wa-camp-progress">
                   <div className="wa-camp-progress-top">
                     <span>{done} of {campaign.total} processed</span>
