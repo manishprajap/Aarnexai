@@ -1,5 +1,5 @@
 import React, { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   IonAlert,
   IonContent,
@@ -155,6 +155,7 @@ const getSuggestedCategories = (businessCategory: string) => {
 
 const WhatsAppWorkspace: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const profileCategoryId = user?.categoryId ? String(user.categoryId) : '';
@@ -167,7 +168,9 @@ const WhatsAppWorkspace: React.FC = () => {
 
   // All WhatsApp campaign/analytics upgrade prompts use the registered subscription route.
   const handleUpgrade = () => {
-    navigate(UPGRADE_ROUTE);
+    // Preserve the exact workspace view (catalog/products, campaigns, analytics, etc.).
+    const returnTo = `${location.pathname}${location.search}${location.hash}`;
+    navigate(`${UPGRADE_ROUTE}?plan=pro&returnTo=${encodeURIComponent(returnTo)}`);
   };
   const viewParam = searchParams.get('view');
   const initialTab: WorkspaceTab = VALID_VIEWS.includes(viewParam as WorkspaceTab)
