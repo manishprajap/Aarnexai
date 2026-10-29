@@ -1,0 +1,175 @@
+/* File: src/components/whatsapp/LeadsTab.css */
+
+.wa-leads-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 0 10px;
+  scrollbar-width: none;
+}
+.wa-leads-chips::-webkit-scrollbar { display: none; }
+.wa-leads-chips button {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #d8e2dc;
+  background: #fff;
+  color: #3b4a43;
+  border-radius: 999px;
+  padding: 7px 13px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.wa-leads-chips button span {
+  background: #eef3f0;
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 12px;
+}
+.wa-leads-chips button.is-active {
+  background: #128c7e;
+  border-color: #128c7e;
+  color: #fff;
+}
+.wa-leads-chips button.is-active span {
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+}
+
+.wa-leads-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.wa-leads-toolbar .wa-search { flex: 1; }
+.wa-leads-toolbar select {
+  border: 1px solid #d8e2dc;
+  border-radius: 12px;
+  background: #fff;
+  padding: 0 10px;
+  font-size: 13px;
+  min-height: 42px;
+}
+
+.wa-lead-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+.wa-lead-card {
+  background: #fff;
+  border: 1px solid #e3ebe6;
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 1px 2px rgba(16, 24, 20, 0.04);
+}
+.wa-lead-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.wa-lead-id {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+}
+.wa-lead-id strong {
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wa-lead-id small { color: #6b7a72; font-size: 12px; }
+
+.wa-lead-source {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 4px 9px;
+  background: #eef3f0;
+  color: #3b4a43;
+}
+.wa-lead-source.is-ad { background: #fff1dc; color: #9a5b00; }
+
+.wa-lead-ad {
+  margin: 10px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #9a5b00;
+}
+.wa-lead-message {
+  margin: 10px 0 0;
+  padding: 9px 11px;
+  background: #f4f8f6;
+  border-radius: 12px;
+  font-size: 14px;
+  color: #26332c;
+  word-break: break-word;
+}
+.wa-lead-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: #6b7a72;
+}
+.wa-lead-notes {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: #3b4a43;
+  word-break: break-word;
+}
+
+.wa-lead-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.wa-lead-actions button,
+.wa-lead-actions a,
+.wa-lead-actions select {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid #d8e2dc;
+  background: #fff;
+  color: #26332c;
+  border-radius: 10px;
+  padding: 7px 11px;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.wa-lead-stage.is-new { background: #e8f1ff; border-color: #b9d3ff; color: #1b4fa8; }
+.wa-lead-stage.is-interested { background: #fff7d6; border-color: #f0dc87; color: #7a5d00; }
+.wa-lead-stage.is-follow_up { background: #ffe9d9; border-color: #f5c29c; color: #a04a05; }
+.wa-lead-stage.is-won { background: #dff5e6; border-color: #a8dcb8; color: #11693a; }
+.wa-lead-stage.is-lost { background: #f4e3e3; border-color: #e3b5b5; color: #9a2d2d; }
+
+.wa-lead-notes-editor {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+.wa-lead-notes-editor textarea {
+  width: 100%;
+  border: 1px solid #d8e2dc;
+  border-radius: 12px;
+  padding: 10px;
+  font-size: 14px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.wa-leads-more {
+  width: 100%;
+  margin-top: 12px;
+}
