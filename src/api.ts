@@ -1,8 +1,9 @@
 // src/api.ts
 
-const BASE_URL = (
-  import.meta.env.VITE_API_BASE_URL || 'https://aarnexai.com/aarnexai-backend/api'
-).replace(/\/+$/, '');
+const DEFAULT_API_BASE_URL = import.meta.env.DEV
+  ? 'http://localhost:3000/aarnexai-backend/api'
+  : 'https://aarnexai.com/aarnexai-backend/api';
+const BASE_URL = (import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL).replace(/\/+$/, '');
 const SERVER_API_BASE_URL = (
   import.meta.env.VITE_SERVER_API_BASE_URL || BASE_URL
 ).replace(/\/+$/, '');
@@ -90,7 +91,7 @@ const createApiError = (response: Response, json: unknown): ApiError => {
 /* Shared request helper                                                      */
 /* -------------------------------------------------------------------------- */
 
-type HttpMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
+type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 async function request<T>(
   method: HttpMethod,
@@ -146,6 +147,9 @@ export const apiPost = <T = any>(endpoint: string, data?: unknown): Promise<T> =
 
 export const apiPut = <T = any>(endpoint: string, data?: unknown): Promise<T> =>
   request<T>('PUT', endpoint, data);
+
+export const apiPatch = <T = any>(endpoint: string, data?: unknown): Promise<T> =>
+  request<T>('PATCH', endpoint, data);
 
 export const apiDelete = <T = any>(endpoint: string): Promise<T> =>
   request<T>('DELETE', endpoint);

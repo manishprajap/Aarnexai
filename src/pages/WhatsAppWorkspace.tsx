@@ -30,6 +30,7 @@ import {
   refreshOutline,
   searchOutline,
   sendOutline,
+  sparklesOutline,
   syncOutline,
   trashOutline,
 } from 'ionicons/icons';
@@ -45,6 +46,7 @@ import {
   WhatsAppConversation,
   WhatsAppMessage,
   WhatsAppMessageTemplate,
+  WhatsAppAutomationSettings,
   createCatalogCategory,
   createCatalogProduct,
   activateWhatsAppNumber,
@@ -53,6 +55,7 @@ import {
   getCatalogCategories,
   getCatalogProducts,
   getWhatsAppCatalog,
+  getWhatsAppAutomationSettings,
   getWhatsAppConnection,
   getWhatsAppConversations,
   getWhatsAppMessages,
@@ -63,6 +66,7 @@ import {
   subscribeWhatsAppWebhook,
   syncWhatsAppCatalog,
   updateCatalogProduct,
+  updateWhatsAppAutomationSettings,
 } from '../services/whatsappCommerce';
 import CampaignsTab from '../components/whatsapp/CampaignsTab';
 import AnalyticsTab from '../components/whatsapp/AnalyticsTab';
@@ -70,7 +74,7 @@ import './WhatsAppWorkspace.css';
 import './WhatsAppWorkspace-template.css';
 import './WhatsAppWorkspace-campaigns.css';
 
-type WorkspaceTab = 'connection' | 'catalog' | 'inbox' | 'campaigns' | 'analytics';
+type WorkspaceTab = 'connection' | 'catalog' | 'inbox' | 'campaigns' | 'analytics' | 'automation';
 
 // Route of your existing "connect WhatsApp" screen. Change if yours differs.
 const CONNECT_ROUTE = '/whatsapp-connect';
@@ -80,7 +84,7 @@ type CatalogTab = 'products' | 'categories';
 
 const POLL_INTERVAL_MS = 5000;
 
-const VALID_VIEWS: WorkspaceTab[] = ['connection', 'inbox', 'campaigns', 'analytics'];
+const VALID_VIEWS: WorkspaceTab[] = ['connection', 'inbox', 'campaigns', 'analytics', 'automation'];
 
 const emptyProduct = (catalogId = '', businessCategoryId = '', businessCategory = ''): ProductInput => ({
   catalogId,
@@ -165,6 +169,9 @@ const WhatsAppWorkspace: React.FC = () => {
   const [catalogTab, setCatalogTab] = useState<CatalogTab>('products');
   const [connection, setConnection] = useState<WhatsAppConnection | null>(null);
   const [loadingConnection, setLoadingConnection] = useState(false);
+  const [automation, setAutomation] = useState<WhatsAppAutomationSettings | null>(null);
+  const [loadingAutomation, setLoadingAutomation] = useState(false);
+  const [savingAutomation, setSavingAutomation] = useState(false);
   const [newChatOpen, setNewChatOpen] = useState(false);
   const [newChatPhone, setNewChatPhone] = useState('');
   const [newChatText, setNewChatText] = useState('');
@@ -218,6 +225,17 @@ const WhatsAppWorkspace: React.FC = () => {
       setConnection(null);
     } finally {
       setLoadingConnection(false);
+    }
+  };
+
+  const loadAutomation = async () => {
+    setLoadingAutomation(true);
+    try {
+      setAutomation(await getWhatsAppAutomationSettings());
+    } catch (error) {
+      setPageError(errorText(error));
+    } finally {
+      setLoadingAutomation(false);
     }
   };
 
@@ -300,6 +318,7 @@ const WhatsAppWorkspace: React.FC = () => {
     void loadCatalog();
     void loadConversations();
     void loadMessageTemplates();
+    void loadAutomation();
   }, []);
 
   // Refresh connection card when the connect flow finishes
@@ -392,12 +411,36 @@ const WhatsAppWorkspace: React.FC = () => {
 
   const handleRefresh = () => {
     void loadConnection();
+    if (activeTab === 'automation') void loadAutomation();
     // Campaigns and Analytics have their own refresh buttons.
-    if (activeTab === 'connection' || activeTab === 'campaigns' || activeTab === 'analytics') return;
+    if (
+      activeTab === 'connection' ||
+      activeTab === 'campaigns' ||
+      activeTab === 'analytics' ||
+      activeTab === 'automation'
+    ) return;
     if (activeTab === 'catalog') void loadCatalog();
     else {
       void loadConversations();
       if (selectedConversation) void loadMessages(selectedConversation);
+    }
+  };
+
+  const handleSaveAutomation = async (enabled = automation?.enabled ?? false) => {
+    if (!automation || savingAutomation) return;
+    setSavingAutomation(true);
+    setPageError('');
+    try {
+      const saved = await updateWhatsAppAutomationSettings({
+        enabled,
+        instructions: automation.instructions,
+      });
+      setAutomation(saved);
+      setToast(saved.enabled ? 'AI auto-replies are on.' : 'AI auto-replies are off.');
+    } catch (error) {
+      setPageError(errorText(error));
+    } finally {
+      setSavingAutomation(false);
     }
   };
 
@@ -765,6 +808,9 @@ const WhatsAppWorkspace: React.FC = () => {
             <button type="button" className={activeTab === 'analytics' ? 'is-active' : ''} onClick={() => updateActiveTab('analytics')}>
               <IonIcon icon={barChartOutline} /> Analytics
             </button>
+            <button type="button" className={activeTab === 'automation' ? 'is-active' : ''} onClick={() => updateActiveTab('automation')}>
+              <IonIcon icon={sparklesOutline} /> AI replies
+            </button>
           </nav>
 
           {pageError && (
@@ -832,6 +878,96 @@ const WhatsAppWorkspace: React.FC = () => {
                     <IonIcon icon={linkOutline} /> Connect WhatsApp
                   </button>
                 </section>
+              )}
+            </section>
+          ) : activeTab === 'automation' ? (
+            <section className="wa-section">
+              <div className="wa-page-heading">
+                <div>
+                  <p className="wa-eyebrow">GEMINI CUSTOMER ASSISTANT</p>
+                  <h1>AI auto-replies</h1>
+                  <p>Let Gemini help answer incoming WhatsApp text messages in your business voice.</p>
+                </div>
+                <button type="button" className="wa-icon-button" onClick={handleRefresh} aria-label="Refresh AI reply settings">
+                  <IonIcon icon={refreshOutline} />
+                </button>
+              </div>
+
+              {loadingAutomation && !automation ? (
+                <div className="wa-loading"><IonSpinner /><span>Loading AI reply settings...</span></div>
+              ) : automation ? (
+                <div className="wa-automation-panel">
+                  <div className={`wa-automation-status${automation.enabled ? ' is-on' : ''}`}>
+                    <span className="wa-automation-status-icon"><IonIcon icon={sparklesOutline} /></span>
+                    <div>
+                      <strong>{automation.enabled ? 'AI replies are on' : 'AI replies are off'}</strong>
+                      <small>
+                        {automation.enabled
+                          ? 'Incoming text messages can receive an automatic reply.'
+                          : 'Nothing is sent automatically until you switch this on.'}
+                      </small>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={automation.enabled}
+                      aria-label="Enable WhatsApp AI auto-replies"
+                      className={`wa-automation-switch${automation.enabled ? ' is-on' : ''}`}
+                      disabled={
+                        savingAutomation ||
+                        loadingAutomation ||
+                        !automation.connected ||
+                        (!automation.enabled && !automation.geminiConfigured)
+                      }
+                      onClick={() => void handleSaveAutomation(!automation.enabled)}
+                    >
+                      <span />
+                    </button>
+                  </div>
+
+                  {!automation.connected && (
+                    <div className="wa-automation-notice is-warning" role="status">
+                      Connect an active WhatsApp Business number before enabling AI replies.
+                    </div>
+                  )}
+                  {!automation.geminiConfigured && (
+                    <div className="wa-automation-notice is-warning" role="status">
+                      The backend has no Gemini key configured. Ask your administrator to set GEMINI_API_KEY on the server.
+                    </div>
+                  )}
+
+                  <label className="wa-automation-instructions">
+                    <span>Business instructions <small>Optional · maximum 2,000 characters</small></span>
+                    <textarea
+                      value={automation.instructions}
+                      maxLength={2000}
+                      disabled={!automation.connected || savingAutomation}
+                      onChange={(event) => setAutomation({ ...automation, instructions: event.target.value })}
+                      placeholder="Describe your business, services, hours, tone, and how you want the assistant to help. Don't add passwords or sensitive customer data."
+                    />
+                  </label>
+                  <div className="wa-automation-actions">
+                    <span>{automation.instructions.length}/2000</span>
+                    <button
+                      type="button"
+                      className="wa-primary-button"
+                      disabled={!automation.connected || savingAutomation || loadingAutomation}
+                      onClick={() => void handleSaveAutomation()}
+                    >
+                      {savingAutomation ? <IonSpinner name="crescent" /> : <IonIcon icon={checkmarkCircleOutline} />}
+                      Save instructions
+                    </button>
+                  </div>
+
+                  <div className="wa-automation-disclosure">
+                    <IonIcon icon={informationCircleOutline} />
+                    <p>
+                      Only new text messages received within WhatsApp&apos;s 24-hour customer service window are eligible. Incoming text and recent conversation history are sent to Gemini to draft a reply. Media messages are not auto-replied to. Keep this off until your customers have been informed and you are ready to use AI processing.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="wa-empty"><IonIcon icon={sparklesOutline} /><h2>AI settings unavailable</h2><p>Refresh the page or try again later.</p></div>
               )}
             </section>
           ) : activeTab === 'catalog' ? (

@@ -1,4 +1,4 @@
-import { apiDelete, apiGet, apiPost, apiPut } from '../api';
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from '../api';
 
 export type ProductAvailability = 'in_stock' | 'out_of_stock' | 'preorder';
 export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
@@ -10,6 +10,41 @@ export interface WhatsAppConnection {
   qualityRating?: string | null;
   status?: string | null;
 }
+
+export interface WhatsAppAutomationSettings {
+  connected: boolean;
+  enabled: boolean;
+  instructions: string;
+  geminiConfigured: boolean;
+}
+
+export const getWhatsAppAutomationSettings = async (): Promise<WhatsAppAutomationSettings> => {
+  const response = await apiGet<WhatsAppAutomationSettings & { success?: boolean; message?: string }>(
+    '/whatsapp/automation'
+  );
+  if (response?.success === false) {
+    throw new Error(response.message || 'Could not load WhatsApp AI settings.');
+  }
+  return response;
+};
+
+export const updateWhatsAppAutomationSettings = async (
+  settings: Pick<WhatsAppAutomationSettings, 'enabled' | 'instructions'>
+): Promise<WhatsAppAutomationSettings> => {
+  const response = await apiPatch<WhatsAppAutomationSettings & { success?: boolean; message?: string }>(
+    '/whatsapp/automation',
+    settings
+  );
+  if (response?.success === false) {
+    throw new Error(response.message || 'Could not save WhatsApp AI settings.');
+  }
+  return {
+    connected: true,
+    enabled: response.enabled,
+    instructions: response.instructions ?? settings.instructions,
+    geminiConfigured: response.geminiConfigured,
+  };
+};
 
 export interface WhatsAppCatalog {
   id: string | number;
