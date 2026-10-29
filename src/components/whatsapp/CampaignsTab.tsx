@@ -193,7 +193,7 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
     return Array.from(map.values());
   }, [conversations, pickedPhones, parsed.valid]);
 
-  // Live preview of the message using the first recipient's name
+  // Live preview of the template using the first recipient's name
   const previewText = useMemo(() => {
     if (!selectedTemplate?.bodyText) return '';
     const sampleName = allRecipients[0]?.name || 'there';
@@ -372,7 +372,7 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
             </button>
           </div>
 
-          <label>Campaign name
+          <label>Campaign name (internal, customers do not see this)
             <input required maxLength={120} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Diwali offer" />
           </label>
 
@@ -481,8 +481,9 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
             </p>
           )}
           <p className="wa-camp-delivery-note">
-            The approved template will be sent to {allRecipients.length} recipient{allRecipients.length === 1 ? '' : 's'} with your values filled in.
-            Delivery also depends on WhatsApp eligibility and Meta delivery status.
+            The approved template will be sent to {allRecipients.length} recipient
+            {allRecipients.length === 1 ? '' : 's'} with your values filled in. Delivery also depends on
+            WhatsApp eligibility and Meta delivery status.
           </p>
           <button type="submit" className="wa-primary-button" disabled={saving || !approvedTemplates.length}>
             {saving ? <IonSpinner name="crescent" /> : <IonIcon icon={sendOutline} />}
@@ -509,19 +510,34 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
             return (
               <li key={campaign.id} className="wa-camp-item">
                 <div className="wa-camp-item-head">
-                  <div>
-                    <strong>{campaign.name}</strong>
+                  <div className="wa-camp-item-title">
+                    <strong title={campaign.name}>{campaign.name}</strong>
                     <small>{campaign.templateName} · {formatDate(campaign.scheduledAt || campaign.createdAt)}</small>
                   </div>
                   <span className={`wa-camp-status is-${campaign.status}`}>{statusLabel[campaign.status]}</span>
                 </div>
-                <div className="wa-camp-meter" aria-label={`${pct}% processed`}><div style={{ width: `${pct}%` }} /></div>
+                <div className="wa-camp-progress">
+                  <div className="wa-camp-progress-top">
+                    <span>{done} of {campaign.total} processed</span>
+                    <strong>{pct}%</strong>
+                  </div>
+                  <div
+                    className="wa-camp-meter"
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={pct}
+                    aria-label={`${pct}% processed`}
+                  >
+                    <div style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
                 <dl className="wa-camp-stats">
-                  <div><dt>Total</dt><dd>{campaign.total}</dd></div>
-                  <div><dt>Sent</dt><dd>{campaign.sent}</dd></div>
-                  <div><dt>Delivered</dt><dd>{campaign.delivered}</dd></div>
-                  <div><dt>Read</dt><dd>{campaign.read}</dd></div>
-                  <div><dt>Failed</dt><dd>{campaign.failed}</dd></div>
+                  <div className="is-total"><dt>Total</dt><dd>{campaign.total}</dd></div>
+                  <div className="is-sent"><dt>Sent</dt><dd>{campaign.sent}</dd></div>
+                  <div className="is-delivered"><dt>Delivered</dt><dd>{campaign.delivered}</dd></div>
+                  <div className="is-read"><dt>Read</dt><dd>{campaign.read}</dd></div>
+                  <div className={`is-failed${campaign.failed > 0 ? ' has-value' : ''}`}><dt>Failed</dt><dd>{campaign.failed}</dd></div>
                 </dl>
                 <div className="wa-camp-actions">
                   {cancellable && (

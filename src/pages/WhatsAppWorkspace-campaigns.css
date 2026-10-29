@@ -1,53 +1,578 @@
 /* Import in WhatsAppWorkspace.tsx: import './WhatsAppWorkspace-campaigns.css'; */
 
-/* Scrollable main tabs (5 tabs on mobile) */
+/* ==========================================================================
+   Scrollable main tabs (6 tabs on mobile)
+   ========================================================================== */
 .wa-main-tabs { overflow-x: auto; white-space: nowrap; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
 .wa-main-tabs::-webkit-scrollbar { display: none; }
 .wa-main-tabs button { flex: 0 0 auto; }
 
-/* Upgrade gate */
+/* ==========================================================================
+   Upgrade gate
+   ========================================================================== */
 .wa-upgrade-gate { display: flex; align-items: center; gap: 12px; padding: 16px; margin: 12px 0; border: 1px dashed rgba(128,128,128,.45); border-radius: 12px; flex-wrap: wrap; }
 .wa-upgrade-gate.is-compact { padding: 10px 12px; margin: 0; }
 .wa-upgrade-icon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: rgba(18,140,126,.12); color: #128c7e; font-size: 18px; }
 .wa-upgrade-text { flex: 1 1 160px; display: flex; flex-direction: column; gap: 2px; }
 .wa-upgrade-text small { opacity: .7; }
 
-/* Campaigns */
-.wa-camp-quota { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border-radius: 10px; background: rgba(128,128,128,.08); font-size: 13px; margin-bottom: 12px; }
-.wa-camp-plan { padding: 2px 10px; border-radius: 999px; background: rgba(128,128,128,.2); font-weight: 600; font-size: 12px; }
-.wa-camp-plan.is-pro { background: #128c7e; color: #fff; }
-.wa-camp-meter { flex: 1 1 100px; height: 6px; border-radius: 999px; background: rgba(128,128,128,.2); overflow: hidden; }
-.wa-camp-meter > div { height: 100%; background: #25a370; transition: width .3s ease; }
-.wa-camp-notice { padding: 10px 12px; border-radius: 10px; background: rgba(37,163,112,.12); color: #1b7a54; font-size: 13px; margin-bottom: 12px; }
-.wa-camp-form { display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid rgba(128,128,128,.25); border-radius: 14px; margin-bottom: 16px; }
-.wa-camp-form label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 500; }
-.wa-camp-form input:not([type='checkbox']), .wa-camp-form select, .wa-camp-form textarea { padding: 10px 12px; border: 1px solid rgba(128,128,128,.35); border-radius: 10px; font: inherit; background: transparent; color: inherit; }
-.wa-camp-form-head { display: flex; justify-content: space-between; align-items: center; }
-.wa-camp-form-head h2 { margin: 0; font-size: 18px; }
-.wa-camp-upload { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.wa-camp-warn { color: #b3261e; }
-.wa-camp-contacts { border: 1px solid rgba(128,128,128,.25); border-radius: 10px; padding: 8px 12px 12px; }
-.wa-camp-contacts legend { font-size: 12px; padding: 0 6px; opacity: .8; }
-.wa-camp-contacts > div { display: flex; flex-wrap: wrap; gap: 6px; max-height: 120px; overflow-y: auto; }
-.wa-camp-chip { flex-direction: row !important; align-items: center; gap: 6px !important; padding: 4px 10px; border: 1px solid rgba(128,128,128,.35); border-radius: 999px; font-weight: 400 !important; }
-.wa-camp-count { margin: 0; font-size: 13px; opacity: .8; }
-.wa-camp-count.is-over { color: #b3261e; opacity: 1; font-weight: 600; }
-.wa-camp-optin { flex-direction: row !important; align-items: flex-start; gap: 8px !important; font-weight: 400 !important; }
-.wa-camp-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
-.wa-camp-item { padding: 14px; border: 1px solid rgba(128,128,128,.25); border-radius: 14px; display: flex; flex-direction: column; gap: 10px; }
-.wa-camp-item-head { display: flex; justify-content: space-between; gap: 8px; }
-.wa-camp-item-head small { display: block; opacity: .7; margin-top: 2px; }
-.wa-camp-status { align-self: flex-start; padding: 2px 10px; border-radius: 999px; font-size: 12px; background: rgba(128,128,128,.2); }
-.wa-camp-status.is-completed { background: rgba(37,163,112,.15); color: #1b7a54; }
-.wa-camp-status.is-sending { background: rgba(33,150,243,.15); color: #1565c0; }
-.wa-camp-status.is-scheduled { background: rgba(255,167,38,.18); color: #a35f00; }
-.wa-camp-status.is-failed, .wa-camp-status.is-cancelled { background: rgba(179,38,30,.12); color: #b3261e; }
-.wa-camp-stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin: 0; text-align: center; }
-.wa-camp-stats dt { font-size: 11px; opacity: .7; }
-.wa-camp-stats dd { margin: 0; font-weight: 600; }
-.wa-camp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+/* ==========================================================================
+   WhatsAppWorkspace-campaigns.css
+   Campaigns tab: quota bar, new-campaign form, campaign cards.
+   Mobile-first (360px+). Replace the whole existing file with this one.
+   ========================================================================== */
 
-/* Analytics */
+.wa-section {
+  --camp-green: #1a9d6a;
+  --camp-green-dark: #12794f;
+  --camp-green-soft: #e6f5ee;
+  --camp-blue: #2b7de9;
+  --camp-blue-soft: #e8f1fd;
+  --camp-red: #d64545;
+  --camp-red-soft: #fdeceb;
+  --camp-amber: #b7791f;
+  --camp-amber-soft: #fdf3dc;
+  --camp-ink: #17302a;
+  --camp-muted: #64766f;
+  --camp-border: #e1e9e4;
+  --camp-surface: #ffffff;
+  --camp-bg-soft: #f4f8f6;
+}
+
+/* ------------------------------ Quota bar ------------------------------ */
+
+.wa-camp-quota {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin: 4px 0 16px;
+  padding: 12px 14px;
+  background: var(--camp-bg-soft);
+  border: 1px solid var(--camp-border);
+  border-radius: 14px;
+  color: var(--camp-ink);
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.wa-camp-quota .wa-camp-meter {
+  flex: 1 0 100%;
+  margin-top: 2px;
+}
+
+.wa-camp-plan {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #e3e8e5;
+  color: var(--camp-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.wa-camp-plan.is-pro {
+  background: var(--camp-green);
+  color: #fff;
+}
+
+/* ------------------------------ Progress meter ------------------------------ */
+/* Shared by the quota bar and every campaign card. Fixed height so it can never
+   stretch into a big pill. */
+
+.wa-camp-meter {
+  display: block;
+  position: relative;
+  width: 100%;
+  height: 6px;
+  min-height: 6px;
+  max-height: 6px;
+  overflow: hidden;
+  background: #dde6e1;
+  border-radius: 999px;
+}
+
+.wa-camp-meter > div {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  background: linear-gradient(90deg, var(--camp-green), #35c487);
+  border-radius: inherit;
+  transition: width 0.4s ease;
+}
+
+/* ------------------------------ Notices ------------------------------ */
+
+.wa-camp-notice {
+  margin: 0 0 14px;
+  padding: 11px 14px;
+  background: var(--camp-green-soft);
+  border: 1px solid #bfe5d1;
+  border-radius: 12px;
+  color: var(--camp-green-dark);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.wa-camp-warn {
+  margin: 0;
+  color: var(--camp-amber);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
+/* ------------------------------ New campaign form ------------------------------ */
+
+.wa-camp-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0 0 20px;
+  padding: 18px 16px;
+  background: var(--camp-surface);
+  border: 1px solid var(--camp-border);
+  border-radius: 18px;
+  box-shadow: 0 1px 2px rgba(23, 48, 42, 0.04), 0 8px 24px rgba(23, 48, 42, 0.05);
+}
+
+.wa-camp-form-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.wa-camp-form-head h2 {
+  margin: 0;
+  color: var(--camp-ink);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.wa-camp-form > label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--camp-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.wa-camp-form input[type='text'],
+.wa-camp-form input:not([type]),
+.wa-camp-form input[type='datetime-local'],
+.wa-camp-form select,
+.wa-camp-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 11px 13px;
+  background: var(--camp-bg-soft);
+  border: 1px solid var(--camp-border);
+  border-radius: 12px;
+  color: var(--camp-ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.4;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+
+.wa-camp-form textarea {
+  min-height: 84px;
+  resize: vertical;
+}
+
+.wa-camp-form input::placeholder,
+.wa-camp-form textarea::placeholder {
+  color: #93a39c;
+}
+
+.wa-camp-form input:focus,
+.wa-camp-form select:focus,
+.wa-camp-form textarea:focus {
+  background: #fff;
+  border-color: var(--camp-green);
+  box-shadow: 0 0 0 3px rgba(26, 157, 106, 0.15);
+}
+
+.wa-camp-form .wa-template-preview,
+.wa-camp-form .wa-camp-custom-preview {
+  margin: 0;
+  padding: 12px 14px;
+  background: var(--camp-green-soft);
+  border-left: 3px solid var(--camp-green);
+  border-radius: 10px;
+  color: var(--camp-ink);
+  font-size: 13.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.wa-camp-form .wa-muted-message {
+  color: var(--camp-muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+/* CSV upload / upgrade row */
+.wa-camp-upload {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Conversation picker */
+.wa-camp-contacts {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--camp-border);
+  border-radius: 14px;
+  background: var(--camp-surface);
+}
+
+.wa-camp-contacts legend {
+  padding: 0 6px;
+  color: var(--camp-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.wa-camp-contacts > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wa-camp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 100%;
+  padding: 7px 12px;
+  background: var(--camp-bg-soft);
+  border: 1px solid var(--camp-border);
+  border-radius: 999px;
+  color: var(--camp-ink);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.wa-camp-chip:has(input:checked) {
+  background: var(--camp-green-soft);
+  border-color: var(--camp-green);
+  color: var(--camp-green-dark);
+}
+
+.wa-camp-chip input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--camp-green);
+}
+
+.wa-camp-chip span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Recipient counter */
+.wa-camp-count {
+  padding: 12px 14px;
+  background: var(--camp-bg-soft);
+  border: 1px solid var(--camp-border);
+  border-radius: 12px;
+  color: var(--camp-ink);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.wa-camp-count.is-over {
+  background: var(--camp-red-soft);
+  border-color: #f3c4c1;
+  color: var(--camp-red);
+}
+
+.wa-camp-recipient-preview {
+  margin-top: 8px;
+  font-size: 12.5px;
+}
+
+.wa-camp-recipient-preview summary {
+  color: var(--camp-green-dark);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.wa-camp-recipient-preview ul {
+  margin: 8px 0 0;
+  padding: 0;
+  max-height: 160px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.wa-camp-recipient-preview li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--camp-border);
+}
+
+.wa-camp-recipient-preview li:last-child {
+  border-bottom: 0;
+}
+
+.wa-camp-recipient-preview code {
+  color: var(--camp-muted);
+  font-size: 12px;
+}
+
+/* Opt-in */
+.wa-camp-form > label.wa-camp-optin {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--camp-bg-soft);
+  border: 1px solid var(--camp-border);
+  border-radius: 12px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+.wa-camp-optin input {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin: 1px 0 0;
+  accent-color: var(--camp-green);
+}
+
+.wa-camp-delivery-note {
+  margin: 0;
+  color: var(--camp-muted);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.wa-camp-form .wa-primary-button {
+  width: 100%;
+  min-height: 48px;
+  justify-content: center;
+}
+
+/* ------------------------------ Campaign list ------------------------------ */
+
+.wa-camp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wa-camp-item {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  background: var(--camp-surface);
+  border: 1px solid var(--camp-border);
+  border-radius: 18px;
+  box-shadow: 0 1px 2px rgba(23, 48, 42, 0.04);
+}
+
+.wa-camp-item-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.wa-camp-item-title {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.wa-camp-item-title strong {
+  overflow: hidden;
+  color: var(--camp-ink);
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wa-camp-item-title small {
+  overflow: hidden;
+  color: var(--camp-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Status chip */
+.wa-camp-status {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 11px;
+  border-radius: 999px;
+  background: #eceff0;
+  color: #55646b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.wa-camp-status::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.wa-camp-status.is-completed { background: var(--camp-green-soft); color: var(--camp-green-dark); }
+.wa-camp-status.is-sending   { background: var(--camp-blue-soft);  color: var(--camp-blue); }
+.wa-camp-status.is-scheduled { background: var(--camp-amber-soft); color: var(--camp-amber); }
+.wa-camp-status.is-failed    { background: var(--camp-red-soft);   color: var(--camp-red); }
+.wa-camp-status.is-sending::before { animation: wa-camp-pulse 1.2s ease-in-out infinite; }
+
+@keyframes wa-camp-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* Custom message line */
+.wa-camp-custom {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--camp-bg-soft);
+  border-radius: 10px;
+  color: var(--camp-ink);
+  font-size: 13px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.wa-camp-custom span {
+  color: var(--camp-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+/* Progress */
+.wa-camp-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.wa-camp-progress-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  color: var(--camp-muted);
+  font-size: 12px;
+}
+
+.wa-camp-progress-top strong {
+  color: var(--camp-ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+/* Stats */
+.wa-camp-stats {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  margin: 0;
+}
+
+.wa-camp-stats > div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 9px 2px;
+  background: var(--camp-bg-soft);
+  border-radius: 12px;
+  text-align: center;
+}
+
+.wa-camp-stats dt {
+  margin: 0;
+  color: var(--camp-muted);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.wa-camp-stats dd {
+  margin: 0;
+  color: var(--camp-ink);
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.wa-camp-stats .is-delivered dd { color: var(--camp-green-dark); }
+.wa-camp-stats .is-read dd      { color: var(--camp-blue); }
+.wa-camp-stats .is-failed dd    { color: var(--camp-red); }
+.wa-camp-stats .is-failed.has-value { background: var(--camp-red-soft); }
+
+/* Actions */
+.wa-camp-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wa-camp-actions:empty {
+  display: none;
+}
+
+.wa-camp-actions .wa-secondary-button {
+  flex: 1 1 auto;
+  justify-content: center;
+}
+
+/* Wider screens */
+@media (min-width: 640px) {
+  .wa-camp-form { padding: 22px; }
+  .wa-camp-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .wa-camp-upload { flex-direction: row; align-items: center; }
+  .wa-camp-stats dt { font-size: 11.5px; }
+}
+
+/* ==========================================================================
+   Analytics
+   ========================================================================== */
 .wa-an-ranges { display: flex; gap: 6px; margin-bottom: 12px; }
 .wa-an-ranges button { padding: 6px 14px; border-radius: 999px; border: 1px solid rgba(128,128,128,.35); background: transparent; color: inherit; font: inherit; font-size: 13px; }
 .wa-an-ranges button.is-active { background: #128c7e; border-color: #128c7e; color: #fff; }

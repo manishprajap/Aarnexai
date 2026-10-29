@@ -1,3 +1,4 @@
+// src/services/whatsappCampaigns.ts
 
 const API_BASE: string = (
   import.meta.env.VITE_API_BASE_URL ??
@@ -48,6 +49,7 @@ export interface Campaign {
   name: string;
   templateId: number | string;
   templateName: string;
+  customMessage?: string | null;
   status: CampaignStatus;
   total: number;
   sent: number;
@@ -75,6 +77,11 @@ export interface CreateCampaignInput {
   name: string;
   templateId: number | string;
   parameters: string[];
+  /**
+   * Optional free-text message. Sent only to recipients who messaged the
+   * business in the last 24 hours; everyone else receives the template.
+   */
+  customMessage?: string | null;
   recipients: CampaignRecipient[];
   scheduledAt?: string | null;
   optInConfirmed: boolean;
