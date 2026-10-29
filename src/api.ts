@@ -1,8 +1,6 @@
 // src/api.ts
 
-const DEFAULT_API_BASE_URL = import.meta.env.DEV
-  ? 'http://localhost:3000/aarnexai-backend/api'
-  : 'https://aarnexai.com/aarnexai-backend/api';
+const DEFAULT_API_BASE_URL = 'https://aarnexai.com/aarnexai-backend/api';
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL || DEFAULT_API_BASE_URL).replace(/\/+$/, '');
 const SERVER_API_BASE_URL = (
   import.meta.env.VITE_SERVER_API_BASE_URL || BASE_URL
