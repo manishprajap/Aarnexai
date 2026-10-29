@@ -4,6 +4,7 @@ import {
   addOutline,
   closeOutline,
   cloudUploadOutline,
+  downloadOutline,
   informationCircleOutline,
   megaphoneOutline,
   refreshOutline,
@@ -201,6 +202,22 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
       setRecipientText((current) => `${current}${current ? '\n' : ''}${String(reader.result ?? '')}`);
     };
     reader.readAsText(file);
+  };
+
+  const downloadRecipientSample = () => {
+    const csv = [
+      'phone,name',
+      '9876543210,Asha Sharma',
+      '919811122233,Rahul Kumar',
+    ].join('\r\n');
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'whatsapp-campaign-recipients-sample.csv';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   };
 
   const togglePicked = (phone: string) =>
@@ -410,6 +427,9 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
             ) : (
               <UpgradeGate compact feature="CSV upload" description="Import contacts from a file on Pro." onUpgrade={onUpgrade} />
             )}
+            <button type="button" className="wa-secondary-button" onClick={downloadRecipientSample}>
+              <IonIcon icon={downloadOutline} /> Download sample CSV
+            </button>
             {parsed.invalid > 0 && <small className="wa-camp-warn">{parsed.invalid} invalid number{parsed.invalid === 1 ? '' : 's'} skipped</small>}
           </div>
 
