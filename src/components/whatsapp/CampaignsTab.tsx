@@ -35,12 +35,25 @@ interface CampaignsTabProps {
 }
 
 const errorText = (error: unknown) =>
-  error instanceof Error ? error.message : 'Request failed.  try again.';
+  error instanceof Error ? error.message : 'Request failed. Please try again.';
 
 const normalizePhone = (raw: string): string | null => {
-  let digits = raw.replace(/\D/g, '');
+  let digits = String(raw ?? '').replace(/\D/g, '');
   if (digits.length === 10) digits = `91${digits}`; // default to India
   return digits.length >= 11 && digits.length <= 15 ? digits : null;
+};
+
+/** Highest {{n}} placeholder found in a template body (0 if none). */
+const countPlaceholders = (body?: string | null): number => {
+  const nums = Array.from((body ?? '').matchAll(/\{\{\s*(\d+)\s*\}\}/g)).map((m) => Number(m[1]));
+  return nums.length ? Math.max(...nums) : 0;
+};
+
+/** Trust parameterCount from the API, but fall back to counting placeholders in the body. */
+const getParamCount = (template?: WhatsAppMessageTemplate | null): number => {
+  if (!template) return 0;
+  const fromApi = Number(template.parameterCount ?? 0);
+  return fromApi > 0 ? fromApi : countPlaceholders(template.bodyText);
 };
 
 // Accepts lines like "9876543210", "9876543210,Asha" or "9876543210<tab>Asha"
@@ -113,6 +126,16 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
     [templates],
   );
   const selectedTemplate = approvedTemplates.find((template) => String(template.id) === templateId);
+  const paramCount = getParamCount(selectedTemplate);
+
+  // Keep the number of value inputs in sync with the template (also covers templates loading late).
+  useEffect(() => {
+    setParameters((current) =>
+      current.length === paramCount
+        ? current
+        : Array.from({ length: paramCount }, (_, i) => current[i] ?? ''),
+    );
+  }, [paramCount, templateId]);
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -121,7 +144,7 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
       setCampaigns(list);
       setQuota(limits);
     } catch (err) {
-      if (!silent) setError(errorText(err));
+      setError(errorText(err));
     } finally {
       if (!silent) setLoading(false);
     }
@@ -145,15 +168,41 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
 
   const allRecipients = useMemo(() => {
     const map = new Map<string, CampaignRecipient>();
-    conversations
-      .filter((c) => pickedPhones.includes(c.phoneNumber))
-      .forEach((c) => {
-        const phone = normalizePhone(c.phoneNumber);
-        if (phone) map.set(phone, { phone, name: c.customerName || undefined });
+    const picked = new Set(
+      pickedPhones
+        .map((phone) => normalizePhone(phone))
+        .filter((phone): phone is string => Boolean(phone)),
+    );
+
+    conversations.forEach((conversation) => {
+      const phone = normalizePhone(conversation.phoneNumber);
+      if (phone && picked.has(phone)) {
+        map.set(phone, { phone, name: conversation.customerName || undefined });
+      }
+    });
+
+    // Pasted/CSV recipients are merged with selected conversations and deduplicated.
+    parsed.valid.forEach((recipient) => {
+      const existing = map.get(recipient.phone);
+      map.set(recipient.phone, {
+        phone: recipient.phone,
+        name: recipient.name || existing?.name,
       });
-    parsed.valid.forEach((r) => map.set(r.phone, r));
+    });
+
     return Array.from(map.values());
   }, [conversations, pickedPhones, parsed.valid]);
+
+  // Live preview of the message using the first recipient's name
+  const previewText = useMemo(() => {
+    if (!selectedTemplate?.bodyText) return '';
+    const sampleName = allRecipients[0]?.name || 'there';
+    return selectedTemplate.bodyText.replace(/\{\{\s*(\d+)\s*\}\}/g, (_m, n) => {
+      const raw = parameters[Number(n) - 1];
+      if (!raw || !raw.trim()) return `{{${n}}}`;
+      return raw.replace(/\{\{\s*name\s*\}\}/gi, sampleName);
+    });
+  }, [selectedTemplate, parameters, allRecipients]);
 
   const remaining =
     !quota || quota.monthlyLimit === null
@@ -202,7 +251,9 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
     }
     if (!name.trim()) return setError('Give your campaign a name.');
     if (!selectedTemplate) return setError('Choose an approved template.');
-    if (parameters.some((value) => !value.trim())) return setError('Fill in all template values.');
+    if (parameters.length !== paramCount || parameters.some((value) => !value.trim())) {
+      return setError('Fill in all template values.');
+    }
     if (allRecipients.length === 0) return setError('Add at least one recipient.');
     if (overLimit) {
       return setError(
@@ -221,7 +272,7 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
       await createCampaign({
         name: name.trim(),
         templateId: selectedTemplate.id,
-        parameters,
+        parameters: parameters.map((value) => value.trim()),
         recipients: allRecipients,
         scheduledAt: scheduledAt ? new Date(scheduledAt).toISOString() : null,
         optInConfirmed: true,
@@ -332,20 +383,23 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
                 const next = e.target.value;
                 const template = approvedTemplates.find((item) => String(item.id) === next);
                 setTemplateId(next);
-                setParameters(Array.from({ length: template?.parameterCount ?? 0 }, () => ''));
+                setParameters(Array.from({ length: getParamCount(template) }, () => ''));
               }}
             >
-              <option value="">{approvedTemplates.length ? 'Choose an approved template' : 'No approved templates yet'}</option>
+              <option value="">{approvedTemplates.length ? 'Choose an approved template' : 'No approved templates available'}</option>
               {approvedTemplates.map((template) => (
                 <option key={template.id} value={String(template.id)}>{template.displayName}</option>
               ))}
             </select>
           </label>
 
-          {selectedTemplate?.bodyText && <p className="wa-template-preview">{selectedTemplate.bodyText}</p>}
+          {selectedTemplate?.bodyText && (
+            <p className="wa-template-preview">{previewText || selectedTemplate.bodyText}</p>
+          )}
           {parameters.map((value, index) => (
             <input
               key={`${templateId}-${index}`}
+              required
               value={value}
               onChange={(e) => setParameters((cur) => cur.map((item, i) => (i === index ? e.target.value : item)))}
               placeholder={`Value for {{${index + 1}}} (use {{name}} for the customer's name)`}
@@ -388,10 +442,25 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
             </fieldset>
           )}
 
-          <p className={`wa-camp-count${overLimit ? ' is-over' : ''}`}>
-            {allRecipients.length} recipient{allRecipients.length === 1 ? '' : 's'}
-            {Number.isFinite(remaining) ? ` · ${remaining} left on your free plan` : ''}
-          </p>
+          <div className={`wa-camp-count${overLimit ? ' is-over' : ''}`}>
+            <strong>{allRecipients.length} recipient{allRecipients.length === 1 ? '' : 's'} selected</strong>
+            {Number.isFinite(remaining) && (
+              <span> · {remaining} recipient{remaining === 1 ? '' : 's'} remaining this month</span>
+            )}
+            {allRecipients.length > 0 && (
+              <details className="wa-camp-recipient-preview">
+                <summary>Review recipient numbers</summary>
+                <ul>
+                  {allRecipients.map((recipient) => (
+                    <li key={recipient.phone}>
+                      <span>{recipient.name || 'WhatsApp contact'}</span>
+                      <code>+{recipient.phone}</code>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+          </div>
 
           <label>Send time
             {isPaid ? (
@@ -406,7 +475,16 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
             <span>I confirm every recipient has agreed to receive WhatsApp messages from my business.</span>
           </label>
 
-          <button type="submit" className="wa-primary-button" disabled={saving}>
+          {!approvedTemplates.length && (
+            <p className="wa-camp-warn">
+              No approved templates are available. Create and get a template approved in WhatsApp Manager, then refresh templates.
+            </p>
+          )}
+          <p className="wa-camp-delivery-note">
+            The approved template will be sent to {allRecipients.length} recipient{allRecipients.length === 1 ? '' : 's'} with your values filled in.
+            Delivery also depends on WhatsApp eligibility and Meta delivery status.
+          </p>
+          <button type="submit" className="wa-primary-button" disabled={saving || !approvedTemplates.length}>
             {saving ? <IonSpinner name="crescent" /> : <IonIcon icon={sendOutline} />}
             {saving ? 'Starting…' : scheduledAt ? 'Schedule campaign' : 'Send campaign'}
           </button>

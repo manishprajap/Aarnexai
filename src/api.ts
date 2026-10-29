@@ -78,12 +78,9 @@ const parseJsonSafely = async (response: Response): Promise<unknown> => {
 /* -------------------------------------------------------------------------- */
 
 const createApiError = (response: Response, json: unknown): ApiError => {
-  // If the backend returned an object, preserve it on `error.data`.
   const data: ApiErrorData | null =
     json && typeof json === 'object' ? (json as ApiErrorData) : null;
-
-  // Prefer the backend's own message.
-  const message =
+    const message =
     data?.message || data?.error || `Request failed with status ${response.status}`;
 
   return new ApiError(message, response.status, data);

@@ -104,6 +104,12 @@ const errorText = (error: unknown) => {
   return 'Request failed. Please try again.';
 };
 
+const isTemplateMessage = (message: WhatsAppMessage) =>
+  /^\s*\[template\]/i.test(message.text ?? '');
+
+const isRecipientUnavailableError = (message: WhatsAppMessage) =>
+  /\b131026\b/.test(message.errorMessage ?? '');
+
 const formatTime = (value?: string | null) => {
   if (!value) return '';
   const date = new Date(value);
@@ -987,7 +993,16 @@ const WhatsAppWorkspace: React.FC = () => {
                               {message.direction === 'outgoing' && message.status === 'failed' && (
                                 <small className="wa-message-error">
                                   <span>{message.errorMessage || 'Message not delivered'}</span>
-                                  {message.text && (
+                                  {isRecipientUnavailableError(message) && (
+                                    <span>
+                                      Meta could not deliver this to the recipient. Verify the full
+                                      number and that it can receive WhatsApp messages.
+                                    </span>
+                                  )}
+                                  {isTemplateMessage(message) && (
+                                    <span>Select the approved template above to send it again.</span>
+                                  )}
+                                  {message.text && !isTemplateMessage(message) && (
                                     <button type="button" onClick={() => void handleRetryMessage(message)}>Retry</button>
                                   )}
                                 </small>

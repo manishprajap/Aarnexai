@@ -1,10 +1,15 @@
 
 const API_BASE: string = (
-  (import.meta as any).env?.VITE_API_URL ?? 'https://aarnexai.com/aarnexai-backend'
+  (import.meta as any).env?.VITE_API_URL ??
+  'https://aarnexai.com/aarnexai-backend'
 ).replace(/\/+$/, '');
+
 const getToken = () => localStorage.getItem('token') ?? '';
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+async function request<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
@@ -13,17 +18,25 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       ...(options.headers ?? {}),
     },
   });
+
   const body = await response.json().catch(() => ({}));
+
   if (!response.ok) {
-    throw new Error(body?.message || body?.error || 'Request failed. Please try again.');
+    throw new Error(
+      body?.message || body?.error || 'Request failed. Please try again.',
+    );
   }
+
   return (body?.data ?? body) as T;
 }
 
-/* ----------------------------- Campaigns ----------------------------- */
-
 export type CampaignStatus =
-  | 'draft' | 'scheduled' | 'sending' | 'completed' | 'cancelled' | 'failed';
+  | 'draft'
+  | 'scheduled'
+  | 'sending'
+  | 'completed'
+  | 'cancelled'
+  | 'failed';
 
 export interface Campaign {
   id: number | string;
@@ -42,9 +55,9 @@ export interface Campaign {
 
 export interface CampaignQuota {
   plan: 'free' | 'pro';
-  monthlyLimit: number | null;   // null = unlimited
+  monthlyLimit: number | null;
   usedThisMonth: number;
-  activeLimit: number | null;    // null = unlimited
+  activeLimit: number | null;
   activeCount: number;
 }
 
@@ -62,16 +75,29 @@ export interface CreateCampaignInput {
   optInConfirmed: boolean;
 }
 
-export const getCampaigns = () => request<Campaign[]>('/api/whatsapp/campaigns');
-export const getCampaignQuota = () => request<CampaignQuota>('/api/whatsapp/campaigns/quota');
-export const createCampaign = (input: CreateCampaignInput) =>
-  request<Campaign>('/api/whatsapp/campaigns', { method: 'POST', body: JSON.stringify(input) });
-export const cancelCampaign = (id: number | string) =>
-  request<void>(`/api/s/${id}/cancel`, { method: 'POST' });
-export const retryCampaignFailures = (id: number | string) =>
-  request<void>(`/api/whatsapp/campaigns/${id}/retry`, { method: 'POST' });
+export const getCampaigns = () =>
+  request<Campaign[]>('/api/whatsapp/campaigns');
 
-/* ----------------------------- Analytics ----------------------------- */
+export const getCampaignQuota = () =>
+  request<CampaignQuota>('/api/whatsapp/campaigns/quota');
+
+export const createCampaign = (input: CreateCampaignInput) =>
+  request<Campaign>('/api/whatsapp/campaigns', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+
+export const cancelCampaign = (id: number | string) =>
+  request<void>(
+    `/api/whatsapp/campaigns/${encodeURIComponent(String(id))}/cancel`,
+    { method: 'POST' },
+  );
+
+export const retryCampaignFailures = (id: number | string) =>
+  request<void>(
+    `/api/whatsapp/campaigns/${encodeURIComponent(String(id))}/retry`,
+    { method: 'POST' },
+  );
 
 export interface AnalyticsSummary {
   days: number;
@@ -82,14 +108,29 @@ export interface AnalyticsSummary {
   failed: number;
   activeConversations: number;
   daily: { date: string; sent: number; received: number }[];
-  // Paid-only (server must omit these for free plans)
   advanced?: {
     avgResponseMinutes: number | null;
-    topTemplates: { name: string; sent: number; readRate: number }[];
-    campaigns: { id: number | string; name: string; sent: number; delivered: number; read: number; failed: number }[];
+    topTemplates: {
+      name: string;
+      sent: number;
+      readRate: number;
+    }[];
+    campaigns: {
+      id: number | string;
+      name: string;
+      sent: number;
+      delivered: number;
+      read: number;
+      failed: number;
+    }[];
     topProducts: { name: string; shares: number }[];
   };
 }
 
-export const getWhatsAppAnalytics = (days: number) =>
-  request<AnalyticsSummary>(`/api/whatsapp/analytics?days=${days}`);
+export const getWhatsAppAnalytics = (days: number) => {
+  const safeDays = [7, 30, 90].includes(days) ? days : 7;
+
+  return request<AnalyticsSummary>(
+    `/api/whatsapp/analytics?days=${safeDays}`,
+  );
+};
