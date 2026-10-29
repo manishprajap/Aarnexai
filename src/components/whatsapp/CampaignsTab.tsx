@@ -113,6 +113,7 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
     () => templates.filter((template) => template.status === 'APPROVED'),
     [templates],
   );
+  const hasProAccess = quota ? quota.plan !== 'free' : isPaid;
   const selectedTemplate = approvedTemplates.find((template) => String(template.id) === templateId);
 
   const load = useCallback(async (silent = false) => {
@@ -191,7 +192,7 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
 
   const handleFile = (file: File | null) => {
     if (!file) return;
-    if (!isPaid) {
+    if (!hasProAccess) {
       setError('CSV upload is a Pro feature.');
       return;
     }
@@ -226,13 +227,13 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
     if (allRecipients.length === 0) return setError('Add at least one recipient.');
     if (overLimit) {
       return setError(
-        isPaid
+        hasProAccess
           ? `Your current plan has ${remaining} recipient${remaining === 1 ? '' : 's'} left this month.`
           : `Your free plan has ${remaining} recipient${remaining === 1 ? '' : 's'} left this month. Remove some or upgrade.`,
       );
     }
     if (activeBlocked) return setError('Free plan allows 1 active campaign. Wait for it to finish or upgrade.');
-    if (scheduledAt && !isPaid) return setError('Scheduling is a Pro feature.');
+    if (scheduledAt && !hasProAccess) return setError('Scheduling is a Pro feature.');
     if (scheduledAt && new Date(scheduledAt).getTime() < Date.now() + 60_000) {
       return setError('Choose a schedule time at least a minute from now.');
     }
@@ -311,7 +312,7 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
 
       {quota && (
         <div className="wa-camp-quota">
-          <span className={`wa-camp-plan${isPaid ? ' is-pro' : ''}`}>{isPaid ? 'Pro' : 'Free'}</span>
+          <span className={`wa-camp-plan${hasProAccess ? ' is-pro' : ''}`}>{hasProAccess ? 'Pro' : 'Free'}</span>
           {quota.monthlyLimit === null ? (
             <span>Unlimited recipients · {quota.usedThisMonth} sent this month</span>
           ) : (
@@ -327,14 +328,14 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
 
       <div className="wa-camp-plan-info">
         <div className="wa-camp-plan-copy">
-          <strong>{isPaid ? 'Pro plan enabled' : 'Free plan'}</strong>
+          <strong>{hasProAccess ? 'Pro plan enabled' : 'Free plan'}</strong>
           <p>
-            {isPaid
+            {hasProAccess
               ? 'CSV contact imports, campaign scheduling and failed-message retries are available with your plan.'
               : 'Create campaigns within your available quota. Upgrade to Pro for CSV imports, scheduled campaigns and failed-message retries.'}
           </p>
         </div>
-        {!isPaid && (
+        {!hasProAccess && (
           <button type="button" className="wa-secondary-button wa-camp-upgrade-button" onClick={onUpgrade}>
             Upgrade to Pro
           </button>
@@ -401,7 +402,7 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
           </label>
 
           <div className="wa-camp-upload">
-            {isPaid ? (
+            {hasProAccess ? (
               <label className="wa-secondary-button">
                 <IonIcon icon={cloudUploadOutline} /> Upload CSV
                 <input type="file" accept=".csv,text/csv,.txt" hidden onChange={(e) => { handleFile(e.target.files?.[0] ?? null); e.target.value = ''; }} />
@@ -447,7 +448,7 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
           </div>
 
           <label>Send time
-            {isPaid ? (
+            {hasProAccess ? (
               <input type="datetime-local" value={scheduledAt} onChange={(e) => setScheduledAt(e.target.value)} />
             ) : (
               <small className="wa-muted-message">Sends immediately. Scheduling is available on Pro.</small>
@@ -514,7 +515,7 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
                     </button>
                   )}
                   {campaign.failed > 0 && campaign.status !== 'sending' && (
-                    isPaid ? (
+                    hasProAccess ? (
                       <button type="button" className="wa-secondary-button" disabled={busyId === campaign.id} onClick={() => void handleRetry(campaign)}>
                         {busyId === campaign.id ? <IonSpinner name="crescent" /> : <IonIcon icon={refreshOutline} />} Retry failed
                       </button>

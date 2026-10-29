@@ -15,6 +15,7 @@ export interface AuthUser {
   mobile?: string;
   email: string | null;
   plan?: string;
+  isPaidPlan?: boolean;
   credits?: number;
 
   // Business Setup details (returned by /auth/me)

@@ -161,10 +161,10 @@ const WhatsAppWorkspace: React.FC = () => {
   const profileCategoryId = user?.categoryId ? String(user.categoryId) : '';
   const profileCategoryName = user?.category?.trim() || '';
   // The backend should remain the source of truth for paid entitlements.
-  const userPlan = String((user as { plan?: string } | null)?.plan ?? 'free')
-    .trim()
-    .toLowerCase();
-  const isPaid = ['pro', 'paid', 'premium', 'business'].includes(userPlan);
+  const userPlan = String(user?.plan ?? 'free').trim().toLowerCase();
+  const isPaid =
+    user?.isPaidPlan ??
+    ['pro', 'paid', 'premium', 'business', 'enterprise'].includes(userPlan);
 
   // All WhatsApp campaign/analytics upgrade prompts use the registered subscription route.
   const handleUpgrade = () => {
