@@ -1,10 +1,15 @@
 
 const API_BASE: string = (
-  (import.meta as any).env?.VITE_API_URL ??
-  'https://aarnexai.com/aarnexai-backend'
+  import.meta.env.VITE_API_BASE_URL ??
+  'https://aarnexai.com/aarnexai-backend/api'
 ).replace(/\/+$/, '');
 
-const getToken = () => localStorage.getItem('token') ?? '';
+const getToken = () =>
+  localStorage.getItem('token') ??
+  localStorage.getItem('auth_token') ??
+  localStorage.getItem('delivery_token') ??
+  localStorage.getItem('access_token') ??
+  '';
 
 async function request<T>(
   path: string,
@@ -76,26 +81,26 @@ export interface CreateCampaignInput {
 }
 
 export const getCampaigns = () =>
-  request<Campaign[]>('/api/whatsapp/campaigns');
+  request<Campaign[]>('/whatsapp/campaigns');
 
 export const getCampaignQuota = () =>
-  request<CampaignQuota>('/api/whatsapp/campaigns/quota');
+  request<CampaignQuota>('/whatsapp/campaigns/quota');
 
 export const createCampaign = (input: CreateCampaignInput) =>
-  request<Campaign>('/api/whatsapp/campaigns', {
+  request<Campaign>('/whatsapp/campaigns', {
     method: 'POST',
     body: JSON.stringify(input),
   });
 
 export const cancelCampaign = (id: number | string) =>
   request<void>(
-    `/api/whatsapp/campaigns/${encodeURIComponent(String(id))}/cancel`,
+    `/whatsapp/campaigns/${encodeURIComponent(String(id))}/cancel`,
     { method: 'POST' },
   );
 
 export const retryCampaignFailures = (id: number | string) =>
   request<void>(
-    `/api/whatsapp/campaigns/${encodeURIComponent(String(id))}/retry`,
+    `/whatsapp/campaigns/${encodeURIComponent(String(id))}/retry`,
     { method: 'POST' },
   );
 
@@ -131,6 +136,6 @@ export const getWhatsAppAnalytics = (days: number) => {
   const safeDays = [7, 30, 90].includes(days) ? days : 7;
 
   return request<AnalyticsSummary>(
-    `/api/whatsapp/analytics?days=${safeDays}`,
+    `/whatsapp/analytics?days=${safeDays}`,
   );
 };

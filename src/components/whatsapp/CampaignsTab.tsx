@@ -430,9 +430,9 @@ const CampaignsTab: React.FC<CampaignsTabProps> = ({
 
           {conversations.length > 0 && (
             <fieldset className="wa-camp-contacts">
-              <legend>Or pick from your conversations</legend>
+              <legend>Select WhatsApp numbers from your conversations</legend>
               <div>
-                {conversations.slice(0, 30).map((c) => (
+                {conversations.map((c) => (
                   <label key={c.id} className="wa-camp-chip">
                     <input type="checkbox" checked={pickedPhones.includes(c.phoneNumber)} onChange={() => togglePicked(c.phoneNumber)} />
                     <span>{c.customerName || c.phoneNumber}</span>

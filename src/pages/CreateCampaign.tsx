@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   IonPage,
   IonHeader,
@@ -58,9 +58,7 @@ const CreateCampaign: React.FC = () => {
   const [productId, setProductId] = useState<number | null>(null);
   const [creativeId, setCreativeId] = useState<number | null>(null);
 
-  const [platform, setPlatform] = useState<
-    'facebook' | 'instagram' | 'whatsapp'
-  >('facebook');
+  const [platform, setPlatform] = useState<'facebook' | 'instagram'>('facebook');
 
   const [objective, setObjective] = useState('TRAFFIC');
 
@@ -79,17 +77,7 @@ const CreateCampaign: React.FC = () => {
     return localStorage.getItem('token');
   };
 
-  useEffect(() => {
-    loadProducts();
-  }, []);
-
-  useEffect(() => {
-    if (productId) {
-      loadCreatives(productId);
-    }
-  }, [productId]);
-
-  const loadProducts = async () => {
+  const loadProducts = useCallback(async () => {
     try {
       setLoadingProducts(true);
 
@@ -114,9 +102,9 @@ const CreateCampaign: React.FC = () => {
     } finally {
       setLoadingProducts(false);
     }
-  };
+  }, []);
 
-  const loadCreatives = async (selectedProductId: number) => {
+  const loadCreatives = useCallback(async (selectedProductId: number) => {
     try {
       setLoadingCreatives(true);
       setCreativeId(null);
@@ -146,7 +134,17 @@ const CreateCampaign: React.FC = () => {
     } finally {
       setLoadingCreatives(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    void loadProducts();
+  }, [loadProducts]);
+
+  useEffect(() => {
+    if (productId !== null) {
+      void loadCreatives(productId);
+    }
+  }, [productId, loadCreatives]);
 
   const nextStep = () => {
     if (step < 7) {
@@ -227,10 +225,14 @@ const CreateCampaign: React.FC = () => {
       } else {
         ionRouter.push('/campaigns', 'forward', 'replace');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
 
-      alert(error?.message || 'Unable to create campaign. Please try again.');
+      alert(
+        error instanceof Error
+          ? error.message
+          : 'Unable to create campaign. Please try again.',
+      );
     } finally {
       setPublishing(false);
     }
@@ -426,21 +428,23 @@ const CreateCampaign: React.FC = () => {
                   </IonLabel>
                 </IonItem>
 
-                <IonItem lines="none">
-                  <IonRadio slot="start" value="whatsapp" />
-                  <IonLabel>
-                    <strong>WhatsApp</strong>
-                    <p>Send promotional messages.</p>
-                  </IonLabel>
-                </IonItem>
               </IonRadioGroup>
             </div>
 
             <div className="rounded-2xl border border-gray-100 bg-white p-4">
               <p className="text-sm text-gray-500">
-                Note: Facebook and Instagram paid advertising use Meta Ads.
-                WhatsApp messaging is a separate marketing flow.
+                WhatsApp campaigns use approved message templates and let you
+                choose the customer numbers to receive them.
               </p>
+              <IonButton
+                className="mt-3"
+                fill="outline"
+                onClick={() =>
+                  ionRouter.push('/whatsapp?view=campaigns', 'forward')
+                }
+              >
+                Create WhatsApp Campaign
+              </IonButton>
             </div>
           </>
         );

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   IonPage,
   IonHeader,
@@ -9,8 +9,6 @@ import {
   IonChip,
   IonLabel,
   IonSpinner,
-  IonFab,
-  IonFabButton,
   useIonRouter,
 } from '@ionic/react';
 import {
@@ -22,6 +20,7 @@ import {
   checkmarkCircleOutline,
   closeCircleOutline,
   timeOutline,
+  logoWhatsapp,
 } from 'ionicons/icons';
 
 interface Campaign {
@@ -49,7 +48,7 @@ const Campaigns: React.FC = () => {
     return localStorage.getItem('token');
   };
 
-  const loadCampaigns = async () => {
+  const loadCampaigns = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -75,11 +74,11 @@ const Campaigns: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    loadCampaigns();
-  }, []);
+    void loadCampaigns();
+  }, [loadCampaigns]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -146,34 +145,40 @@ const Campaigns: React.FC = () => {
     <IonPage>
       <IonHeader className="ion-no-border">
         <IonToolbar className="app-toolbar">
-          <div className="flex items-center justify-between px-4 py-2">
+          <div className="px-4 py-2">
             <h1 className="m-0 text-lg font-bold text-gray-900">
               Campaigns
             </h1>
-
-            <IonButton slot="end" fill="clear" onClick={goToCreate}>
-              <IonIcon slot="icon-only" icon={addOutline} />
-            </IonButton>
           </div>
         </IonToolbar>
       </IonHeader>
 
       <IonContent fullscreen className="bg-gray-50">
         <div className="mx-auto max-w-[700px] px-4 pb-24 pt-4">
-          <div className="header-text mb-5">
+          <div className="mb-5">
             <h1 className="m-0 text-2xl font-bold text-gray-900">
-              Your Campaigns
+              Advertising campaigns
             </h1>
 
             <p className="mt-2 text-sm text-gray-500">
-              Create and manage your advertising campaigns.
+              Create and manage your Facebook and Instagram ad campaigns.
             </p>
           </div>
 
-          <IonButton expand="block" onClick={goToCreate} className="mb-6">
-            <IonIcon slot="start" icon={addOutline} />
-            Create Campaign
-          </IonButton>
+          <div className="mb-6 grid gap-3 sm:grid-cols-2">
+            <IonButton expand="block" onClick={goToCreate}>
+              <IonIcon slot="start" icon={addOutline} />
+              Create Ad Campaign
+            </IonButton>
+            <IonButton
+              expand="block"
+              fill="outline"
+              onClick={() => ionRouter.push('/whatsapp?view=campaigns', 'forward')}
+            >
+              <IonIcon slot="start" icon={logoWhatsapp} />
+              Create WhatsApp Campaign
+            </IonButton>
+          </div>
 
           {loading ? (
             <div className="flex flex-col items-center gap-2 py-12 text-center">
@@ -192,11 +197,11 @@ const Campaigns: React.FC = () => {
               </h2>
 
               <p className="mb-4 text-sm text-gray-500">
-                Create your first campaign to promote your products.
+                Create your first advertising campaign to promote your products.
               </p>
 
               <IonButton onClick={goToCreate}>
-                Create First Campaign
+                Create First Ad Campaign
               </IonButton>
             </div>
           ) : (
@@ -250,17 +255,6 @@ const Campaigns: React.FC = () => {
             </div>
           )}
         </div>
-
-        <IonFab
-          vertical="bottom"
-          horizontal="end"
-          slot="fixed"
-          style={{ marginBottom: 20, marginRight: 15 }}
-        >
-          <IonFabButton onClick={goToCreate}>
-            <IonIcon icon={addOutline} />
-          </IonFabButton>
-        </IonFab>
       </IonContent>
     </IonPage>
   );
