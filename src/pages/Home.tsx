@@ -729,6 +729,7 @@ const Home: React.FC = () => {
     try {
       const imageForm = new FormData();
       imageForm.set('image', productDraft.image);
+      imageForm.set('imageOnly', 'true');
       if (user?.id) imageForm.set('userId', String(user.id));
 
       const uploadResult = await apiPost<{
