@@ -1,3 +1,4 @@
+///src/pages/BusinessWebsite.tsx
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   IonButton,
@@ -28,8 +29,13 @@ interface RazorpayCheckoutResult {
 
 const CHECKOUT_SCRIPT = 'https://checkout.razorpay.com/v1/checkout.js';
 
+// Public websites are served by the Next.js backend on the real domain.
+// Never use window.location.origin here: inside the app / dev server it is
+// http://localhost:8100, which is not where the public page lives.
+const PUBLIC_SITE_BASE = 'https://aarnexai.com/aarnexai-backend';
+
 const getPublicWebsiteUrl = (slug: string | null) =>
-  slug ? new URL(encodeURIComponent(slug), window.location.origin).toString() : null;
+  slug ? `${PUBLIC_SITE_BASE}/${encodeURIComponent(slug)}` : null;
 
 async function loadCheckout() {
   if (window.Razorpay) return true;
@@ -169,7 +175,7 @@ const BusinessWebsite: React.FC = () => {
               <>
                 <div className="space-y-2 rounded-xl bg-gray-50 p-4 text-sm">
                   <p className="m-0"><strong>Business:</strong> {status.business.name || 'Complete your business profile'}</p>
-                  <p className="m-0"><strong>Website address:</strong> {publicWebsiteUrl || 'Available after business setup'}</p>
+                  <p className="m-0 break-all"><strong>Website address:</strong> {publicWebsiteUrl || 'Available after business setup'}</p>
                   <p className="m-0"><strong>Subscription:</strong> {status.subscription.active ? `Active until ${formatDate(status.subscription.endDate)}` : 'Inactive'}</p>
                   <p className="m-0"><strong>Publishing:</strong> {status.published ? 'Live' : 'Not published'}</p>
                 </div>
