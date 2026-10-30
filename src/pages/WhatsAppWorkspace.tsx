@@ -1084,8 +1084,9 @@ const WhatsAppWorkspace: React.FC = () => {
               conversations={conversations}
               onUpgrade={handleUpgrade}
             />
-          ) : activeTab === 'analytics' ? (
+          ) : activeTab === 'analytics' ? ( 
             <AnalyticsTab
+            
               isPaid={isPaid}
               conversations={conversations}
               onUpgrade={handleUpgrade}
