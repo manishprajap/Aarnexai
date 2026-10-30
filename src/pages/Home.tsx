@@ -684,6 +684,17 @@ const Home: React.FC = () => {
     setProductModalOpen(true);
     setLoadingServices(true);
     void apiGet<{ success: boolean; services: UserService[] }>('/business/services')
+      .catch(async (loadError) => {
+        if (!(loadError instanceof ApiError) || loadError.status !== 404) throw loadError;
+        const response = await apiGet<{
+          success: boolean;
+          business: { services?: UserService[] };
+        }>('/business');
+        return {
+          success: response.success,
+          services: Array.isArray(response.business.services) ? response.business.services : [],
+        };
+      })
       .then((response) => setUserServices(response.services))
       .catch((loadError) => {
         setServiceFormError(loadError instanceof Error ? loadError.message : 'Could not load your services.');
@@ -809,10 +820,19 @@ const Home: React.FC = () => {
     setSavingService(true);
     setServiceFormError('');
     try {
-      const result = await apiPost<{ success?: boolean; message?: string; service: UserService }>(
-        '/business/services',
-        { name, description: serviceDraft.description.trim() },
-      );
+      let result: { success?: boolean; message?: string; service: UserService };
+      try {
+        result = await apiPost<{ success?: boolean; message?: string; service: UserService }>(
+          '/business/services',
+          { name, description: serviceDraft.description.trim() },
+        );
+      } catch (requestError) {
+        if (!(requestError instanceof ApiError) || requestError.status !== 404) throw requestError;
+        result = await apiPost<{ success?: boolean; message?: string; service: UserService }>(
+          '/business',
+          { action: 'createService', name, description: serviceDraft.description.trim() },
+        );
+      }
       if (!result?.success || !result.service) {
         throw new Error(result?.message || 'The service could not be saved.');
       }
