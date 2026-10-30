@@ -2363,6 +2363,40 @@ ion-modal.connect-sheet ion-content.cs-content {
   line-height: 1.4;
 }
 
+.home-product-tabs {
+  display: grid;
+  flex: none;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 5px;
+  margin-bottom: 16px;
+  padding: 4px;
+  border-radius: 12px;
+  background: #f0f4f8;
+}
+
+.home-product-tabs button {
+  min-height: 40px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #64758a;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.home-product-tabs button.is-active {
+  background: #ffffff;
+  color: #087fe5;
+  box-shadow: 0 2px 6px rgba(20, 45, 70, 0.1);
+}
+
+.home-product-tabs button:focus-visible {
+  outline: 2px solid #087fe5;
+  outline-offset: 2px;
+}
+
 .home-product-close {
   display: grid;
   flex: none;
@@ -2430,6 +2464,10 @@ ion-modal.connect-sheet ion-content.cs-content {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
+}
+
+.home-product-price-grid {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .home-product-image-picker {
@@ -2518,6 +2556,57 @@ ion-modal.connect-sheet ion-content.cs-content {
   flex: none;
   color: #087fe5;
   font-size: 17px;
+}
+
+.home-service-list {
+  padding: 13px;
+  border: 1px solid #e3eaf0;
+  border-radius: 11px;
+  background: #f8fafc;
+}
+
+.home-service-list h3 {
+  margin: 0 0 9px;
+  color: #344b63;
+  font-size: 12px;
+}
+
+.home-service-list > p {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: #74849a;
+  font-size: 12px;
+}
+
+.home-service-list ul {
+  display: grid;
+  gap: 8px;
+  max-height: 180px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.home-service-list li {
+  display: grid;
+  gap: 3px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.home-service-list li strong {
+  color: #304b65;
+  font-size: 12px;
+}
+
+.home-service-list li span {
+  color: #74849a;
+  font-size: 11px;
+  line-height: 1.45;
 }
 
 .home-product-file-input {

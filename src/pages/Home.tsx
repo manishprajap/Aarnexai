@@ -67,8 +67,20 @@ type ProductDraft = {
   name: string;
   description: string;
   price: string;
-  currency: string;
   image: File | null;
+};
+
+type ServiceDraft = {
+  name: string;
+  description: string;
+};
+
+type UserService = {
+  id: number;
+  name: string;
+  slug: string;
+  description: string | null;
+  status: string;
 };
 
 type PromptPlanItem = {
@@ -155,9 +167,9 @@ const emptyProduct = (): ProductDraft => ({
   name: '',
   description: '',
   price: '',
-  currency: 'INR',
   image: null,
 });
+const emptyService = (): ServiceDraft => ({ name: '', description: '' });
 const INSPIRATION_DISMISSAL_MS = 30 * 60 * 1000;
 
 function groupCalendarPublications(
@@ -232,9 +244,15 @@ const Home: React.FC = () => {
   const [homeContentError, setHomeContentError] = useState('');
   const [loadingHomeContent, setLoadingHomeContent] = useState(true);
   const [productModalOpen, setProductModalOpen] = useState(false);
+  const [productModalTab, setProductModalTab] = useState<'product' | 'service'>('product');
   const [productDraft, setProductDraft] = useState<ProductDraft>(emptyProduct);
   const [savingProduct, setSavingProduct] = useState(false);
   const [productFormError, setProductFormError] = useState('');
+  const [serviceDraft, setServiceDraft] = useState<ServiceDraft>(emptyService);
+  const [userServices, setUserServices] = useState<UserService[]>([]);
+  const [loadingServices, setLoadingServices] = useState(false);
+  const [savingService, setSavingService] = useState(false);
+  const [serviceFormError, setServiceFormError] = useState('');
   const [productToast, setProductToast] = useState('');
   const [promptPlannerCollapsed, setPromptPlannerCollapsed] = useState(false);
   const [calendarDays, setCalendarDays] = useState<MarketingCalendarDay[]>([]);
@@ -659,8 +677,18 @@ const Home: React.FC = () => {
 
   const openProductForm = () => {
     setProductDraft(emptyProduct());
+    setServiceDraft(emptyService());
     setProductFormError('');
+    setServiceFormError('');
+    setProductModalTab('product');
     setProductModalOpen(true);
+    setLoadingServices(true);
+    void apiGet<{ success: boolean; services: UserService[] }>('/business/services')
+      .then((response) => setUserServices(response.services))
+      .catch((loadError) => {
+        setServiceFormError(loadError instanceof Error ? loadError.message : 'Could not load your services.');
+      })
+      .finally(() => setLoadingServices(false));
   };
 
   const handleProductImage = (file?: File) => {
@@ -710,7 +738,7 @@ const Home: React.FC = () => {
   const saveProduct = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!productDraft.name.trim()) {
-      setProductFormError('Enter a product or service name.');
+      setProductFormError('Enter a product name.');
       return;
     }
     if (!productDraft.image) {
@@ -718,8 +746,12 @@ const Home: React.FC = () => {
       return;
     }
 
-    const price = productDraft.price.trim() ? Number(productDraft.price) : null;
-    if (price !== null && (!Number.isFinite(price) || price < 0)) {
+    if (!productDraft.price.trim()) {
+      setProductFormError('Enter a product price.');
+      return;
+    }
+    const price = Number(productDraft.price);
+    if (!Number.isFinite(price) || price < 0) {
       setProductFormError('Enter a valid price.');
       return;
     }
@@ -748,7 +780,7 @@ const Home: React.FC = () => {
         name: productDraft.name.trim(),
         originalImageUrl: uploadResult.imageUrl,
         description: productDraft.description.trim(),
-        price: price === null ? null : String(price),
+        price: String(price),
       });
       if (!result?.success) {
         throw new Error(result?.message || 'The product could not be saved.');
@@ -756,13 +788,44 @@ const Home: React.FC = () => {
 
       setProductModalOpen(false);
       setProductDraft(emptyProduct());
-      setProductToast('Product or service saved successfully.');
+      setProductToast('Product saved successfully.');
     } catch (error) {
       setProductFormError(
         error instanceof Error ? error.message : 'Could not save this product or service. Please try again.'
       );
     } finally {
       setSavingProduct(false);
+    }
+  };
+
+  const saveService = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const name = serviceDraft.name.trim();
+    if (!name) {
+      setServiceFormError('Enter a service name.');
+      return;
+    }
+
+    setSavingService(true);
+    setServiceFormError('');
+    try {
+      const result = await apiPost<{ success?: boolean; message?: string; service: UserService }>(
+        '/business/services',
+        { name, description: serviceDraft.description.trim() },
+      );
+      if (!result?.success || !result.service) {
+        throw new Error(result?.message || 'The service could not be saved.');
+      }
+
+      setUserServices((services) => [result.service, ...services]);
+      setServiceDraft(emptyService());
+      setProductToast('Service saved successfully.');
+    } catch (saveError) {
+      setServiceFormError(
+        saveError instanceof Error ? saveError.message : 'Could not save this service. Please try again.',
+      );
+    } finally {
+      setSavingService(false);
     }
   };
 
@@ -1553,7 +1616,7 @@ const Home: React.FC = () => {
           <header className="home-product-modal-header">
             <div>
               <p className="dashboard-kicker">YOUR CATALOG</p>
-              <h2>Add a product or service</h2>
+              <h2>Add product &amp; services</h2>
             </div>
             <button
               type="button"
@@ -1565,9 +1628,41 @@ const Home: React.FC = () => {
             </button>
           </header>
 
-          <form id="home-product-form" className="home-product-form" onSubmit={(event) => void saveProduct(event)}>
+          <div className="home-product-tabs" role="tablist" aria-label="Catalog item type">
+            <button
+              type="button"
+              role="tab"
+              id="home-product-tab"
+              aria-selected={productModalTab === 'product'}
+              aria-controls="home-product-form"
+              className={productModalTab === 'product' ? 'is-active' : ''}
+              onClick={() => setProductModalTab('product')}
+            >
+              Add product
+            </button>
+            <button
+              type="button"
+              role="tab"
+              id="home-service-tab"
+              aria-selected={productModalTab === 'service'}
+              aria-controls="home-service-form"
+              className={productModalTab === 'service' ? 'is-active' : ''}
+              onClick={() => setProductModalTab('service')}
+            >
+              Services
+            </button>
+          </div>
+
+          {productModalTab === 'product' ? (
+          <form
+            id="home-product-form"
+            className="home-product-form"
+            role="tabpanel"
+            aria-labelledby="home-product-tab"
+            onSubmit={(event) => void saveProduct(event)}
+          >
             <div className="home-product-image-section">
-              <span className="home-product-image-label">Product or service image</span>
+              <span className="home-product-image-label">Product image</span>
               <div className={`home-product-image-picker${productDraft.image ? ' has-image' : ''}`}>
                 <IonIcon icon={productDraft.image ? checkmarkCircleOutline : imageOutline} />
                 <span>{productDraft.image?.name ?? 'Choose an image to upload'}</span>
@@ -1608,13 +1703,13 @@ const Home: React.FC = () => {
             </div>
 
             <label>
-              Product or service name
+              Product name
               <input
                 required
                 maxLength={150}
                 value={productDraft.name}
                 onChange={(event) => setProductDraft((draft) => ({ ...draft, name: event.target.value }))}
-                placeholder="e.g. Consultation or item name"
+                placeholder="e.g. Handmade soap"
               />
             </label>
             <label>
@@ -1627,37 +1722,82 @@ const Home: React.FC = () => {
                 placeholder="Describe what you offer"
               />
             </label>
-            <div className="home-product-form-grid">
+            <div className="home-product-form-grid home-product-price-grid">
               <label>
-                Price
+                Price (₹)
                 <input
                   type="number"
                   min="0"
                   step="0.01"
                   value={productDraft.price}
                   onChange={(event) => setProductDraft((draft) => ({ ...draft, price: event.target.value }))}
-                  placeholder="Optional"
+                  required
+                  placeholder="Enter price"
                 />
-              </label>
-              <label>
-                Currency
-                <select
-                  value={productDraft.currency}
-                  onChange={(event) => setProductDraft((draft) => ({ ...draft, currency: event.target.value }))}
-                >
-                  <option value="INR">INR</option>
-                  <option value="USD">USD</option>
-                  <option value="GBP">GBP</option>
-                  <option value="EUR">EUR</option>
-                </select>
               </label>
             </div>
             {productFormError && <p className="home-product-form-error" role="alert">{productFormError}</p>}
           </form>
+          ) : (
+            <form
+              id="home-service-form"
+              className="home-product-form"
+              role="tabpanel"
+              aria-labelledby="home-service-tab"
+              onSubmit={(event) => void saveService(event)}
+            >
+              <label>
+                Service name
+                <input
+                  required
+                  maxLength={190}
+                  value={serviceDraft.name}
+                  onChange={(event) => setServiceDraft((draft) => ({ ...draft, name: event.target.value }))}
+                  placeholder="e.g. Home cleaning"
+                />
+              </label>
+              <label>
+                Description
+                <textarea
+                  rows={4}
+                  maxLength={5000}
+                  value={serviceDraft.description}
+                  onChange={(event) => setServiceDraft((draft) => ({ ...draft, description: event.target.value }))}
+                  placeholder="Describe the service you provide"
+                />
+              </label>
+              {serviceFormError && <p className="home-product-form-error" role="alert">{serviceFormError}</p>}
+              <section className="home-service-list" aria-label="Your services">
+                <h3>Your services</h3>
+                {loadingServices ? (
+                  <p><IonSpinner name="dots" /> Loading services...</p>
+                ) : userServices.length ? (
+                  <ul>
+                    {userServices.map((service) => (
+                      <li key={service.id}>
+                        <strong>{service.name}</strong>
+                        {service.description && <span>{service.description}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p>No services added yet.</p>
+                )}
+              </section>
+            </form>
+          )}
           <footer className="home-product-savebar">
-            <button form="home-product-form" type="submit" disabled={savingProduct}>
-              {savingProduct ? <IonSpinner name="crescent" /> : null}
-              {savingProduct ? 'Saving...' : 'Save product or service'}
+            <button
+              form={productModalTab === 'product' ? 'home-product-form' : 'home-service-form'}
+              type="submit"
+              disabled={productModalTab === 'product' ? savingProduct : savingService}
+            >
+              {(productModalTab === 'product' ? savingProduct : savingService)
+                ? <IonSpinner name="crescent" />
+                : null}
+              {(productModalTab === 'product' ? savingProduct : savingService)
+                ? 'Saving...'
+                : productModalTab === 'product' ? 'Save product' : 'Save service'}
             </button>
           </footer>
         </div>
