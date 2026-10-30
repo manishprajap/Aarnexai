@@ -28,6 +28,9 @@ interface RazorpayCheckoutResult {
 
 const CHECKOUT_SCRIPT = 'https://checkout.razorpay.com/v1/checkout.js';
 
+const getPublicWebsiteUrl = (slug: string | null) =>
+  slug ? new URL(encodeURIComponent(slug), window.location.origin).toString() : null;
+
 async function loadCheckout() {
   if (window.Razorpay) return true;
   return new Promise<boolean>((resolve) => {
@@ -133,6 +136,7 @@ const BusinessWebsite: React.FC = () => {
     const parsed = new Date(date);
     return Number.isNaN(parsed.getTime()) ? 'Not active' : parsed.toLocaleDateString();
   };
+  const publicWebsiteUrl = getPublicWebsiteUrl(status?.slug ?? null);
 
   return (
     <IonPage>
@@ -165,7 +169,7 @@ const BusinessWebsite: React.FC = () => {
               <>
                 <div className="space-y-2 rounded-xl bg-gray-50 p-4 text-sm">
                   <p className="m-0"><strong>Business:</strong> {status.business.name || 'Complete your business profile'}</p>
-                  <p className="m-0"><strong>Website address:</strong> {status.url ? `https://aarnexai.com${status.url}` : 'Available after business setup'}</p>
+                  <p className="m-0"><strong>Website address:</strong> {publicWebsiteUrl || 'Available after business setup'}</p>
                   <p className="m-0"><strong>Subscription:</strong> {status.subscription.active ? `Active until ${formatDate(status.subscription.endDate)}` : 'Inactive'}</p>
                   <p className="m-0"><strong>Publishing:</strong> {status.published ? 'Live' : 'Not published'}</p>
                 </div>
@@ -182,8 +186,8 @@ const BusinessWebsite: React.FC = () => {
                     <IonButton disabled={saving} onClick={() => void setPublished(!status.published)}>
                       {saving ? <IonSpinner name="crescent" /> : status.published ? 'Unpublish website' : 'Publish website'}
                     </IonButton>
-                    {status.published && status.url && (
-                      <IonButton fill="outline" href={status.url} target="_blank" rel="noreferrer">
+                    {status.published && publicWebsiteUrl && (
+                      <IonButton fill="outline" href={publicWebsiteUrl} target="_blank" rel="noreferrer">
                         <IonIcon slot="end" icon={openOutline} /> View website
                       </IonButton>
                     )}

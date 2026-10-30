@@ -277,6 +277,7 @@ const App: React.FC = () => {
               }
             />
 
+            <Route path="/:slug/products/:productId" element={<PublicBusinessSite />} />
             <Route path="/:slug" element={<PublicBusinessSite />} />
             <Route path="/" element={<Navigate to="/login" replace />} />
             <Route path="*" element={<Navigate to="/login" replace />} />

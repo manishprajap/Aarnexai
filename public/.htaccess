@@ -1,0 +1,16 @@
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # Leave backend requests to the backend deployment.
+  RewriteRule ^aarnexai-backend(?:/|$) - [L]
+
+  # Serve existing files and directories, including Vite assets.
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # Let the React router handle public business slugs and other app routes.
+  RewriteRule ^ index.html [L]
+</IfModule>
