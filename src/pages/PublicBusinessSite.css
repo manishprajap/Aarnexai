@@ -229,6 +229,7 @@
   color: var(--public-site-muted);
   font-size: 17px;
   line-height: 1.8;
+  white-space: pre-line;
 }
 
 .public-site-products {

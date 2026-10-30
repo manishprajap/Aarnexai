@@ -186,6 +186,9 @@ const BusinessWebsite: React.FC = () => {
                     <IonButton disabled={saving} onClick={() => void setPublished(!status.published)}>
                       {saving ? <IonSpinner name="crescent" /> : status.published ? 'Unpublish website' : 'Publish website'}
                     </IonButton>
+                    <IonButton fill="outline" disabled={saving} onClick={() => navigate('/business-website/manual')}>
+                      Manual
+                    </IonButton>
                     {status.published && publicWebsiteUrl && (
                       <IonButton fill="outline" href={publicWebsiteUrl} target="_blank" rel="noreferrer">
                         <IonIcon slot="end" icon={openOutline} /> View website

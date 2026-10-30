@@ -47,6 +47,7 @@ import Onboarding from './pages/Onboarding ';
 import Uploadnew from './pages/Uploadnew';
 import PromptPlan from './pages/PromptPlan';
 import BusinessWebsite from './pages/BusinessWebsite';
+import BusinessWebsiteManual from './pages/BusinessWebsiteManual';
 import PublicBusinessSite from './pages/PublicBusinessSite';
 
 setupIonicReact();
@@ -273,6 +274,15 @@ const App: React.FC = () => {
               element={
                 <RequireAuth>
                   <BusinessWebsite />
+                </RequireAuth>
+              }
+            />
+
+            <Route
+              path="/business-website/manual"
+              element={
+                <RequireAuth>
+                  <BusinessWebsiteManual />
                 </RequireAuth>
               }
             />

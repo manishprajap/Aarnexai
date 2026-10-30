@@ -30,6 +30,7 @@ interface PublicSite {
   city: string | null;
   website: string | null;
   logo: string | null;
+  aboutUs: string | null;
   products: PublicProduct[];
 }
 
@@ -242,7 +243,7 @@ const PublicBusinessSite: React.FC = () => {
                 <p className="public-site-eyebrow">About us</p>
                 <h2>Welcome to {site.name}</h2>
                 <p>
-                  {site.name}{site.category ? ` is a ${site.category.toLowerCase()} business` : ' is a local business'}{site.city ? ` based in ${site.city}` : ''}. We are pleased to share our products with you.
+                  {site.aboutUs || `${site.name}${site.category ? ` is a ${site.category.toLowerCase()} business` : ' is a local business'}${site.city ? ` based in ${site.city}` : ''}. We are pleased to share our products with you.`}
                 </p>
               </div>
             </section>
